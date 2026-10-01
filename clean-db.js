@@ -1,0 +1,292 @@
+const fs = require('fs');
+const path = require('path');
+const mongoose = require('mongoose');
+
+const CLIENT2_MONGO_URI = 'mongodb://charlesjoyass_db_user:57XZqt7XTrFdkaKt@ac-3th3i0i-shard-00-00.ceb3uhz.mongodb.net:27017,ac-3th3i0i-shard-00-01.ceb3uhz.mongodb.net:27017,ac-3th3i0i-shard-00-02.ceb3uhz.mongodb.net:27017/cliente2_demo_pos?ssl=true&replicaSet=atlas-xpgtcp-shard-0&authSource=admin&retryWrites=true&w=majority';
+const CLIENT2_DB_FILE = path.join(__dirname, 'db.json');
+
+// Triple-check that we are NOT touching charlesjoyas_pos or main repo
+if (CLIENT2_MONGO_URI.includes('charlesjoyas_pos') || CLIENT2_DB_FILE.includes('nexus-pos-saas')) {
+  console.error('ERROR CRITICO DE SEGURIDAD: Intento de conexion a Charles Joyas detectado. Abortando de inmediato.');
+  process.exit(1);
+}
+
+const cleanData = {
+  store: {
+    name: "Joyería & Taller Demo",
+    slogan: "Oro 18k & Plata 925",
+    legalName: "Joyería Demo S.A.S",
+    taxId: "900123456-7",
+    currency: "$",
+    phone: "300 123 4567",
+    email: "contacto@nexuspos.io",
+    address: "Avenida Principal # 10 - 20",
+    addressExtra: "Local 101",
+    cashier: "Administrador",
+    shiftStatus: "Cerrado",
+    shiftStartTime: "08:00 AM",
+    cashInBox: 0,
+    taxRate: 0,
+    branding: {
+      appName: "JOYERÍA POS",
+      appBadge: "DEMO",
+      logoUrl: "",
+      primaryColor: "#0284c7",
+      secondaryColor: "#0d9488",
+      fontHeading: "Inter",
+      fontBody: "Outfit"
+    },
+    metalRates: {
+      oro18k: 580000,
+      oro14k: 510000,
+      balineria: 400000,
+      plata925: 400000
+    }
+  },
+  kpis: {
+    salesToday: 0,
+    salesTrend: "0%",
+    transactionsToday: 0,
+    txTrend: "0%",
+    inventoryValue: 4520000,
+    avgCostPerGram: 410000,
+    avgCostGrams: 11.02,
+    skusCount: 3,
+    totalGrams: 11.02,
+    netMargin: "28%",
+    marginTrend: "0%",
+    totalCustomers: 0,
+    totalSuppliers: 0,
+    activeServices: 0,
+    totalAssetsValue: 0
+  },
+  users: [
+    {
+      id: "USR-001",
+      name: "Administrador",
+      email: "carlos@nexuspos.io",
+      password: "1234567",
+      role: "Super Admin",
+      status: "Active",
+      lastLogin: "Hoy 08:00 AM",
+      avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80",
+      customPermissions: null
+    },
+    {
+      id: "USR-002",
+      name: "Cajero de Turno",
+      email: "cajero@nexuspos.io",
+      password: "1234567",
+      role: "Cajero",
+      status: "Active",
+      lastLogin: "Hoy 08:00 AM",
+      avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80",
+      customPermissions: [
+        "dashboard",
+        "pos",
+        "ventas",
+        "clientes",
+        "creditos_clientes",
+        "comprar",
+        "gastos",
+        "formas_pago",
+        "cuadre_caja",
+        "abonos_ventas",
+        "abonos_compras"
+      ]
+    }
+  ],
+  customers: [],
+  suppliers: [],
+  perfiles: [
+    {
+      id: "PRF-01",
+      name: "Super Admin",
+      permissions: "Acceso total sin restricciones: Gestión Global, Usuarios, Ajustes, Inventario, Finanzas y POS",
+      usersCount: 1,
+      badgeColor: "#F59E0B",
+      allowedModules: ["*"]
+    },
+    {
+      id: "PRF-62",
+      name: "Gerente de Tienda Regional",
+      permissions: "Acceso total a finanzas y reportes",
+      usersCount: 0,
+      allowedModules: ["dashboard", "pos", "clientes", "proveedores", "gastos", "formas_pago", "ventas", "comprar", "creditos_clientes", "creditos_proveedores", "productos", "servicios", "categorias", "activos", "reports", "informes"]
+    },
+    {
+      id: "PRF-02",
+      name: "Supervisor de Tienda",
+      permissions: "Gestión de POS, Ventas, Inventario y Modificación de Precios",
+      usersCount: 0,
+      badgeColor: "#6366F1",
+      allowedModules: ["dashboard", "pos", "clientes", "proveedores", "gastos", "formas_pago", "ventas", "comprar", "creditos_clientes", "creditos_proveedores", "productos", "servicios", "categorias", "activos", "reports", "informes"]
+    },
+    {
+      id: "PRF-03",
+      name: "Cajero",
+      permissions: "Ventas en POS, Cobros, Apertura y Cierre de Caja Chica",
+      usersCount: 1,
+      badgeColor: "#10B981",
+      allowedModules: ["pos", "clientes", "cuadre_caja", "ventas", "abonos_ventas", "abonos_compras"]
+    },
+    {
+      id: "PRF-04",
+      name: "Contador / Auditor",
+      permissions: "Acceso de lectura a Finanzas, Reportes, Balances e Informes",
+      usersCount: 0,
+      badgeColor: "#8B5CF6",
+      allowedModules: ["dashboard", "gastos", "formas_pago", "ventas", "creditos_clientes", "creditos_proveedores", "reports", "informes", "cuadre_caja"]
+    }
+  ],
+  expenses: [],
+  paymentMethods: [
+    { id: "PM-01", name: "Efectivo", icon: "cash", fee: "0%", active: true },
+    { id: "PM-02", name: "Tarjeta Débito/Crédito", icon: "card", fee: "0.8%", active: true },
+    { id: "PM-03", name: "Transferencia Bancaria", icon: "bank", fee: "0%", active: true },
+    { id: "PM-04", name: "Crédito Cliente", icon: "credit", fee: "0%", active: true },
+    { id: "PM-15", name: "Plan Separe", icon: "calendar", fee: "0%", active: true }
+  ],
+  purchases: [],
+  customerCredits: [],
+  supplierCredits: [],
+  services: [],
+  categories: [
+    { id: "oro18k", name: "Oro 18K Italiano & Ley", itemsCount: 2, color: "#F59E0B", availableGrams: 7.35, cost: 410000.00 },
+    { id: "plata925", name: "Plata 925 Fina", itemsCount: 1, color: "#94A3B8", availableGrams: 3.67, cost: 28000.00 },
+    { id: "diamantes", name: "Piedras Preciosas & Dijes", itemsCount: 0, color: "#6366F1", availableGrams: 0.00, cost: 850000.00 },
+    { id: "relojes", name: "Relojería de Lujo", itemsCount: 0, color: "#10B981", availableGrams: 0.00, cost: 1200000.00 }
+  ],
+  products: [
+    {
+      id: "PROD-001",
+      code: "AN-001",
+      name: "Anillo Solitario Circones Oro 18K",
+      category: "oro18k",
+      type: "Anillo",
+      metal: "Oro 18k",
+      weight: 2.85,
+      cost: 1150000,
+      price: 1650000,
+      stock: 5,
+      minStock: 1,
+      image: "https://images.unsplash.com/photo-1605100804763-247f67b3557e?w=300&auto=format&fit=crop&q=80",
+      status: "Disponible"
+    },
+    {
+      id: "PROD-002",
+      code: "CAD-001",
+      name: "Cadena Eslabón Fígaro 50cm Oro 18K",
+      category: "oro18k",
+      type: "Cadena",
+      metal: "Oro 18k",
+      weight: 4.50,
+      cost: 1800000,
+      price: 2450000,
+      stock: 3,
+      minStock: 1,
+      image: "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=300&auto=format&fit=crop&q=80",
+      status: "Disponible"
+    },
+    {
+      id: "PROD-003",
+      code: "PUL-001",
+      name: "Pulsera Tejida Italiana Plata 925",
+      category: "plata925",
+      type: "Pulsera",
+      metal: "Plata 925",
+      weight: 3.67,
+      cost: 280000,
+      price: 420000,
+      stock: 8,
+      minStock: 2,
+      image: "https://images.unsplash.com/photo-1611591475155-42848c26f0f2?w=300&auto=format&fit=crop&q=80",
+      status: "Disponible"
+    }
+  ],
+  assets: [],
+  cashShiftLog: {
+    shiftId: "TURNO-001",
+    openedAt: "08:00 AM",
+    openingCash: 0,
+    cashSales: 0,
+    cardSales: 0,
+    qrSales: 0,
+    cashExpenses: 0,
+    expectedCashInDrawer: 0,
+    actualCashInDrawer: 0,
+    discrepancy: 0,
+    status: "Cerrado"
+  },
+  cashShiftsHistory: [],
+  abonosVentas: [],
+  abonosCompras: [],
+  balanceSheet: {
+    assetsCurrent: 4520000,
+    assetsFixed: 0,
+    totalAssets: 4520000,
+    liabilitiesShort: 0,
+    liabilitiesLong: 0,
+    totalLiabilities: 0,
+    netEquity: 4520000
+  },
+  stockRadarData: {
+    categories: ["Oro 18K Italiano & Ley", "Plata 925 Fina", "Piedras Preciosas & Dijes", "Relojería de Lujo"],
+    turnover: [0, 0, 0, 0],
+    stockLevel: [8, 8, 0, 0],
+    profitability: [28, 33, 0, 0],
+    stockRisk: [0, 0, 0, 0]
+  },
+  recentTransactions: [],
+  sales: [],
+  financialLedger: [],
+  chartData: {
+    weeklySales: {
+      labels: ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom", "Hoy"],
+      income: [0, 0, 0, 0, 0, 0, 0, 0],
+      expenses: [0, 0, 0, 0, 0, 0, 0, 0]
+    },
+    categorySales: {
+      labels: ["Oro 18K", "Plata 925", "Diamantes", "Relojes"],
+      data: [0, 0, 0, 0]
+    },
+    topProducts: [],
+    peakHours: {
+      labels: ["09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00", "19:00"],
+      transactions: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    }
+  },
+  updatedAt: new Date().toISOString()
+};
+
+async function run() {
+  console.log('[Clean Script] 1. Escribiendo copia local limpia en:', CLIENT2_DB_FILE);
+  fs.writeFileSync(CLIENT2_DB_FILE, JSON.stringify(cleanData, null, 2), 'utf8');
+  console.log('[Clean Script] Local db.json para cliente 2 guardado exitosamente.');
+
+  console.log('[Clean Script] 2. Conectando a MongoDB Atlas base de datos aislada: cliente2_demo_pos');
+  await mongoose.connect(CLIENT2_MONGO_URI);
+  console.log('[Clean Script] Conectado a MongoDB Atlas en cliente2_demo_pos');
+
+  const DataSchema = new mongoose.Schema({
+    key: { type: String, default: 'main_store', unique: true },
+    content: mongoose.Schema.Types.Mixed,
+    updatedAt: { type: Date, default: Date.now }
+  });
+  const DataModel = mongoose.model('NexusData', DataSchema);
+
+  await DataModel.findOneAndUpdate(
+    { key: 'main_store' },
+    { content: cleanData, updatedAt: new Date() },
+    { upsert: true, new: true }
+  );
+
+  console.log('[Clean Script] Documento main_store guardado exitosamente en cliente2_demo_pos!');
+  await mongoose.disconnect();
+  console.log('[Clean Script] Proceso completado al 100%.');
+}
+
+run().catch(err => {
+  console.error('[Clean Script] Error:', err);
+  process.exit(1);
+});
