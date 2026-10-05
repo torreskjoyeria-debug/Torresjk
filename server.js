@@ -19,9 +19,9 @@ const PORT = process.env.PORT || 4000;
 const DIRECT_MONGO_URI = 'mongodb://charlesjoyass_db_user:57XZqt7XTrFdkaKt@ac-3th3i0i-shard-00-00.ceb3uhz.mongodb.net:27017,ac-3th3i0i-shard-00-01.ceb3uhz.mongodb.net:27017,ac-3th3i0i-shard-00-02.ceb3uhz.mongodb.net:27017/cliente2_demo_pos?ssl=true&replicaSet=atlas-xpgtcp-shard-0&authSource=admin&retryWrites=true&w=majority';
 let MONGO_URI = process.env.MONGO_URI || DIRECT_MONGO_URI;
 
-// STRICT SECURITY GUARD: Ensure this project NEVER touches the production database of Charles Joyas (charlesjoyas_pos)
-if (MONGO_URI.includes('charlesjoyas_pos')) {
-  console.error('⛔ BLOQUEO CRÍTICO DE SEGURIDAD: Conexión denegada. Este proyecto replica está estrictamente aislado y NUNCA puede conectarse a charlesjoyas_pos.');
+// STRICT SECURITY GUARD: Ensure this project can ONLY EVER connect to cliente2_demo_pos
+if (!MONGO_URI.includes('cliente2_demo_pos') || MONGO_URI.includes('charlesjoyas_pos')) {
+  console.error('⛔ BLOQUEO CRÍTICO DE SEGURIDAD: Conexión denegada. Este proyecto replica está estrictamente configurado para conectarse ÚNICA Y EXCLUSIVAMENTE a cliente2_demo_pos.');
   process.exit(1);
 }
 
@@ -127,12 +127,27 @@ app.use(async (req, res, next) => {
   next();
 });
 
-// Helper: load local db file
-function loadLocalDb() {
+const DEFAULT_STORES_LIST = [
+  { id: 'store_1', name: 'Sede Principal', code: 'SP', address: 'Avenida Principal # 10 - 20, Local 101', phone: '300 123 4567', email: 'principal@nexuspos.io', color: '#0284c7' },
+  { id: 'store_2', name: 'Sede Centro', code: 'SC', address: 'Calle 48 # 50 - 15, Local 102 (C.C. Centro Joyero)', phone: '310 987 6543', email: 'centro@nexuspos.io', color: '#0d9488' }
+];
+
+// Helper: load local db file (supporting both single-store legacy and multi-store schema)
+function loadLocalDb(storeId) {
   if (fs.existsSync(DB_FILE)) {
     try {
       const content = fs.readFileSync(DB_FILE, 'utf8');
-      return JSON.parse(content);
+      const parsed = JSON.parse(content);
+      if (storeId) {
+        if (parsed.stores && parsed.stores[storeId]) {
+          return parsed.stores[storeId];
+        }
+        if (storeId === 'store_1' && parsed.products) {
+          return parsed;
+        }
+        return null;
+      }
+      return parsed;
     } catch (e) {
       console.error('[Nexus Server - Cliente 2] Error leyendo db.json:', e);
     }
@@ -140,15 +155,31 @@ function loadLocalDb() {
   return null;
 }
 
-// Helper: save local db file atomically
-function saveLocalDb(data) {
+// Helper: save local db file atomically per store
+function saveLocalDb(data, storeId = 'store_1') {
   if (process.env.VERCEL) {
     return; // Read-only filesystem in Vercel, MongoDB Atlas handles persistence
   }
   const uniqueSuffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   const tmpFile = `${DB_FILE}.tmp.${uniqueSuffix}`;
   try {
-    fs.writeFileSync(tmpFile, JSON.stringify(data, null, 2), 'utf8');
+    let fullDb = {};
+    if (fs.existsSync(DB_FILE)) {
+      try {
+        fullDb = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+      } catch (_) {}
+    }
+    if (!fullDb.stores) {
+      fullDb.stores = {};
+    }
+    if (!Array.isArray(fullDb.storesList) || fullDb.storesList.length === 0) {
+      fullDb.storesList = DEFAULT_STORES_LIST;
+    }
+    fullDb.activeStoreId = storeId;
+    fullDb.stores[storeId] = data;
+    fullDb.updatedAt = new Date().toISOString();
+
+    fs.writeFileSync(tmpFile, JSON.stringify(fullDb, null, 2), 'utf8');
     fs.renameSync(tmpFile, DB_FILE);
   } catch (e) {
     console.error('[Nexus Server - Cliente 2] Error escribiendo db.json:', e);
@@ -164,8 +195,9 @@ app.get('/api/health', (req, res) => {
     status: 'ok',
     project: 'Nexus POS - Cliente 2 Demo',
     database: 'cliente2_demo_pos',
+    multiStore: true,
     mongoConnected,
-    storageMode: mongoConnected ? 'MongoDB' : 'Local JSON / Storage',
+    storageMode: mongoConnected ? 'MongoDB (cliente2_demo_pos)' : 'Local JSON / Storage',
     lastMongoError,
     uriType: MONGO_URI.startsWith('mongodb+srv') ? 'SRV' : 'Direct ReplicaSet',
     hasEnvMongoUri: !!process.env.MONGO_URI,
@@ -173,29 +205,105 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// GET /api/data - Fetch complete store state
-app.get('/api/data', async (req, res) => {
+// GET /api/stores - Fetch manifest of stores
+app.get('/api/stores', async (req, res) => {
   try {
     if (!mongoConnected) {
       await ensureDbConnected();
     }
     if (mongoConnected) {
-      const doc = await DataModel.findOne({ key: 'main_store' });
-      if (doc && doc.content) {
-        return res.json(doc.content);
+      const manifestDoc = await DataModel.findOne({ key: 'stores_manifest' });
+      if (manifestDoc && manifestDoc.content && Array.isArray(manifestDoc.content.storesList)) {
+        return res.json({ stores: manifestDoc.content.storesList, activeStoreId: manifestDoc.content.activeStoreId || 'store_1' });
       }
     }
-    const localData = loadLocalDb();
-    if (localData) {
-      return res.json(localData);
+    const localDb = loadLocalDb();
+    if (localDb && Array.isArray(localDb.storesList)) {
+      return res.json({ stores: localDb.storesList, activeStoreId: localDb.activeStoreId || 'store_1' });
     }
-    return res.json({ status: 'empty' });
+    res.json({ stores: DEFAULT_STORES_LIST, activeStoreId: 'store_1' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// POST /api/data - Sync full state
+// POST /api/stores - Save/update stores list metadata
+app.post('/api/stores', async (req, res) => {
+  try {
+    const rawRole = String(req.headers['x-nexus-role'] || '').trim().toLowerCase();
+    if (!rawRole.includes('admin')) {
+      return res.status(403).json({ error: 'No autorizado: Solo Super Admin puede modificar la red de sedes.' });
+    }
+    const { stores } = req.body;
+    if (!Array.isArray(stores) || stores.length === 0) {
+      return res.status(400).json({ error: 'Lista de sedes inválida' });
+    }
+
+    if (!process.env.VERCEL && fs.existsSync(DB_FILE)) {
+      try {
+        const fullDb = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+        fullDb.storesList = stores;
+        fullDb.updatedAt = new Date().toISOString();
+        fs.writeFileSync(DB_FILE, JSON.stringify(fullDb, null, 2), 'utf8');
+      } catch (_) {}
+    }
+
+    if (!mongoConnected) {
+      await ensureDbConnected();
+    }
+    if (mongoConnected) {
+      await DataModel.findOneAndUpdate(
+        { key: 'stores_manifest' },
+        { content: { storesList: stores, updatedAt: new Date().toISOString() }, updatedAt: new Date() },
+        { upsert: true, new: true }
+      );
+    }
+    res.json({ success: true, stores });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/data - Fetch complete store state for a specific isolated store
+app.get('/api/data', async (req, res) => {
+  try {
+    const requestedStoreId = String(req.query.storeId || req.headers['x-nexus-store-id'] || 'store_1').trim();
+    const storeId = /^[a-zA-Z0-9_-]+$/.test(requestedStoreId) ? requestedStoreId : 'store_1';
+
+    // Strict access control: if user is constrained to a specific store, forbid fetching another store
+    const userStore = String(req.headers['x-nexus-user-store'] || '').trim();
+    const userRole = String(req.headers['x-nexus-role'] || '').trim().toLowerCase();
+    if (userStore && userStore !== '*' && !userRole.includes('admin') && userStore !== storeId) {
+      return res.status(403).json({ error: `Acceso restringido: Tu usuario pertenece a "${userStore}" y no puede consultar "${storeId}".` });
+    }
+
+    if (!mongoConnected) {
+      await ensureDbConnected();
+    }
+    if (mongoConnected) {
+      const doc = await DataModel.findOne({ key: storeId });
+      if (doc && doc.content) {
+        return res.json(doc.content);
+      }
+      if (storeId === 'store_1') {
+        const legacyDoc = await DataModel.findOne({ key: 'main_store' });
+        if (legacyDoc && legacyDoc.content) {
+          return res.json(legacyDoc.content);
+        }
+      }
+    }
+
+    const localData = loadLocalDb(storeId);
+    if (localData) {
+      return res.json(localData);
+    }
+    return res.json({ status: 'empty', storeId });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/data - Sync isolated full state for a specific store
 app.post('/api/data', async (req, res) => {
   try {
     // 1. Authorization check: must have a valid role header from active session
@@ -215,6 +323,15 @@ app.post('/api/data', async (req, res) => {
       return res.status(403).json({ error: 'No autorizado: Se requiere una sesión válida para sincronizar datos.' });
     }
 
+    const requestedStoreId = String(req.query.storeId || req.headers['x-nexus-store-id'] || 'store_1').trim();
+    const storeId = /^[a-zA-Z0-9_-]+$/.test(requestedStoreId) ? requestedStoreId : 'store_1';
+
+    // Strict access control: verify user store ownership
+    const userStore = String(req.headers['x-nexus-user-store'] || '').trim();
+    if (userStore && userStore !== '*' && !roleLower.includes('admin') && userStore !== storeId) {
+      return res.status(403).json({ error: `Acceso restringido: No tienes permiso para modificar la sede "${storeId}".` });
+    }
+
     // 2. Strict multi-property schema validation to prevent DB corruption
     const data = req.body;
     if (
@@ -229,7 +346,7 @@ app.post('/api/data', async (req, res) => {
     }
 
     data.updatedAt = new Date().toISOString();
-    saveLocalDb(data);
+    saveLocalDb(data, storeId);
 
     if (!mongoConnected) {
       await ensureDbConnected();
@@ -237,15 +354,22 @@ app.post('/api/data', async (req, res) => {
 
     if (mongoConnected) {
       await DataModel.findOneAndUpdate(
-        { key: 'main_store' },
+        { key: storeId },
         { content: data, updatedAt: new Date() },
         { upsert: true, new: true }
       );
+      if (storeId === 'store_1') {
+        await DataModel.findOneAndUpdate(
+          { key: 'main_store' },
+          { content: data, updatedAt: new Date() },
+          { upsert: true, new: true }
+        );
+      }
     } else if (process.env.VERCEL) {
       return res.status(503).json({ error: 'Error de persistencia: No se pudo conectar a MongoDB Atlas en Vercel.' });
     }
 
-    res.json({ success: true, mode: mongoConnected ? 'MongoDB (cliente2_demo_pos)' : 'Local JSON', timestamp: new Date() });
+    res.json({ success: true, storeId, mode: mongoConnected ? 'MongoDB (cliente2_demo_pos)' : 'Local JSON', timestamp: new Date() });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

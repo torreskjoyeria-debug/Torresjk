@@ -1,10 +1,10 @@
-// Clean Initial Data Store for Nexus POS SaaS - Joyería Fina & Taller (CHARLES JOYAS SAS)
+// Clean Initial Data Store for Nexus POS SaaS - Joyería Fina & Taller (Cliente 2 Demo)
 
 const INITIAL_DATA = {
   store: {
-    name: "Charles Joyas",
+    name: "Sede Principal",
     slogan: "Oro 18k",
-    legalName: "Inversiones Charles Joyas S.A.S",
+    legalName: "Joyería Demo S.A.S - Sede Principal",
     taxId: "901838998-0",
     currency: "$",
     phone: "323 491 3454",
@@ -17,7 +17,7 @@ const INITIAL_DATA = {
     cashInBox: 0,
     taxRate: 0,
     branding: {
-      appName: "CHARLES JOYAS",
+      appName: "JOYERÍA POS",
       appBadge: "SAS",
       logoUrl: "",
       primaryColor: "#0284c7",

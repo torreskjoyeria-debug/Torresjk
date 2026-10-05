@@ -5179,3 +5179,87 @@ html, body {
   border-style: dashed;
 }
 
+/* ==========================================================================
+   MULTI-STORE / MULTI-TIENDA SELECTOR & BADGES
+   ========================================================================== */
+.store-switcher-wrapper {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-surface);
+  border: 1.5px solid var(--border-color);
+  padding: 4px 10px;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.store-switcher-wrapper:hover {
+  border-color: var(--brand-primary);
+  box-shadow: 0 0 0 3px var(--brand-glow);
+}
+
+.store-switcher-icon {
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.store-switcher-select {
+  background: transparent;
+  border: none;
+  font-family: var(--font-body);
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text-main);
+  cursor: pointer;
+  outline: none;
+  padding: 3px 6px;
+  border-radius: var(--radius-sm);
+}
+
+.store-switcher-select:focus {
+  background: var(--bg-surface-hover);
+}
+
+.store-switcher-select option {
+  background: var(--bg-surface);
+  color: var(--text-main);
+  font-weight: 600;
+  padding: 8px;
+}
+
+.store-locked-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--brand-primary-text);
+  background: var(--brand-primary-light);
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+}
+
+.store-user-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+.store-user-badge.global {
+  background: #FEF3C7;
+  color: #B45309;
+}
+.store-user-badge.store_1 {
+  background: #E0F2FE;
+  color: #0369A1;
+}
+.store-user-badge.store_2 {
+  background: #CCFBF1;
+  color: #0F766E;
+}
+
+

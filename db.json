@@ -1,22 +1,22 @@
 {
   "store": {
-    "name": "Joyería & Taller Demo",
+    "name": "Sede Principal",
     "slogan": "Oro 18k & Plata 925",
-    "legalName": "Joyería Demo S.A.S",
-    "taxId": "900123456-7",
+    "legalName": "Joyería Demo S.A.S - Sede Principal",
+    "taxId": "900123456-1",
     "currency": "$",
     "phone": "300 123 4567",
-    "email": "contacto@nexuspos.io",
+    "email": "principal@nexuspos.io",
     "address": "Avenida Principal # 10 - 20",
     "addressExtra": "Local 101",
-    "cashier": "Administrador",
+    "cashier": "Carlos Garzón (Super Admin)",
     "shiftStatus": "Cerrado",
     "shiftStartTime": "08:00 AM",
-    "cashInBox": 163500000,
+    "cashInBox": 0,
     "taxRate": 0,
     "branding": {
       "appName": "JOYERÍA POS",
-      "appBadge": "DEMO",
+      "appBadge": "SEDE 1",
       "logoUrl": "",
       "primaryColor": "#0284c7",
       "secondaryColor": "#0d9488",
@@ -24,25 +24,23 @@
       "fontBody": "Outfit"
     },
     "metalRates": {
-      "oro18k": 520000,
-      "oro18kItaliano": 520000,
-      "oro14k": 420000,
-      "oro18kNacional": 420000,
+      "oro18k": 580000,
+      "oro14k": 510000,
       "balineria": 400000,
       "plata925": 400000
     }
   },
   "kpis": {
-    "salesToday": 122500000,
+    "salesToday": 0,
     "salesTrend": "0%",
-    "transactionsToday": 4,
+    "transactionsToday": 0,
     "txTrend": "0%",
-    "inventoryValue": 56700000,
-    "avgCostPerGram": 1800000,
-    "avgCostGrams": 31.5,
-    "skusCount": 2,
-    "totalGrams": 28,
-    "netMargin": "28%",
+    "inventoryValue": 183250000,
+    "avgCostPerGram": 339352,
+    "avgCostGrams": 540,
+    "skusCount": 0,
+    "totalGrams": 0,
+    "netMargin": "0%",
     "marginTrend": "0%",
     "totalCustomers": 0,
     "totalSuppliers": 0,
@@ -52,23 +50,24 @@
   "users": [
     {
       "id": "USR-001",
-      "name": "Administrador",
+      "name": "Carlos Garzón (Super Admin)",
       "email": "carlos@nexuspos.io",
-      "password": "1234567",
+      "password": "123456",
       "role": "Super Admin",
       "status": "Active",
+      "storeId": "*",
       "lastLogin": "Hoy 08:00 AM",
       "avatar": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80",
-      "customPermissions": null,
-      "storeId": "*"
+      "customPermissions": null
     },
     {
       "id": "USR-002",
-      "name": "Cajero de Turno",
-      "email": "cajero@nexuspos.io",
-      "password": "1234567",
+      "name": "Cajero Sede Principal",
+      "email": "cajeroprincipal@nexuspos.io",
+      "password": "123456",
       "role": "Cajero",
       "status": "Active",
+      "storeId": "store_1",
       "lastLogin": "Hoy 08:00 AM",
       "avatar": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80",
       "customPermissions": [
@@ -77,50 +76,42 @@
         "ventas",
         "clientes",
         "creditos_clientes",
-        "comprar",
         "gastos",
         "formas_pago",
         "cuadre_caja",
-        "abonos_ventas",
-        "abonos_compras"
-      ],
-      "storeId": "store_1"
+        "abonos_ventas"
+      ]
     },
     {
       "id": "USR-003",
-      "name": "Eduardo Martinez",
-      "email": "Edumarc@nexus.io.com",
-      "password": "1234567",
-      "role": "Gerente de Tienda Regional",
-      "storeId": "store_2",
-      "customPermissions": null,
+      "name": "Cajero Sede Centro",
+      "email": "cajerocentro@nexuspos.io",
+      "password": "123456",
+      "role": "Cajero",
       "status": "Active",
-      "lastLogin": "Ahora mismo",
-      "avatar": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80"
+      "storeId": "store_2",
+      "lastLogin": "Hoy 08:00 AM",
+      "avatar": "https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=120&auto=format&fit=crop&q=80",
+      "customPermissions": [
+        "dashboard",
+        "pos",
+        "ventas",
+        "clientes",
+        "creditos_clientes",
+        "gastos",
+        "formas_pago",
+        "cuadre_caja",
+        "abonos_ventas"
+      ]
     }
   ],
   "customers": [],
-  "suppliers": [
-    {
-      "id": "PRV-846",
-      "docType": "CC",
-      "nit": "111111",
-      "name": "PIPE",
-      "phone": "2234566",
-      "email": "PIPE@GMAIL.COM",
-      "address": "CENTRO",
-      "accountType": "Ahorros",
-      "accountNumber": "1123445",
-      "bank": "BANCOLOMBOA",
-      "creditBalance": 0,
-      "status": "Active"
-    }
-  ],
+  "suppliers": [],
   "perfiles": [
     {
       "id": "PRF-01",
       "name": "Super Admin",
-      "permissions": "Acceso total sin restricciones: Gestión Global, Usuarios, Ajustes, Inventario, Finanzas y POS",
+      "permissions": "Acceso total sin restricciones: Gestión Global, Sedes, Usuarios, Ajustes, Inventario, Finanzas y POS",
       "usersCount": 1,
       "badgeColor": "#F59E0B",
       "allowedModules": [
@@ -128,59 +119,10 @@
       ]
     },
     {
-      "id": "PRF-62",
-      "name": "Gerente de Tienda Regional",
-      "permissions": "Acceso total a finanzas y reportes",
-      "usersCount": 0,
-      "allowedModules": [
-        "dashboard",
-        "pos",
-        "clientes",
-        "proveedores",
-        "gastos",
-        "formas_pago",
-        "ventas",
-        "comprar",
-        "creditos_clientes",
-        "creditos_proveedores",
-        "productos",
-        "servicios",
-        "categorias",
-        "activos",
-        "reports",
-        "informes"
-      ]
-    },
-    {
-      "id": "PRF-02",
-      "name": "Supervisor de Tienda",
-      "permissions": "Gestión de POS, Ventas, Inventario y Modificación de Precios",
-      "usersCount": 0,
-      "badgeColor": "#6366F1",
-      "allowedModules": [
-        "dashboard",
-        "pos",
-        "clientes",
-        "proveedores",
-        "gastos",
-        "formas_pago",
-        "ventas",
-        "comprar",
-        "creditos_clientes",
-        "creditos_proveedores",
-        "productos",
-        "servicios",
-        "categorias",
-        "activos",
-        "reports",
-        "informes"
-      ]
-    },
-    {
       "id": "PRF-03",
       "name": "Cajero",
       "permissions": "Ventas en POS, Cobros, Apertura y Cierre de Caja Chica",
-      "usersCount": 1,
+      "usersCount": 2,
       "badgeColor": "#10B981",
       "allowedModules": [
         "pos",
@@ -190,37 +132,9 @@
         "abonos_ventas",
         "abonos_compras"
       ]
-    },
-    {
-      "id": "PRF-04",
-      "name": "Contador / Auditor",
-      "permissions": "Acceso de lectura a Finanzas, Reportes, Balances e Informes",
-      "usersCount": 0,
-      "badgeColor": "#8B5CF6",
-      "allowedModules": [
-        "dashboard",
-        "gastos",
-        "formas_pago",
-        "ventas",
-        "creditos_clientes",
-        "creditos_proveedores",
-        "reports",
-        "informes",
-        "cuadre_caja"
-      ]
     }
   ],
-  "expenses": [
-    {
-      "id": "EXP-1162",
-      "date": "2026-10-01",
-      "description": "COOMPRA AGUA",
-      "category": "Suministros",
-      "amount": 100000,
-      "status": "Pagado",
-      "method": "Efectivo"
-    }
-  ],
+  "expenses": [],
   "paymentMethods": [
     {
       "id": "PM-01",
@@ -266,11 +180,11 @@
     {
       "id": "oro18k",
       "name": "Oro 18K Italiano & Ley",
-      "itemsCount": 2,
+      "itemsCount": 0,
       "color": "#F59E0B",
-      "availableGrams": 28,
-      "cost": 1800000,
-      "totalValuation": 50400000
+      "availableGrams": 0,
+      "cost": 444000,
+      "totalValuation": 0
     },
     {
       "id": "plata925",
@@ -278,7 +192,7 @@
       "itemsCount": 0,
       "color": "#94A3B8",
       "availableGrams": 0,
-      "cost": 280000,
+      "cost": 28000,
       "totalValuation": 0
     },
     {
@@ -300,106 +214,32 @@
       "totalValuation": 0
     }
   ],
-  "products": [
-    {
-      "id": "PRD-173",
-      "sku": "001",
-      "name": "Cadena lazo",
-      "measureType": "Unidades",
-      "weightUnit": "u.",
-      "unit": "u.",
-      "pieceWeight": 3.5,
-      "weight": 3.5,
-      "category": "oro18k",
-      "categoryName": "Oro 18K Italiano & Ley",
-      "supplier": "ANONIMO",
-      "cost": 1800000,
-      "price": 0,
-      "stock": 8,
-      "isExtra": false,
-      "minStock": 2,
-      "status": "active",
-      "sold30d": 3,
-      "monthlySales": {
-        "2026-10": {
-          "3": 3
-        }
-      }
-    },
-    {
-      "id": "PRD-469",
-      "sku": "001",
-      "name": "Cadena lazo",
-      "measureType": "Unidades",
-      "weightUnit": "u.",
-      "unit": "u.",
-      "pieceWeight": 3.5,
-      "weight": 3.5,
-      "category": "oro18k",
-      "categoryName": "Oro 18K Italiano & Ley",
-      "supplier": "ANONIMO",
-      "cost": 1800000,
-      "price": 0,
-      "stock": 0,
-      "isExtra": false,
-      "minStock": 2,
-      "status": "out_of_stock",
-      "sold30d": 1,
-      "monthlySales": {
-        "2026-10": {
-          "3": 1
-        }
-      }
-    }
-  ],
-  "assets": [
-    {
-      "id": "ACT-86",
-      "name": "CAJA FUERTE",
-      "category": "Equipamiento POS",
-      "purchaseDate": "2026-10-01",
-      "costValue": 20000000,
-      "currentVal": 20000000,
-      "status": "Excelente"
-    }
-  ],
+  "products": [],
+  "assets": [],
   "cashShiftLog": {
-    "shiftId": "TURNO-686",
-    "openedAt": "12:54",
-    "openingCash": 1000000,
-    "cashSales": 172500000,
+    "shiftId": "TURNO-001",
+    "openedAt": "08:00 AM",
+    "openingCash": 0,
+    "cashSales": 0,
     "cardSales": 0,
     "qrSales": 0,
-    "cashExpenses": 10000000,
-    "expectedCashInDrawer": 163500000,
+    "cashExpenses": 0,
+    "expectedCashInDrawer": 0,
     "actualCashInDrawer": 0,
     "discrepancy": 0,
-    "status": "Abierto",
-    "openedBy": "Administrador",
-    "openedDate": "2026-10-01"
+    "status": "Cerrado"
   },
   "cashShiftsHistory": [],
   "abonosVentas": [],
-  "abonosCompras": [
-    {
-      "id": "AB-C667467",
-      "date": "2026-10-01",
-      "supplier": "PIPE",
-      "poId": "OC-432896",
-      "amount": 10000000,
-      "method": "Efectivo (Caja)",
-      "cashier": "Administrador",
-      "status": "Confirmado"
-    }
-  ],
+  "abonosCompras": [],
   "balanceSheet": {
-    "assetsCurrent": 4520000,
+    "assetsCurrent": 0,
     "assetsFixed": 0,
-    "totalAssets": 4520000,
+    "totalAssets": 0,
     "liabilitiesShort": 0,
     "liabilitiesLong": 0,
     "totalLiabilities": 0,
-    "netEquity": 4520000
+    "netEquity": 0
   },
   "stockRadarData": {
     "categories": [
@@ -415,14 +255,14 @@
       0
     ],
     "stockLevel": [
-      8,
-      8,
+      0,
+      0,
       0,
       0
     ],
     "profitability": [
-      28,
-      33,
+      0,
+      0,
       0,
       0
     ],
@@ -433,186 +273,8 @@
       0
     ]
   },
-  "recentTransactions": [
-    {
-      "id": "TX-97236",
-      "customer": "Cliente Mostrador",
-      "customerDoc": "",
-      "customerDocType": "CC",
-      "customerAddress": "",
-      "customerPhone": "",
-      "time": "04:45:39 p.m.",
-      "date": "03/10/2026",
-      "type": "Venta POS Joyería",
-      "itemsCount": 3.5,
-      "items": [
-        {
-          "id": "PRD-173",
-          "sku": "001",
-          "name": "Cadena lazo",
-          "qty": 3.5,
-          "quantity": 3.5,
-          "unit": "u.",
-          "measureType": "Unidades",
-          "pieceWeight": 3.5,
-          "price": 10000000,
-          "total": 35000000
-        }
-      ],
-      "subtotal": 35000000,
-      "tax": 0,
-      "total": 35000000,
-      "paymentMethod": "Efectivo",
-      "cashier": "Administrador",
-      "status": "completed"
-    },
-    {
-      "id": "TX-95062",
-      "customer": "Cliente Mostrador",
-      "customerDoc": "",
-      "customerDocType": "CC",
-      "customerAddress": "",
-      "customerPhone": "",
-      "time": "04:41:16 p.m.",
-      "date": "03/10/2026",
-      "type": "Venta POS Joyería",
-      "itemsCount": 3.5,
-      "items": [
-        {
-          "id": "PRD-173",
-          "sku": "001",
-          "name": "Cadena lazo",
-          "qty": 3.5,
-          "quantity": 3.5,
-          "unit": "u.",
-          "measureType": "Unidades",
-          "pieceWeight": 3.5,
-          "price": 10000000,
-          "total": 35000000
-        }
-      ],
-      "subtotal": 35000000,
-      "tax": 0,
-      "total": 35000000,
-      "paymentMethod": "Efectivo",
-      "cashier": "Administrador",
-      "status": "completed"
-    },
-    {
-      "id": "TX-92723",
-      "customer": "Cliente Mostrador",
-      "customerDoc": "",
-      "customerDocType": "CC",
-      "customerAddress": "",
-      "customerPhone": "",
-      "time": "04:32:35 p.m.",
-      "date": "03/10/2026",
-      "type": "Venta POS Joyería",
-      "itemsCount": 3.5,
-      "items": [
-        {
-          "id": "PRD-469",
-          "sku": "001",
-          "name": "Cadena lazo",
-          "qty": 3.5,
-          "quantity": 3.5,
-          "unit": "u.",
-          "measureType": "Unidades",
-          "pieceWeight": 3.5,
-          "price": 10000000,
-          "total": 35000000
-        }
-      ],
-      "subtotal": 35000000,
-      "tax": 0,
-      "total": 35000000,
-      "paymentMethod": "Efectivo",
-      "cashier": "Administrador",
-      "status": "completed"
-    },
-    {
-      "id": "TX-91960",
-      "customer": "Cliente Mostrador",
-      "customerDoc": "",
-      "customerDocType": "CC",
-      "customerAddress": "",
-      "customerPhone": "",
-      "time": "04:10:56 p.m.",
-      "date": "03/10/2026",
-      "type": "Venta POS Joyería",
-      "itemsCount": 3.5,
-      "items": [
-        {
-          "id": "PRD-173",
-          "sku": "001",
-          "name": "Cadena lazo",
-          "qty": 3.5,
-          "quantity": 3.5,
-          "unit": "u.",
-          "measureType": "Unidades",
-          "pieceWeight": 3.5,
-          "price": 5000000,
-          "total": 17500000
-        }
-      ],
-      "subtotal": 17500000,
-      "tax": 0,
-      "total": 17500000,
-      "paymentMethod": "Efectivo",
-      "cashier": "Administrador",
-      "status": "completed"
-    },
-    {
-      "id": "TX-96126",
-      "customer": "Cliente Mostrador",
-      "customerDoc": "",
-      "customerDocType": "CC",
-      "customerAddress": "",
-      "customerPhone": "",
-      "time": "12:54:16",
-      "date": "01/10/2026",
-      "type": "Venta POS Joyería",
-      "itemsCount": 5,
-      "items": [
-        {
-          "id": "PROD-001",
-          "sku": "001",
-          "name": "Anillo Solitario Circones Oro 18K",
-          "qty": 5,
-          "quantity": 5,
-          "unit": "g",
-          "measureType": "Pesaje",
-          "pieceWeight": 2.85,
-          "price": 10000000,
-          "total": 50000000
-        }
-      ],
-      "subtotal": 50000000,
-      "tax": 0,
-      "total": 50000000,
-      "paymentMethod": "Efectivo",
-      "cashier": "Administrador",
-      "status": "completed"
-    }
-  ],
-  "financialLedger": [
-    {
-      "id": "LED-DEL-6167258",
-      "date": "2026-10-03",
-      "type": "Eliminación CXP",
-      "description": "Deuda CP-967 con PIPE eliminada por Super Admin (Administrador). Monto pendiente condonado: $ 20.000.000 COP.",
-      "amount": -20000000,
-      "user": "Administrador"
-    },
-    {
-      "id": "LED-DEL-6165933",
-      "date": "2026-10-03",
-      "type": "Eliminación CXP",
-      "description": "Deuda OC-432896 con PIPE eliminada por Super Admin (Administrador). Monto pendiente condonado: $ 35.000.000 COP.",
-      "amount": -35000000,
-      "user": "Administrador"
-    }
-  ],
+  "recentTransactions": [],
+  "financialLedger": [],
   "chartData": {
     "weeklySales": {
       "labels": [
@@ -691,6 +353,388 @@
     }
   },
   "sales": [],
-  "updatedAt": "2026-10-03T21:45:38.939Z",
-  "_storeId": "store_1"
+  "updatedAt": "2026-10-05T21:46:01.019Z",
+  "stores": {
+    "store_2": {
+      "store": {
+        "name": "Sede Centro",
+        "slogan": "Oro 18k & Plata 925",
+        "legalName": "Joyería Demo S.A.S - Sede Centro",
+        "taxId": "900123456-2",
+        "currency": "$",
+        "phone": "310 987 6543",
+        "email": "centro@nexuspos.io",
+        "address": "Calle 48 # 50 - 15",
+        "addressExtra": "Local 102 (C.C. Centro Joyero)",
+        "cashier": "Administrador",
+        "shiftStatus": "Cerrado",
+        "shiftStartTime": "08:00 AM",
+        "cashInBox": 0,
+        "taxRate": 0,
+        "branding": {
+          "appName": "JOYERÍA POS",
+          "appBadge": "SEDE 2",
+          "logoUrl": "",
+          "primaryColor": "#0d9488",
+          "secondaryColor": "#0284c7",
+          "fontHeading": "Inter",
+          "fontBody": "Outfit"
+        },
+        "metalRates": {
+          "oro18k": 580000,
+          "oro14k": 510000,
+          "balineria": 400000,
+          "plata925": 400000
+        }
+      },
+      "kpis": {
+        "salesToday": 0,
+        "salesTrend": "0%",
+        "transactionsToday": 0,
+        "txTrend": "0%",
+        "inventoryValue": 0,
+        "avgCostPerGram": 0,
+        "avgCostGrams": 0,
+        "skusCount": 0,
+        "totalGrams": 0,
+        "netMargin": "0%",
+        "marginTrend": "0%",
+        "totalCustomers": 0,
+        "totalSuppliers": 0,
+        "activeServices": 0,
+        "totalAssetsValue": 0
+      },
+      "users": [
+        {
+          "id": "USR-001",
+          "name": "Carlos Garzón (Super Admin)",
+          "email": "carlos@nexuspos.io",
+          "password": "123456",
+          "role": "Super Admin",
+          "status": "Active",
+          "storeId": "*",
+          "lastLogin": "Hoy 08:00 AM",
+          "avatar": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80",
+          "customPermissions": null
+        },
+        {
+          "id": "USR-002",
+          "name": "Cajero Sede Principal",
+          "email": "cajeroprincipal@nexuspos.io",
+          "password": "123456",
+          "role": "Cajero",
+          "status": "Active",
+          "storeId": "store_1",
+          "lastLogin": "Hoy 08:00 AM",
+          "avatar": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80",
+          "customPermissions": [
+            "dashboard",
+            "pos",
+            "ventas",
+            "clientes",
+            "creditos_clientes",
+            "gastos",
+            "formas_pago",
+            "cuadre_caja",
+            "abonos_ventas"
+          ]
+        },
+        {
+          "id": "USR-003",
+          "name": "Cajero Sede Centro",
+          "email": "cajerocentro@nexuspos.io",
+          "password": "123456",
+          "role": "Cajero",
+          "status": "Active",
+          "storeId": "store_2",
+          "lastLogin": "Hoy 08:00 AM",
+          "avatar": "https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=120&auto=format&fit=crop&q=80",
+          "customPermissions": [
+            "dashboard",
+            "pos",
+            "ventas",
+            "clientes",
+            "creditos_clientes",
+            "gastos",
+            "formas_pago",
+            "cuadre_caja",
+            "abonos_ventas"
+          ]
+        }
+      ],
+      "customers": [],
+      "suppliers": [],
+      "perfiles": [
+        {
+          "id": "PRF-01",
+          "name": "Super Admin",
+          "permissions": "Acceso total sin restricciones: Gestión Global, Sedes, Usuarios, Ajustes, Inventario, Finanzas y POS",
+          "usersCount": 1,
+          "badgeColor": "#F59E0B",
+          "allowedModules": [
+            "*"
+          ]
+        },
+        {
+          "id": "PRF-03",
+          "name": "Cajero",
+          "permissions": "Ventas en POS, Cobros, Apertura y Cierre de Caja Chica",
+          "usersCount": 2,
+          "badgeColor": "#10B981",
+          "allowedModules": [
+            "pos",
+            "clientes",
+            "cuadre_caja",
+            "ventas",
+            "abonos_ventas",
+            "abonos_compras"
+          ]
+        }
+      ],
+      "expenses": [],
+      "paymentMethods": [
+        {
+          "id": "PM-01",
+          "name": "Efectivo",
+          "icon": "cash",
+          "fee": "0%",
+          "active": true
+        },
+        {
+          "id": "PM-02",
+          "name": "Tarjeta Débito/Crédito",
+          "icon": "card",
+          "fee": "0.8%",
+          "active": true
+        },
+        {
+          "id": "PM-03",
+          "name": "Transferencia Bancaria",
+          "icon": "bank",
+          "fee": "0%",
+          "active": true
+        },
+        {
+          "id": "PM-04",
+          "name": "Crédito Cliente",
+          "icon": "credit",
+          "fee": "0%",
+          "active": true
+        },
+        {
+          "id": "PM-15",
+          "name": "Plan Separe",
+          "icon": "calendar",
+          "fee": "0%",
+          "active": true
+        }
+      ],
+      "purchases": [],
+      "customerCredits": [],
+      "supplierCredits": [],
+      "services": [],
+      "categories": [
+        {
+          "id": "oro18k",
+          "name": "Oro 18K Italiano & Ley",
+          "itemsCount": 0,
+          "color": "#F59E0B",
+          "availableGrams": 0,
+          "cost": 444000
+        },
+        {
+          "id": "plata925",
+          "name": "Plata 925 Fina",
+          "itemsCount": 0,
+          "color": "#94A3B8",
+          "availableGrams": 0,
+          "cost": 28000
+        },
+        {
+          "id": "diamantes",
+          "name": "Piedras Preciosas & Dijes",
+          "itemsCount": 0,
+          "color": "#6366F1",
+          "availableGrams": 0,
+          "cost": 850000
+        },
+        {
+          "id": "relojes",
+          "name": "Relojería de Lujo",
+          "itemsCount": 0,
+          "color": "#10B981",
+          "availableGrams": 0,
+          "cost": 1200000
+        }
+      ],
+      "products": [],
+      "assets": [],
+      "cashShiftLog": {
+        "shiftId": "TURNO-001",
+        "openedAt": "08:00 AM",
+        "openingCash": 0,
+        "cashSales": 9500000,
+        "cardSales": 0,
+        "qrSales": 0,
+        "cashExpenses": 0,
+        "expectedCashInDrawer": 0,
+        "actualCashInDrawer": 0,
+        "discrepancy": 0,
+        "status": "Cerrado"
+      },
+      "cashShiftsHistory": [],
+      "abonosVentas": [],
+      "abonosCompras": [],
+      "balanceSheet": {
+        "assetsCurrent": 0,
+        "assetsFixed": 0,
+        "totalAssets": 0,
+        "liabilitiesShort": 0,
+        "liabilitiesLong": 0,
+        "totalLiabilities": 0,
+        "netEquity": 0
+      },
+      "stockRadarData": {
+        "categories": [
+          "Oro 18K Italiano & Ley",
+          "Plata 925 Fina",
+          "Piedras Preciosas & Dijes",
+          "Relojería de Lujo"
+        ],
+        "turnover": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "stockLevel": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "profitability": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "stockRisk": [
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "recentTransactions": [],
+      "sales": [
+        {
+          "id": "VENTA-TIENDA-2-1791236761004",
+          "total": 9500000,
+          "timestamp": "2026-10-05T21:46:01.004Z",
+          "storeId": "store_2"
+        }
+      ],
+      "financialLedger": [],
+      "chartData": {
+        "weeklySales": {
+          "labels": [
+            "Lun",
+            "Mar",
+            "Mié",
+            "Jue",
+            "Vie",
+            "Sáb",
+            "Dom",
+            "Hoy"
+          ],
+          "income": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "expenses": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "categorySales": {
+          "labels": [
+            "Oro 18K",
+            "Plata 925",
+            "Diamantes",
+            "Relojes"
+          ],
+          "data": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "topProducts": [],
+        "peakHours": {
+          "labels": [
+            "09:00",
+            "10:00",
+            "11:00",
+            "12:00",
+            "13:00",
+            "14:00",
+            "15:00",
+            "16:00",
+            "17:00",
+            "18:00",
+            "19:00"
+          ],
+          "transactions": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "updatedAt": "2026-10-05T21:46:01.019Z"
+    }
+  },
+  "storesList": [
+    {
+      "id": "store_1",
+      "name": "Sede Principal",
+      "code": "SP",
+      "address": "Avenida Principal # 10 - 20, Local 101",
+      "phone": "300 123 4567",
+      "email": "principal@nexuspos.io",
+      "color": "#0284c7"
+    },
+    {
+      "id": "store_2",
+      "name": "Sede Centro",
+      "code": "SC",
+      "address": "Calle 48 # 50 - 15, Local 102 (C.C. Centro Joyero)",
+      "phone": "310 987 6543",
+      "email": "centro@nexuspos.io",
+      "color": "#0d9488"
+    }
+  ],
+  "activeStoreId": "store_2"
 }

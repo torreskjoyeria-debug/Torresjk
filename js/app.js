@@ -13,6 +13,12 @@ class NexusApp {
     this.currentTheme = 'light';
     this.currentRadarFilter = 'todos';
     this.radarSearchTerm = '';
+    this.currentStoreId = localStorage.getItem('nexus_pos_active_store') || 'store_1';
+    this.storesList = [
+      { id: 'store_1', name: 'Sede Principal', code: 'SP', address: 'Avenida Principal # 10 - 20, Local 101', phone: '300 123 4567', email: 'principal@nexuspos.io', color: '#0284c7' },
+      { id: 'store_2', name: 'Sede Centro', code: 'SC', address: 'Calle 48 # 50 - 15, Local 102 (C.C. Centro Joyero)', phone: '310 987 6543', email: 'centro@nexuspos.io', color: '#0d9488' }
+    ];
+    this.userStoreFilter = 'current';
     this.inventoryStockFilter = 'all';
     this.activeCashShiftTab = 'current';
     this.cashShiftHistoryPeriod = 'all';
@@ -326,9 +332,18 @@ class NexusApp {
     const setup = async () => {
       try {
         this.checkTheme();
+        await this.loadStoresList();
+        try {
+          const authUser = JSON.parse(localStorage.getItem('nexus_pos_user') || 'null');
+          if (authUser && authUser.storeId && authUser.storeId !== '*' && authUser.role !== 'Super Admin') {
+            this.currentStoreId = authUser.storeId;
+            localStorage.setItem('nexus_pos_active_store', authUser.storeId);
+          }
+        } catch (_) {}
         await this.loadPersistence();
         this.applyBrandingSettings(this.data.store?.branding);
         this.checkAuth();
+        this.updateStoreSelectorUI();
         this.setupNavigation();
         this.setupSidebarToggle();
         this.setupPOS();
@@ -616,15 +631,25 @@ class NexusApp {
 
   async loadPersistence() {
     let localData = null;
+    const storeKey = 'nexus_pos_data_' + this.currentStoreId;
     try {
-      const local = localStorage.getItem('nexus_pos_data');
+      let local = localStorage.getItem(storeKey);
+      if (!local && this.currentStoreId === 'store_1') {
+        local = localStorage.getItem('nexus_pos_data');
+      }
       if (local) {
         localData = JSON.parse(local);
       }
     } catch(e) {}
 
     try {
-      const res = await fetch('/api/data');
+      const res = await fetch(`/api/data?storeId=${this.currentStoreId}`, {
+        headers: {
+          'X-Nexus-Store-Id': this.currentStoreId,
+          'X-Nexus-User-Store': this.currentUser?.storeId || '*',
+          'X-Nexus-Role': this.currentUser?.role || ''
+        }
+      });
       if (res.ok) {
         const dbData = await res.json();
         if (dbData && dbData.products && Array.isArray(dbData.products)) {
@@ -641,6 +666,7 @@ class NexusApp {
             this.data.balanceSheet = Object.assign({}, INITIAL_DATA.balanceSheet, localData.balanceSheet || {});
             this.data.stockRadarData = Object.assign({}, INITIAL_DATA.stockRadarData, localData.stockRadarData || {});
             this.sanitizeLoadedData();
+            try { localStorage.setItem(storeKey, JSON.stringify(this.data)); } catch(_) {}
             this.savePersistence();
             return;
           }
@@ -652,7 +678,8 @@ class NexusApp {
           this.data.balanceSheet = Object.assign({}, INITIAL_DATA.balanceSheet, dbData.balanceSheet || {});
           this.data.stockRadarData = Object.assign({}, INITIAL_DATA.stockRadarData, dbData.stockRadarData || {});
           this.sanitizeLoadedData();
-          console.log('[NexusApp] Persistencia cargada exitosamente desde Backend/MongoDB.');
+          try { localStorage.setItem(storeKey, JSON.stringify(this.data)); } catch(_) {}
+          console.log(`[NexusApp] Persistencia cargada exitosamente para ${this.currentStoreId} desde Backend/MongoDB.`);
           return;
         }
       }
@@ -909,8 +936,12 @@ class NexusApp {
 
     this.data.updatedAt = new Date().toISOString();
 
+    const storeKey = 'nexus_pos_data_' + this.currentStoreId;
     try {
-      localStorage.setItem('nexus_pos_data', JSON.stringify(this.data));
+      localStorage.setItem(storeKey, JSON.stringify(this.data));
+      if (this.currentStoreId === 'store_1') {
+        localStorage.setItem('nexus_pos_data', JSON.stringify(this.data));
+      }
     } catch(e) {
       console.warn('[NexusApp] Error en LocalStorage save:', e);
     }
@@ -925,12 +956,14 @@ class NexusApp {
     try {
       const userRole = this.currentUser?.role || 'Super Admin';
       const userId = this.currentUser?.id || 'USR-001';
-      await fetch('/api/data', {
+      await fetch(`/api/data?storeId=${this.currentStoreId}`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
           'X-Nexus-User-Id': userId,
-          'X-Nexus-Role': userRole
+          'X-Nexus-Role': userRole,
+          'X-Nexus-Store-Id': this.currentStoreId,
+          'X-Nexus-User-Store': this.currentUser?.storeId || '*'
         },
         body: JSON.stringify(this.data)
       });
@@ -998,7 +1031,13 @@ class NexusApp {
   async syncRemoteDataIfChanged() {
     if (this._isSaving || this._pendingSave) return;
     try {
-      const res = await fetch('/api/data');
+      const res = await fetch(`/api/data?storeId=${this.currentStoreId}`, {
+        headers: {
+          'X-Nexus-Store-Id': this.currentStoreId,
+          'X-Nexus-User-Store': this.currentUser?.storeId || '*',
+          'X-Nexus-Role': this.currentUser?.role || ''
+        }
+      });
       if (res.ok) {
         const remote = await res.json();
         if (remote && remote.products && Array.isArray(remote.products)) {
@@ -1376,6 +1415,15 @@ class NexusApp {
     this.currentUser = user;
     localStorage.setItem('nexus_pos_user', JSON.stringify(user));
     document.body.classList.remove('not-authenticated');
+
+    if (user.storeId && user.storeId !== '*' && user.role !== 'Super Admin') {
+      if (this.currentStoreId !== user.storeId) {
+        this.currentStoreId = user.storeId;
+        localStorage.setItem('nexus_pos_active_store', user.storeId);
+        await this.loadPersistence();
+      }
+    }
+    this.updateStoreSelectorUI();
     
     const loginOverlay = document.getElementById('login-screen');
     if (loginOverlay) {
@@ -1717,6 +1765,12 @@ class NexusApp {
       const canPOS = this.hasPermission('pos', null);
       topPosBtn.style.display = canPOS ? 'inline-flex' : 'none';
     }
+
+    this.updateStoreSelectorUI();
+    const btnMultistore = document.getElementById('btn-tab-config-multistore');
+    if (btnMultistore) {
+      btnMultistore.style.display = (this.currentUser?.role === 'Super Admin') ? 'inline-block' : 'none';
+    }
   }
 
   /* --------------------------------------------------------------------------
@@ -1986,9 +2040,11 @@ class NexusApp {
         const nextNum = Math.max(maxNum + 1, (this.data.users || []).length + 1);
         const nextId = `USR-${String(nextNum).padStart(3, '0')}`;
 
+        const userStoreId = document.getElementById('user-store-select')?.value || '*';
         const newUser = {
           id: nextId,
           name, email, password, role,
+          storeId: userStoreId,
           customPermissions: customPermissions.length > 0 ? customPermissions : null,
           status: "Active",
           lastLogin: "Ahora mismo",
@@ -2046,6 +2102,10 @@ class NexusApp {
           u.email = document.getElementById('edit-user-email').value.trim();
           u.role = newRole;
           u.status = newStatus;
+          const editStoreSel = document.getElementById('edit-user-store-select');
+          if (editStoreSel) {
+            u.storeId = editStoreSel.value;
+          }
 
           // Super Admin accounts always have unrestricted total access; customPermissions must be null
           if (u.role === 'Super Admin') {
@@ -3573,17 +3633,264 @@ class NexusApp {
     const storePane = document.getElementById('config-pane-store');
     const brandingPane = document.getElementById('config-pane-branding');
     const securityPane = document.getElementById('config-pane-security');
+    const multistorePane = document.getElementById('config-pane-multistore');
     const btnStore = document.getElementById('btn-tab-config-store');
     const btnBranding = document.getElementById('btn-tab-config-branding');
     const btnSecurity = document.getElementById('btn-tab-config-security');
+    const btnMultistore = document.getElementById('btn-tab-config-multistore');
 
     if (storePane) storePane.style.display = tabName === 'store' ? 'block' : 'none';
     if (brandingPane) brandingPane.style.display = tabName === 'branding' ? 'block' : 'none';
     if (securityPane) securityPane.style.display = tabName === 'security' ? 'block' : 'none';
+    if (multistorePane) multistorePane.style.display = tabName === 'multistore' ? 'block' : 'none';
 
     if (btnStore) btnStore.classList.toggle('active', tabName === 'store');
     if (btnBranding) btnBranding.classList.toggle('active', tabName === 'branding');
     if (btnSecurity) btnSecurity.classList.toggle('active', tabName === 'security');
+    if (btnMultistore) btnMultistore.classList.toggle('active', tabName === 'multistore');
+
+    if (tabName === 'multistore') {
+      this.renderMultiStoreConfigCards();
+    }
+  }
+
+  /* --------------------------------------------------------------------------
+     MULTI-STORE / MULTI-TIENDA ENGINE (GESTIÓN Y NAVEGACIÓN ENTRE SEDES)
+     -------------------------------------------------------------------------- */
+  async loadStoresList() {
+    try {
+      const res = await fetch('/api/stores');
+      if (res.ok) {
+        const data = await res.json();
+        if (data && Array.isArray(data.stores) && data.stores.length > 0) {
+          this.storesList = data.stores;
+        }
+      }
+    } catch (e) {
+      console.warn('[NexusApp] No se pudieron cargar las sedes remotas:', e);
+    }
+    this.renderStoreSelectorDropdown();
+  }
+
+  renderStoreSelectorDropdown() {
+    const sel = document.getElementById('active-store-select');
+    if (!sel) return;
+    sel.innerHTML = (this.storesList || []).map(s => `
+      <option value="${s.id}" ${s.id === this.currentStoreId ? 'selected' : ''}>
+        ${s.id === 'store_1' ? '🏢' : '🏬'} ${this.escapeHtml(s.name)}
+      </option>
+    `).join('');
+    sel.value = this.currentStoreId;
+  }
+
+  updateStoreSelectorUI() {
+    const wrapper = document.getElementById('store-switcher-wrapper');
+    const sel = document.getElementById('active-store-select');
+    if (!wrapper || !sel) return;
+
+    let badge = document.getElementById('store-locked-badge');
+    if (!badge) {
+      badge = document.createElement('div');
+      badge.id = 'store-locked-badge';
+      badge.className = 'store-locked-badge';
+      badge.style.display = 'none';
+      wrapper.appendChild(badge);
+    }
+
+    const currentStoreObj = (this.storesList || []).find(s => s.id === this.currentStoreId) || { name: 'Sede Principal' };
+
+    const isGlobalAdmin = !this.currentUser || this.currentUser.role === 'Super Admin' || this.currentUser.storeId === '*';
+    if (isGlobalAdmin) {
+      sel.style.display = 'inline-block';
+      badge.style.display = 'none';
+      sel.value = this.currentStoreId;
+    } else {
+      sel.style.display = 'none';
+      badge.style.display = 'inline-flex';
+      badge.innerHTML = `<span>${this.currentStoreId === 'store_2' ? '🏬' : '🏢'} ${this.escapeHtml(currentStoreObj.name)}</span>`;
+    }
+
+    const storePill = document.querySelector('.store-status-pill span:last-child');
+    if (storePill && this.currentUser) {
+      storePill.textContent = `${currentStoreObj.name} - Operador: ${this.currentUser.name} (${this.currentUser.role})`;
+    }
+  }
+
+  async handleStoreSelectChange(newStoreId) {
+    const isGlobalAdmin = !this.currentUser || this.currentUser.role === 'Super Admin' || this.currentUser.storeId === '*';
+    if (!isGlobalAdmin) {
+      this.showToast('Acceso Denegado: No tienes autorización para cambiar de sede.', 'danger');
+      const sel = document.getElementById('active-store-select');
+      if (sel) sel.value = this.currentStoreId;
+      return;
+    }
+    await this.switchStore(newStoreId);
+  }
+
+  async switchStore(storeId) {
+    if (!storeId || this.currentStoreId === storeId) return;
+
+    // Strict access control: only global Super Admin can switch stores
+    const isGlobalAdmin = !this.currentUser || this.currentUser.role === 'Super Admin' || this.currentUser.storeId === '*';
+    if (!isGlobalAdmin) {
+      this.showToast('Acceso Denegado: No tienes autorización para cambiar de sede.', 'danger');
+      const sel = document.getElementById('active-store-select');
+      if (sel) sel.value = this.currentStoreId;
+      return;
+    }
+
+    const targetStore = (this.storesList || []).find(s => s.id === storeId) || { name: storeId };
+
+    try {
+      await this.savePersistence();
+    } catch (_) {}
+
+    this.cart = [];
+    this.currentStoreId = storeId;
+    localStorage.setItem('nexus_pos_active_store', storeId);
+
+    const sel = document.getElementById('active-store-select');
+    if (sel) sel.value = storeId;
+
+    await this.loadPersistence();
+
+    this.updateUIForRole();
+    this.updateStoreSelectorUI();
+    this.syncAllModules();
+    this.renderAllTables();
+    this.renderDashboardMetrics();
+    this.renderPOSProducts();
+    this.renderCart();
+    this.renderCuadreCajaCard();
+    this.renderCashStatusIndicator();
+    this.renderMultiStoreConfigCards();
+    if (typeof this.initCharts === 'function') this.initCharts();
+
+    // Update active store tab fields in Config view if open
+    if (document.getElementById('config-name-input')) {
+      document.getElementById('config-name-input').value = this.data.store?.name || '';
+      document.getElementById('config-address-input').value = this.data.store?.address || '';
+      document.getElementById('config-phone-input').value = this.data.store?.phone || '';
+      document.getElementById('config-legal-input').value = this.data.store?.legalName || '';
+      document.getElementById('config-nif-input').value = this.data.store?.taxId || '';
+    }
+
+    this.showToast(`🏬 Sede activa cambiada a: ${targetStore.name}`, 'info');
+  }
+
+  renderMultiStoreConfigCards() {
+    const s1 = (this.storesList || []).find(s => s.id === 'store_1') || { name: 'Sede Principal', code: 'SP', address: '', phone: '', email: '' };
+    const s2 = (this.storesList || []).find(s => s.id === 'store_2') || { name: 'Sede Centro', code: 'SC', address: '', phone: '', email: '' };
+
+    const t1 = document.getElementById('card-title-store_1');
+    const t2 = document.getElementById('card-title-store_2');
+    if (t1) t1.textContent = s1.name;
+    if (t2) t2.textContent = s2.name;
+
+    const in1Name = document.getElementById('cfg-s1-name');
+    const in1Code = document.getElementById('cfg-s1-code');
+    const in1Addr = document.getElementById('cfg-s1-address');
+    const in1Phone = document.getElementById('cfg-s1-phone');
+    const in1Email = document.getElementById('cfg-s1-email');
+
+    if (in1Name) in1Name.value = s1.name || '';
+    if (in1Code) in1Code.value = s1.code || 'SP';
+    if (in1Addr) in1Addr.value = s1.address || '';
+    if (in1Phone) in1Phone.value = s1.phone || '';
+    if (in1Email) in1Email.value = s1.email || '';
+
+    const in2Name = document.getElementById('cfg-s2-name');
+    const in2Code = document.getElementById('cfg-s2-code');
+    const in2Addr = document.getElementById('cfg-s2-address');
+    const in2Phone = document.getElementById('cfg-s2-phone');
+    const in2Email = document.getElementById('cfg-s2-email');
+
+    if (in2Name) in2Name.value = s2.name || '';
+    if (in2Code) in2Code.value = s2.code || 'SC';
+    if (in2Addr) in2Addr.value = s2.address || '';
+    if (in2Phone) in2Phone.value = s2.phone || '';
+    if (in2Email) in2Email.value = s2.email || '';
+
+    const b1 = document.getElementById('badge-status-store_1');
+    const b2 = document.getElementById('badge-status-store_2');
+    if (b1) {
+      const isAct = this.currentStoreId === 'store_1';
+      b1.textContent = isAct ? '★ En Uso' : 'Disponible';
+      b1.style.background = isAct ? '#D1FAE5' : '#E0E7FF';
+      b1.style.color = isAct ? '#065F46' : '#3730A3';
+    }
+    if (b2) {
+      const isAct = this.currentStoreId === 'store_2';
+      b2.textContent = isAct ? '★ En Uso' : 'Disponible';
+      b2.style.background = isAct ? '#D1FAE5' : '#E0E7FF';
+      b2.style.color = isAct ? '#065F46' : '#3730A3';
+    }
+  }
+
+  async saveStoreMetadataFromForm(storeId) {
+    if (this.currentUser?.role !== 'Super Admin') {
+      this.showToast('Acceso Denegado: Solo el Super Admin puede modificar los datos de las sedes.', 'danger');
+      return;
+    }
+    const prefix = storeId === 'store_1' ? 'cfg-s1' : 'cfg-s2';
+    const name = document.getElementById(`${prefix}-name`)?.value.trim();
+    const code = document.getElementById(`${prefix}-code`)?.value.trim();
+    const address = document.getElementById(`${prefix}-address`)?.value.trim();
+    const phone = document.getElementById(`${prefix}-phone`)?.value.trim();
+    const email = document.getElementById(`${prefix}-email`)?.value.trim();
+
+    if (!name) {
+      this.showToast('El nombre de la sede es obligatorio.', 'warning');
+      return;
+    }
+
+    let target = this.storesList.find(s => s.id === storeId);
+    if (!target) {
+      target = { id: storeId };
+      this.storesList.push(target);
+    }
+    target.name = name;
+    target.code = code;
+    target.address = address;
+    target.phone = phone;
+    target.email = email;
+
+    try {
+      await fetch('/api/stores', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Nexus-Role': this.currentUser?.role || 'Super Admin'
+        },
+        body: JSON.stringify({ stores: this.storesList })
+      });
+    } catch (e) {
+      console.warn('[NexusApp] Error guardando storesList en server:', e);
+    }
+
+    if (this.currentStoreId === storeId && this.data.store) {
+      this.data.store.name = name;
+      if (address) this.data.store.address = address;
+      if (phone) this.data.store.phone = phone;
+      if (email) this.data.store.email = email;
+      await this.savePersistence();
+    }
+
+    this.renderStoreSelectorDropdown();
+    this.updateStoreSelectorUI();
+    this.renderMultiStoreConfigCards();
+    this.showToast(`✓ Datos de "${name}" guardados exitosamente.`, 'success');
+  }
+
+  setUserStoreFilter(filter) {
+    this.userStoreFilter = filter;
+    const btnAll = document.getElementById('btn-filter-all-users');
+    const btnCurrent = document.getElementById('btn-filter-current-users');
+    if (btnAll && btnCurrent) {
+      btnAll.classList.toggle('active', filter === 'all');
+      btnCurrent.classList.toggle('active', filter !== 'all');
+    }
+    this.renderUsersTable();
   }
 
   hexToRgb(hex) {
@@ -4532,6 +4839,16 @@ class NexusApp {
     document.getElementById('edit-user-id').value = u.id;
     document.getElementById('edit-user-name').value = u.name;
     document.getElementById('edit-user-email').value = u.email;
+
+    const storeSel = document.getElementById('edit-user-store-select');
+    if (storeSel) {
+      storeSel.value = u.storeId || '*';
+      storeSel.disabled = isTargetSuperAdmin;
+    }
+    const storeHelp = document.getElementById('edit-user-store-help');
+    if (storeHelp) {
+      storeHelp.style.display = isTargetSuperAdmin ? 'block' : 'none';
+    }
 
     const statusSelect = document.getElementById('edit-user-status');
     const statusHelp = document.getElementById('edit-user-status-help');
@@ -5893,7 +6210,24 @@ class NexusApp {
 
     this.ensureOrderedUserIds();
 
-    tbody.innerHTML = this.data.users.map(u => {
+    const activeStoreObj = (this.storesList || []).find(s => s.id === this.currentStoreId) || { name: 'Esta Sede' };
+    const label = document.getElementById('users-store-name-label');
+    if (label) label.textContent = activeStoreObj.name;
+
+    // Strict store isolation: only show users assigned to the active store or global Super Admin unless 'all'
+    const filterMode = this.userStoreFilter || 'current';
+    const storeFilteredUsers = (this.data.users || []).filter(u => {
+      if (filterMode === 'all') return true;
+      if (u.storeId === '*' || u.role === 'Super Admin' || u.id === 'USR-001') return true;
+      return u.storeId === this.currentStoreId;
+    });
+
+    if (storeFilteredUsers.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:2.5rem 1rem; color:var(--text-muted);"><div style="font-size:1.5rem; margin-bottom:0.5rem;">👤</div><div style="font-weight:600;">No hay usuarios asignados a ${this.escapeHtml(activeStoreObj.name)}</div><div style="font-size:0.8rem; margin-top:0.25rem;">Haga clic en "+ Nuevo Usuario" para registrar personal en esta sede.</div></td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = storeFilteredUsers.map(u => {
       const hasCustom = u.customPermissions && Array.isArray(u.customPermissions) && u.customPermissions.length > 0;
       const permBadge = hasCustom ? `<span class="badge badge-warning" style="margin-left:4px; font-size:0.68rem;" title="Permisos Personalizados Activos">Especial</span>` : '';
       const isRootUser = u.id === 'USR-001' || u.role === 'Super Admin';
@@ -5921,6 +6255,7 @@ class NexusApp {
           <td>${this.escapeHtml(u.name)}</td>
           <td>${this.escapeHtml(u.email)}</td>
           <td><span class="badge" style="background:#EEF2FF; color:#6366F1;">${this.escapeHtml(u.role)}</span>${permBadge}</td>
+          <td>${u.storeId === '*' || !u.storeId ? '<span class="store-user-badge global">🌟 Global</span>' : (u.storeId === 'store_2' ? '<span class="store-user-badge store_2">🏬 Sede Centro</span>' : '<span class="store-user-badge store_1">🏢 Sede Principal</span>')}</td>
           <td>${this.escapeHtml(u.lastLogin)}</td>
           <td><span class="badge ${u.status === 'Active' ? 'badge-active' : 'badge-danger'}"><span class="badge-dot"></span>${this.escapeHtml(u.status)}</span></td>
           <td>${actionHtml}</td>
@@ -6152,9 +6487,9 @@ class NexusApp {
  xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
  xmlns:html="http://www.w3.org/TR/REC-html40">
  <DocumentProperties xmlns="urn:schemas-microsoft-com:office:office">
-  <Author>Charles Joyas SAS</Author>
+  <Author>Nexus POS</Author>
   <Created>${now.toISOString()}</Created>
-  <Company>Charles Joyas SAS</Company>
+  <Company>Joyería Demo</Company>
  </DocumentProperties>
  <Styles>
   <Style ss:ID="Default" ss:Name="Normal">
@@ -6467,7 +6802,7 @@ class NexusApp {
    <Column ss:Width="80"/>
 
    <Row ss:Height="28">
-    <Cell ss:MergeAcross="16" ss:StyleID="TitleHeader"><Data ss:Type="String">  CHARLES JOYAS SAS — DIRECTORIO GENERAL DE CLIENTES &amp; CARTERA COMERCIAL</Data></Cell>
+    <Cell ss:MergeAcross="16" ss:StyleID="TitleHeader"><Data ss:Type="String">  DIRECTORIO GENERAL DE CLIENTES &amp; CARTERA COMERCIAL</Data></Cell>
    </Row>
    <Row ss:Height="18">
     <Cell ss:MergeAcross="16" ss:StyleID="SubTitleHeader"><Data ss:Type="String">  NIT: 901838998-0 | Joyería Fina &amp; Taller | Gestión de Contacto, Límites de Crédito, Deuda y Formas de Pago</Data></Cell>
@@ -6631,7 +6966,7 @@ class NexusApp {
    <Column ss:Width="380"/>
 
    <Row ss:Height="28">
-    <Cell ss:MergeAcross="2" ss:StyleID="TitleHeader"><Data ss:Type="String">  POLÍTICAS DE CRÉDITO Y COBRANZA — CHARLES JOYAS SAS</Data></Cell>
+    <Cell ss:MergeAcross="2" ss:StyleID="TitleHeader"><Data ss:Type="String">  POLÍTICAS DE CRÉDITO Y COBRANZA</Data></Cell>
    </Row>
    <Row ss:Height="18">
     <Cell ss:MergeAcross="2" ss:StyleID="SubTitleHeader"><Data ss:Type="String">  Condiciones de otorgamiento de cupo, plazos, abonos y Plan Separe</Data></Cell>
@@ -6667,7 +7002,7 @@ class NexusApp {
  </Worksheet>
 </Workbook>`;
 
-    this._downloadExcelWorkbook(xml, `Directorio_Clientes_CharlesJoyas_${dateStr}`);
+    this._downloadExcelWorkbook(xml, `Directorio_Clientes_${dateStr}`);
     this.showToast(`Directorio de Clientes (${customers.length} registros) exportado a Excel exitosamente`, 'success');
   }
 
@@ -6858,9 +7193,9 @@ class NexusApp {
  xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
  xmlns:html="http://www.w3.org/TR/REC-html40">
  <DocumentProperties xmlns="urn:schemas-microsoft-com:office:office">
-  <Author>Charles Joyas SAS</Author>
+  <Author>Nexus POS</Author>
   <Created>${now.toISOString()}</Created>
-  <Company>Charles Joyas SAS</Company>
+  <Company>Joyería Demo</Company>
  </DocumentProperties>
  <Styles>
   <Style ss:ID="Default" ss:Name="Normal">
@@ -7161,7 +7496,7 @@ class NexusApp {
    <Column ss:Width="130"/>
 
    <Row ss:Height="28">
-    <Cell ss:MergeAcross="14" ss:StyleID="TitleHeader"><Data ss:Type="String">  CHARLES JOYAS SAS — DIRECTORIO GENERAL DE PROVEEDORES &amp; DISTRIBUIDORES</Data></Cell>
+    <Cell ss:MergeAcross="14" ss:StyleID="TitleHeader"><Data ss:Type="String">  DIRECTORIO GENERAL DE PROVEEDORES &amp; DISTRIBUIDORES</Data></Cell>
    </Row>
    <Row ss:Height="18">
     <Cell ss:MergeAcross="14" ss:StyleID="SubTitleHeader"><Data ss:Type="String">  NIT: 901838998-0 | Joyería Fina &amp; Taller | Gestión de Compras, Condiciones de Pago y Saldos Pendientes</Data></Cell>
@@ -7323,7 +7658,7 @@ class NexusApp {
    <Column ss:Width="360"/>
 
    <Row ss:Height="28">
-    <Cell ss:MergeAcross="2" ss:StyleID="TitleHeader"><Data ss:Type="String">  POLÍTICAS COMERCIALES CON PROVEEDORES — CHARLES JOYAS SAS</Data></Cell>
+    <Cell ss:MergeAcross="2" ss:StyleID="TitleHeader"><Data ss:Type="String">  POLÍTICAS COMERCIALES CON PROVEEDORES</Data></Cell>
    </Row>
    <Row ss:Height="18">
     <Cell ss:MergeAcross="2" ss:StyleID="SubTitleHeader"><Data ss:Type="String">  Procedimientos de auditoría, recepción de materia prima y dispersión de fondos</Data></Cell>
@@ -7359,7 +7694,7 @@ class NexusApp {
  </Worksheet>
 </Workbook>`;
 
-    this._downloadExcelWorkbook(xml, `Directorio_Proveedores_CharlesJoyas_${dateStr}`);
+    this._downloadExcelWorkbook(xml, `Directorio_Proveedores_${dateStr}`);
     this.showToast(`Directorio de Proveedores (${suppliers.length} registros) exportado a Excel exitosamente`, 'success');
   }
 
@@ -7567,9 +7902,9 @@ class NexusApp {
  xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
  xmlns:html="http://www.w3.org/TR/REC-html40">
  <DocumentProperties xmlns="urn:schemas-microsoft-com:office:office">
-  <Author>Charles Joyas SAS</Author>
+  <Author>Nexus POS</Author>
   <Created>${now.toISOString()}</Created>
-  <Company>Charles Joyas SAS</Company>
+  <Company>Joyería Demo</Company>
  </DocumentProperties>
  <Styles>
   <Style ss:ID="Default" ss:Name="Normal">
@@ -7788,7 +8123,7 @@ class NexusApp {
    <Column ss:Width="150"/>
 
    <Row ss:Height="28">
-    <Cell ss:MergeAcross="10" ss:StyleID="TitleHeader"><Data ss:Type="String">  CHARLES JOYAS SAS — REGISTRO DETALLADO DE GASTOS OPERATIVOS</Data></Cell>
+    <Cell ss:MergeAcross="10" ss:StyleID="TitleHeader"><Data ss:Type="String">  REGISTRO DETALLADO DE GASTOS OPERATIVOS</Data></Cell>
    </Row>
    <Row ss:Height="18">
     <Cell ss:MergeAcross="10" ss:StyleID="SubTitleHeader"><Data ss:Type="String">  NIT: 901838998-0 | Joyería Fina &amp; Taller | Auditoría de Egresos, Nómina, Suministros y Servicios</Data></Cell>
@@ -7944,7 +8279,7 @@ class NexusApp {
    <Column ss:Width="340"/>
 
    <Row ss:Height="28">
-    <Cell ss:MergeAcross="2" ss:StyleID="TitleHeader"><Data ss:Type="String">  GUÍA CONTABLE DE GASTOS OPERATIVOS — CHARLES JOYAS SAS</Data></Cell>
+    <Cell ss:MergeAcross="2" ss:StyleID="TitleHeader"><Data ss:Type="String">  GUÍA CONTABLE DE GASTOS OPERATIVOS</Data></Cell>
    </Row>
    <Row ss:Height="18">
     <Cell ss:MergeAcross="2" ss:StyleID="SubTitleHeader"><Data ss:Type="String">  Criterios de imputación contable y clasificación de costos para auditoría</Data></Cell>
@@ -7980,7 +8315,7 @@ class NexusApp {
  </Worksheet>
 </Workbook>`;
 
-    this._downloadExcelWorkbook(xml, `Gastos_Operativos_Detallado_CharlesJoyas_${dateStr}`);
+    this._downloadExcelWorkbook(xml, `Gastos_Operativos_Detallado_${dateStr}`);
     this.showToast(`Auditoría de Gastos Operativos (${expenses.length} egresos) exportada a Excel exitosamente`, 'success');
   }
 
@@ -8679,7 +9014,7 @@ class NexusApp {
 
    <!-- ENCABEZADO -->
    <Row ss:Height="26">
-    <Cell ss:MergeAcross="12" ss:StyleID="HeaderTitle"><Data ss:Type="String">CHARLES JOYAS S.A.S. - HISTORIAL DE VENTAS &amp; FACTURACIÓN</Data></Cell>
+    <Cell ss:MergeAcross="12" ss:StyleID="HeaderTitle"><Data ss:Type="String">HISTORIAL DE VENTAS &amp; FACTURACIÓN</Data></Cell>
    </Row>
    <Row ss:Height="18">
     <Cell ss:MergeAcross="12" ss:StyleID="HeaderSub"><Data ss:Type="String">Reporte oficial de transacciones emitidas en punto de venta y mostrador comercial</Data></Cell>
@@ -9225,7 +9560,7 @@ class NexusApp {
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const filterSuffix = currentFilter !== 'all' ? `_${currentFilter}` : '';
     const dateStr = new Date().toISOString().split('T')[0];
-    const fileName = `Inventario_Charles_Joyas${filterSuffix}_${dateStr}.csv`;
+    const fileName = `Inventario_Joyeria${filterSuffix}_${dateStr}.csv`;
 
     if (window.navigator && window.navigator.msSaveOrOpenBlob) {
       window.navigator.msSaveOrOpenBlob(blob, fileName);
@@ -9554,9 +9889,9 @@ class NexusApp {
  xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
  xmlns:html="http://www.w3.org/TR/REC-html40">
  <DocumentProperties xmlns="urn:schemas-microsoft-com:office:office">
-  <Author>Charles Joyas SAS</Author>
+  <Author>Nexus POS</Author>
   <Created>${now.toISOString()}</Created>
-  <Company>Charles Joyas SAS</Company>
+  <Company>Joyería Demo</Company>
  </DocumentProperties>
  <Styles>
   <Style ss:ID="Default" ss:Name="Normal">
@@ -9842,7 +10177,7 @@ class NexusApp {
    <Column ss:Width="230"/>
 
    <Row ss:Height="28">
-    <Cell ss:MergeAcross="11" ss:StyleID="TitleHeader"><Data ss:Type="String">  CHARLES JOYAS SAS — CONTROL PATRIMONIAL DE ACTIVOS FIJOS &amp; EQUIPAMIENTO</Data></Cell>
+    <Cell ss:MergeAcross="11" ss:StyleID="TitleHeader"><Data ss:Type="String">  CONTROL PATRIMONIAL DE ACTIVOS FIJOS &amp; EQUIPAMIENTO</Data></Cell>
    </Row>
    <Row ss:Height="18">
     <Cell ss:MergeAcross="11" ss:StyleID="SubTitleHeader"><Data ss:Type="String">  NIT: 901838998-0 | Joyería Fina &amp; Taller | Registro de Bienes, Valor de Compra y Depreciación</Data></Cell>
@@ -10009,7 +10344,7 @@ class NexusApp {
     <Cell ss:MergeAcross="3" ss:StyleID="TitleHeader"><Data ss:Type="String">  NORMATIVA CONTABLE Y POLÍTICAS DE DEPRECIACIÓN NIIF</Data></Cell>
    </Row>
    <Row ss:Height="18">
-    <Cell ss:MergeAcross="3" ss:StyleID="SubTitleHeader"><Data ss:Type="String">  Marco fiscal colombiano (Estatuto Tributario Art. 137) y políticas contables de Charles Joyas SAS</Data></Cell>
+    <Cell ss:MergeAcross="3" ss:StyleID="SubTitleHeader"><Data ss:Type="String">  Marco fiscal colombiano (Estatuto Tributario Art. 137) y políticas contables internas</Data></Cell>
    </Row>
    <Row ss:Height="10"></Row>
 
@@ -10047,7 +10382,7 @@ class NexusApp {
  </Worksheet>
 </Workbook>`;
 
-    this._downloadExcelWorkbook(xml, `Activos_Fijos_Patrimonio_CharlesJoyas_${dateStr}`);
+    this._downloadExcelWorkbook(xml, `Activos_Fijos_Patrimonio_${dateStr}`);
     this.showToast(`Auditoría de Activos Fijos (${assets.length} bienes) exportada a Excel exitosamente`, 'success');
   }
 
@@ -11473,7 +11808,7 @@ class NexusApp {
       return;
     }
 
-    const storeName = this.data.store?.name || 'Charles Joyas';
+    const storeName = this.data.store?.name || 'Sede Principal';
     const now = new Date();
     const formattedNow = `${now.toLocaleDateString('es-CO')} ${now.toLocaleTimeString('es-CO')}`;
 
@@ -11689,7 +12024,7 @@ class NexusApp {
       this.showToast('No hay ningún arqueo seleccionado para exportar', 'warning');
       return;
     }
-    const storeName = this.data.store?.name || 'Charles Joyas';
+    const storeName = this.data.store?.name || 'Sede Principal';
     const now = new Date();
     const formattedNow = `${now.toLocaleDateString('es-CO')} ${now.toLocaleTimeString('es-CO')}`;
 
@@ -12787,7 +13122,7 @@ class NexusApp {
     let hoja1Rows = `
       <!-- HEADER CORPORATIVO -->
       <Row ss:Height="28">
-        <Cell ss:MergeAcross="4" ss:StyleID="TitleHeader"><Data ss:Type="String">CHARLES JOYAS - JOYERÍA FINA &amp; TALLER DE ALTA GAMA</Data></Cell>
+        <Cell ss:MergeAcross="4" ss:StyleID="TitleHeader"><Data ss:Type="String">ESTADO DE RESULTADOS - P&amp;L</Data></Cell>
       </Row>
       <Row ss:Height="22">
         <Cell ss:MergeAcross="4" ss:StyleID="SubTitleHeader"><Data ss:Type="String">ESTADO DE RESULTADOS INTEGRAL &amp; INFORME FINANCIERO (P&amp;L)</Data></Cell>
@@ -12948,7 +13283,7 @@ class NexusApp {
     // -------------------------------------------------------------------------
     let hoja2Rows = `
       <Row ss:Height="26">
-        <Cell ss:MergeAcross="7" ss:StyleID="TitleHeader"><Data ss:Type="String">CHARLES JOYAS - DETALLE DE VENTAS DEL PERÍODO</Data></Cell>
+        <Cell ss:MergeAcross="7" ss:StyleID="TitleHeader"><Data ss:Type="String">DETALLE DE VENTAS DEL PERÍODO</Data></Cell>
       </Row>
       <Row ss:Height="20">
         <Cell ss:MergeAcross="7" ss:StyleID="MetaHeader"><Data ss:Type="String">Período: ${escapeXml(periodLabel)} | Total Ventas: ${validSalesTx.length} transacciones | Facturado: $ ${Number(m.totalGrossRevenue).toLocaleString('es-CO')} COP</Data></Cell>
@@ -13002,7 +13337,7 @@ class NexusApp {
     // -------------------------------------------------------------------------
     let hoja3Rows = `
       <Row ss:Height="26">
-        <Cell ss:MergeAcross="5" ss:StyleID="TitleHeader"><Data ss:Type="String">CHARLES JOYAS - DETALLE DE GASTOS OPERATIVOS (OPEX)</Data></Cell>
+        <Cell ss:MergeAcross="5" ss:StyleID="TitleHeader"><Data ss:Type="String">DETALLE DE GASTOS OPERATIVOS (OPEX)</Data></Cell>
       </Row>
       <Row ss:Height="20">
         <Cell ss:MergeAcross="5" ss:StyleID="MetaHeader"><Data ss:Type="String">Período: ${escapeXml(periodLabel)} | Total Egresos: ${periodExpenses.length} registros | Monto Total: $ ${Number(m.totalOPEX).toLocaleString('es-CO')} COP</Data></Cell>
@@ -13054,8 +13389,8 @@ class NexusApp {
  xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
  xmlns:html="http://www.w3.org/TR/REC-html40">
  <DocumentProperties xmlns="urn:schemas-microsoft-com:office:office">
-  <Author>Charles Joyas</Author>
-  <Company>Charles Joyas Joyería Fina</Company>
+  <Author>Nexus POS</Author>
+  <Company>Joyería Demo</Company>
   <Created>${now.toISOString()}</Created>
  </DocumentProperties>
  <Styles>
@@ -13345,7 +13680,7 @@ class NexusApp {
       ? `${this.finanzasCustomStartDate || 'desde'}_al_${this.finanzasCustomEndDate || 'hasta'}`
       : period;
     link.setAttribute('href', url);
-    link.setAttribute('download', `Estado_Resultados_PyL_Charles_Joyas_${fileRangeSuffix}_${fileDateStr}.xls`);
+    link.setAttribute('download', `Estado_Resultados_PyL_${fileRangeSuffix}_${fileDateStr}.xls`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -13663,7 +13998,7 @@ class NexusApp {
     const link = document.createElement('a');
     const dateStr = new Date().toISOString().split('T')[0];
     link.setAttribute('href', url);
-    link.setAttribute('download', `Reporte_Compras_Charles_Joyas_${m.period}_${dateStr}.csv`);
+    link.setAttribute('download', `Reporte_Compras_Joyeria_${m.period}_${dateStr}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -14204,8 +14539,8 @@ class NexusApp {
  xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
  xmlns:html="http://www.w3.org/TR/REC-html40">
  <DocumentProperties xmlns="urn:schemas-microsoft-com:office:office">
-  <Author>Charles Joyas SAS</Author>
-  <Company>Inversiones Charles Joyas S.A.S</Company>
+  <Author>Nexus POS</Author>
+  <Company>Joyería Demo S.A.S</Company>
   <Created>${now.toISOString()}</Created>
  </DocumentProperties>
  <Styles>
@@ -14227,7 +14562,7 @@ class NexusApp {
    <Column ss:Width="120"/>
 
    <Row ss:Height="28">
-    <Cell ss:MergeAcross="9" ss:StyleID="TitleHeader"><Data ss:Type="String">  CHARLES JOYAS SAS — AUDITORÍA GENERAL DE CRÉDITOS Y CUENTAS POR PAGAR (CXP)</Data></Cell>
+    <Cell ss:MergeAcross="9" ss:StyleID="TitleHeader"><Data ss:Type="String">  AUDITORÍA GENERAL DE CRÉDITOS Y CUENTAS POR PAGAR (CXP)</Data></Cell>
    </Row>
    <Row ss:Height="18">
     <Cell ss:MergeAcross="9" ss:StyleID="SubTitleHeader"><Data ss:Type="String">  NIT: 901838998-0 | Joyería Fina &amp; Taller | Consolidado Ejecutivo de Compromisos Comerciales</Data></Cell>
@@ -14314,7 +14649,7 @@ class NexusApp {
    <Column ss:Width="105"/>
 
    <Row ss:Height="28">
-    <Cell ss:MergeAcross="12" ss:StyleID="TitleHeader"><Data ss:Type="String">  CHARLES JOYAS SAS — CARTERA ACTIVA: DEUDAS Y SALDOS PENDIENTES DE PAGO</Data></Cell>
+    <Cell ss:MergeAcross="12" ss:StyleID="TitleHeader"><Data ss:Type="String">  CARTERA ACTIVA: DEUDAS Y SALDOS PENDIENTES DE PAGO</Data></Cell>
    </Row>
    <Row ss:Height="18">
     <Cell ss:MergeAcross="12" ss:StyleID="SubTitleHeader"><Data ss:Type="String">  Listado Prioritario de Compromisos Comerciales Pendientes (Filtro Activo: Saldo > $0)</Data></Cell>
@@ -14380,7 +14715,7 @@ class NexusApp {
    <Column ss:Width="160"/>
 
    <Row ss:Height="28">
-    <Cell ss:MergeAcross="11" ss:StyleID="TitleHeader"><Data ss:Type="String">  CHARLES JOYAS SAS — LIBRO MAESTRO DE CRÉDITOS CON PROVEEDORES (HISTÓRICO)</Data></Cell>
+    <Cell ss:MergeAcross="11" ss:StyleID="TitleHeader"><Data ss:Type="String">  LIBRO MAESTRO DE CRÉDITOS CON PROVEEDORES (HISTÓRICO)</Data></Cell>
    </Row>
    <Row ss:Height="18">
     <Cell ss:MergeAcross="11" ss:StyleID="SubTitleHeader"><Data ss:Type="String">  Trazabilidad Completa de Compromisos Comerciales: Cuentas Activas y Cuentas Saldadas</Data></Cell>
@@ -14444,7 +14779,7 @@ class NexusApp {
    <Column ss:Width="95"/>
 
    <Row ss:Height="28">
-    <Cell ss:MergeAcross="9" ss:StyleID="TitleHeader"><Data ss:Type="String">  CHARLES JOYAS SAS — HISTORIAL DE PAGOS Y ABONOS A PROVEEDORES</Data></Cell>
+    <Cell ss:MergeAcross="9" ss:StyleID="TitleHeader"><Data ss:Type="String">  HISTORIAL DE PAGOS Y ABONOS A PROVEEDORES</Data></Cell>
    </Row>
    <Row ss:Height="18">
     <Cell ss:MergeAcross="9" ss:StyleID="SubTitleHeader"><Data ss:Type="String">  Comprobantes Oficiales de Salidas de Caja y Banco para Amortización de Deudas</Data></Cell>
@@ -14489,7 +14824,7 @@ class NexusApp {
  </Worksheet>
 </Workbook>`;
 
-    this._downloadExcelWorkbook(xml, 'Reporte_Creditos_Proveedores_Charles_Joyas');
+    this._downloadExcelWorkbook(xml, 'Reporte_Creditos_Proveedores');
     this.showToast('Auditoría Completa de Créditos y Cuentas por Pagar exportada a Excel exitosamente', 'success');
   }
 
@@ -14591,8 +14926,8 @@ class NexusApp {
  xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
  xmlns:html="http://www.w3.org/TR/REC-html40">
  <DocumentProperties xmlns="urn:schemas-microsoft-com:office:office">
-  <Author>Charles Joyas SAS</Author>
-  <Company>Inversiones Charles Joyas S.A.S</Company>
+  <Author>Nexus POS</Author>
+  <Company>Joyería Demo S.A.S</Company>
   <Created>${now.toISOString()}</Created>
  </DocumentProperties>
  <Styles>
@@ -14612,7 +14947,7 @@ class NexusApp {
    <Column ss:Width="90"/>
 
    <Row ss:Height="28">
-    <Cell ss:MergeAcross="7" ss:StyleID="TitleHeader"><Data ss:Type="String">  CHARLES JOYAS SAS — RESUMEN EJECUTIVO DE PAGOS Y ABONOS A PROVEEDORES</Data></Cell>
+    <Cell ss:MergeAcross="7" ss:StyleID="TitleHeader"><Data ss:Type="String">  RESUMEN EJECUTIVO DE PAGOS Y ABONOS A PROVEEDORES</Data></Cell>
    </Row>
    <Row ss:Height="18">
     <Cell ss:MergeAcross="7" ss:StyleID="SubTitleHeader"><Data ss:Type="String">  NIT: 901838998-0 | Joyería Fina &amp; Taller de Orfebrería | Auditoría de Cuentas por Pagar</Data></Cell>
@@ -14689,7 +15024,7 @@ class NexusApp {
    <Column ss:Width="95"/>
 
    <Row ss:Height="28">
-    <Cell ss:MergeAcross="11" ss:StyleID="TitleHeader"><Data ss:Type="String">  CHARLES JOYAS SAS — HISTORIAL DETALLADO DE ABONOS A COMPRAS (PAGOS PROVEEDORES)</Data></Cell>
+    <Cell ss:MergeAcross="11" ss:StyleID="TitleHeader"><Data ss:Type="String">  HISTORIAL DETALLADO DE ABONOS A COMPRAS (PAGOS PROVEEDORES)</Data></Cell>
    </Row>
    <Row ss:Height="18">
     <Cell ss:MergeAcross="11" ss:StyleID="SubTitleHeader"><Data ss:Type="String">  Trazabilidad Completa de Salidas de Dinero | Relación con Órdenes y Créditos</Data></Cell>
@@ -14732,7 +15067,7 @@ class NexusApp {
  </Worksheet>
 </Workbook>`;
 
-    this._downloadExcelWorkbook(xml, 'Historial_Abonos_Compras_Charles_Joyas');
+    this._downloadExcelWorkbook(xml, 'Historial_Abonos_Compras');
     this.showToast('Historial de Abonos a Compras exportado a Excel exitosamente', 'success');
   }
 
@@ -14827,8 +15162,8 @@ class NexusApp {
  xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
  xmlns:html="http://www.w3.org/TR/REC-html40">
  <DocumentProperties xmlns="urn:schemas-microsoft-com:office:office">
-  <Author>Charles Joyas SAS</Author>
-  <Company>Inversiones Charles Joyas S.A.S</Company>
+  <Author>Nexus POS</Author>
+  <Company>Joyería Demo S.A.S</Company>
   <Created>${now.toISOString()}</Created>
  </DocumentProperties>
  <Styles>
@@ -14847,7 +15182,7 @@ class NexusApp {
    <Column ss:Width="90"/>
 
    <Row ss:Height="28">
-    <Cell ss:MergeAcross="6" ss:StyleID="TitleHeader"><Data ss:Type="String">  CHARLES JOYAS SAS — RESUMEN EJECUTIVO DE ABONOS Y COBROS A CLIENTES</Data></Cell>
+    <Cell ss:MergeAcross="6" ss:StyleID="TitleHeader"><Data ss:Type="String">  RESUMEN EJECUTIVO DE ABONOS Y COBROS A CLIENTES</Data></Cell>
    </Row>
    <Row ss:Height="18">
     <Cell ss:MergeAcross="6" ss:StyleID="SubTitleHeader"><Data ss:Type="String">  NIT: 901838998-0 | Joyería Fina &amp; Taller de Orfebrería | Recaudos Crédito y Plan Separe</Data></Cell>
@@ -14910,7 +15245,7 @@ class NexusApp {
    <Column ss:Width="95"/>
 
    <Row ss:Height="28">
-    <Cell ss:MergeAcross="10" ss:StyleID="TitleHeader"><Data ss:Type="String">  CHARLES JOYAS SAS — HISTORIAL DETALLADO DE ABONOS A VENTAS (COBROS CLIENTES)</Data></Cell>
+    <Cell ss:MergeAcross="10" ss:StyleID="TitleHeader"><Data ss:Type="String">  HISTORIAL DETALLADO DE ABONOS A VENTAS (COBROS CLIENTES)</Data></Cell>
    </Row>
    <Row ss:Height="18">
     <Cell ss:MergeAcross="10" ss:StyleID="SubTitleHeader"><Data ss:Type="String">  Control de Ingresos por Cuotas de Créditos y Plan Separe de Joyería</Data></Cell>
@@ -14952,7 +15287,7 @@ class NexusApp {
  </Worksheet>
 </Workbook>`;
 
-    this._downloadExcelWorkbook(xml, 'Historial_Abonos_Ventas_Charles_Joyas');
+    this._downloadExcelWorkbook(xml, 'Historial_Abonos_Ventas');
     this.showToast('Historial de Abonos a Ventas exportado a Excel exitosamente', 'success');
   }
 
@@ -15120,8 +15455,8 @@ class NexusApp {
  xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
  xmlns:html="http://www.w3.org/TR/REC-html40">
  <DocumentProperties xmlns="urn:schemas-microsoft-com:office:office">
-  <Author>Charles Joyas SAS</Author>
-  <Company>Inversiones Charles Joyas S.A.S</Company>
+  <Author>Nexus POS</Author>
+  <Company>Joyería Demo S.A.S</Company>
   <Created>${now.toISOString()}</Created>
  </DocumentProperties>
  <Styles>
@@ -15139,7 +15474,7 @@ class NexusApp {
    <Column ss:Width="90"/>
 
    <Row ss:Height="28">
-    <Cell ss:MergeAcross="5" ss:StyleID="TitleHeader"><Data ss:Type="String">  CHARLES JOYAS SAS — RESUMEN EJECUTIVO DE COMPRAS &amp; ABASTECIMIENTO</Data></Cell>
+    <Cell ss:MergeAcross="5" ss:StyleID="TitleHeader"><Data ss:Type="String">  RESUMEN EJECUTIVO DE COMPRAS &amp; ABASTECIMIENTO</Data></Cell>
    </Row>
    <Row ss:Height="18">
     <Cell ss:MergeAcross="5" ss:StyleID="SubTitleHeader"><Data ss:Type="String">  NIT: 901838998-0 | Joyería Fina &amp; Taller | Indicadores de Metales, Gemas e Inventario</Data></Cell>
@@ -15231,7 +15566,7 @@ class NexusApp {
    <Column ss:Width="120"/>
 
    <Row ss:Height="28">
-    <Cell ss:MergeAcross="20" ss:StyleID="TitleHeader"><Data ss:Type="String">  CHARLES JOYAS SAS — LIBRO DETALLADO DE ÓRDENES DE COMPRA A PROVEEDORES</Data></Cell>
+    <Cell ss:MergeAcross="20" ss:StyleID="TitleHeader"><Data ss:Type="String">  LIBRO DETALLADO DE ÓRDENES DE COMPRA A PROVEEDORES</Data></Cell>
    </Row>
    <Row ss:Height="18">
     <Cell ss:MergeAcross="20" ss:StyleID="SubTitleHeader"><Data ss:Type="String">  Control Exhaustivo de Materias Primas, Gramaje Joyero, Precios por Gramo y Saldos</Data></Cell>
@@ -15301,7 +15636,7 @@ class NexusApp {
    <Column ss:Width="95"/>
 
    <Row ss:Height="28">
-    <Cell ss:MergeAcross="8" ss:StyleID="TitleHeader"><Data ss:Type="String">  CHARLES JOYAS SAS — HISTORIAL DE PAGOS Y ABONOS A PROVEEDORES</Data></Cell>
+    <Cell ss:MergeAcross="8" ss:StyleID="TitleHeader"><Data ss:Type="String">  HISTORIAL DE PAGOS Y ABONOS A PROVEEDORES</Data></Cell>
    </Row>
    <Row ss:Height="18">
     <Cell ss:MergeAcross="8" ss:StyleID="SubTitleHeader"><Data ss:Type="String">  Registro de Egresos y Liquidaciones de Compras y Créditos Comerciales</Data></Cell>
@@ -15344,7 +15679,7 @@ class NexusApp {
  </Worksheet>
 </Workbook>`;
 
-    this._downloadExcelWorkbook(xml, 'Reporte_Detallado_Compras_Charles_Joyas');
+    this._downloadExcelWorkbook(xml, 'Reporte_Detallado_Compras');
     this.showToast('Reporte Detallado de Compras exportado a Excel exitosamente', 'success');
   }
 
@@ -15547,8 +15882,8 @@ class NexusApp {
  xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
  xmlns:html="http://www.w3.org/TR/REC-html40">
  <DocumentProperties xmlns="urn:schemas-microsoft-com:office:office">
-  <Author>Charles Joyas SAS</Author>
-  <Company>Inversiones Charles Joyas S.A.S</Company>
+  <Author>Nexus POS</Author>
+  <Company>Joyería Demo S.A.S</Company>
   <Created>${now.toISOString()}</Created>
  </DocumentProperties>
  <Styles>
@@ -15566,7 +15901,7 @@ class NexusApp {
    <Column ss:Width="90"/>
 
    <Row ss:Height="28">
-    <Cell ss:MergeAcross="5" ss:StyleID="TitleHeader"><Data ss:Type="String">  CHARLES JOYAS SAS — LIBRO COMPLETO DE COMPRAS, ABASTECIMIENTO Y ABONOS</Data></Cell>
+    <Cell ss:MergeAcross="5" ss:StyleID="TitleHeader"><Data ss:Type="String">  LIBRO COMPLETO DE COMPRAS, ABASTECIMIENTO Y ABONOS</Data></Cell>
    </Row>
    <Row ss:Height="18">
     <Cell ss:MergeAcross="5" ss:StyleID="SubTitleHeader"><Data ss:Type="String">  NIT: 901838998-0 | Joyería Fina &amp; Taller | Consolidado Multi-Módulo de Flujos Comerciales</Data></Cell>
@@ -15646,7 +15981,7 @@ class NexusApp {
    <Column ss:Width="110"/>
 
    <Row ss:Height="28">
-    <Cell ss:MergeAcross="19" ss:StyleID="TitleHeader"><Data ss:Type="String">  CHARLES JOYAS SAS — HISTORIAL DETALLADO DE ÓRDENES DE COMPRA</Data></Cell>
+    <Cell ss:MergeAcross="19" ss:StyleID="TitleHeader"><Data ss:Type="String">  HISTORIAL DETALLADO DE ÓRDENES DE COMPRA</Data></Cell>
    </Row>
    <Row ss:Height="18">
     <Cell ss:MergeAcross="19" ss:StyleID="SubTitleHeader"><Data ss:Type="String">  Control Exhaustivo de Materias Primas, Gramaje Joyero, Precios por Gramo y Saldos</Data></Cell>
@@ -15715,7 +16050,7 @@ class NexusApp {
    <Column ss:Width="95"/>
 
    <Row ss:Height="28">
-    <Cell ss:MergeAcross="11" ss:StyleID="TitleHeader"><Data ss:Type="String">  CHARLES JOYAS SAS — HISTORIAL DE PAGOS Y ABONOS A PROVEEDORES</Data></Cell>
+    <Cell ss:MergeAcross="11" ss:StyleID="TitleHeader"><Data ss:Type="String">  HISTORIAL DE PAGOS Y ABONOS A PROVEEDORES</Data></Cell>
    </Row>
    <Row ss:Height="18">
     <Cell ss:MergeAcross="11" ss:StyleID="SubTitleHeader"><Data ss:Type="String">  Trazabilidad de Desembolsos a Cuentas Comerciales de Proveedores de Joyería</Data></Cell>
@@ -15773,7 +16108,7 @@ class NexusApp {
    <Column ss:Width="95"/>
 
    <Row ss:Height="28">
-    <Cell ss:MergeAcross="10" ss:StyleID="TitleHeader"><Data ss:Type="String">  CHARLES JOYAS SAS — HISTORIAL DE ABONOS RECIBIDOS DE CLIENTES</Data></Cell>
+    <Cell ss:MergeAcross="10" ss:StyleID="TitleHeader"><Data ss:Type="String">  HISTORIAL DE ABONOS RECIBIDOS DE CLIENTES</Data></Cell>
    </Row>
    <Row ss:Height="18">
     <Cell ss:MergeAcross="10" ss:StyleID="SubTitleHeader"><Data ss:Type="String">  Control de Ingresos por Cuotas de Crédito y Plan Separe de Joyas</Data></Cell>
@@ -15829,7 +16164,7 @@ class NexusApp {
    <Column ss:Width="100"/>
 
    <Row ss:Height="28">
-    <Cell ss:MergeAcross="9" ss:StyleID="TitleHeader"><Data ss:Type="String">  CHARLES JOYAS SAS — CARTERA Y CUENTAS POR PAGAR A PROVEEDORES (CXP)</Data></Cell>
+    <Cell ss:MergeAcross="9" ss:StyleID="TitleHeader"><Data ss:Type="String">  CARTERA Y CUENTAS POR PAGAR A PROVEEDORES (CXP)</Data></Cell>
    </Row>
    <Row ss:Height="18">
     <Cell ss:MergeAcross="9" ss:StyleID="SubTitleHeader"><Data ss:Type="String">  Auditoría de Compromisos Financieros, Vencimientos y Saldos de Deuda</Data></Cell>
@@ -15870,7 +16205,7 @@ class NexusApp {
  </Worksheet>
 </Workbook>`;
 
-    this._downloadExcelWorkbook(xml, 'Libro_Completo_Compras_y_Abonos_Charles_Joyas');
+    this._downloadExcelWorkbook(xml, 'Libro_Completo_Compras_y_Abonos');
     this.showToast('Libro Completo de Compras y Abonos exportado a Excel exitosamente', 'success');
   }
 
@@ -16685,8 +17020,8 @@ class NexusApp {
  xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
  xmlns:html="http://www.w3.org/TR/REC-html40">
  <DocumentProperties xmlns="urn:schemas-microsoft-com:office:office">
-  <Author>Charles Joyas SAS</Author>
-  <Company>Inversiones Charles Joyas S.A.S</Company>
+  <Author>Nexus POS</Author>
+  <Company>Joyería Demo S.A.S</Company>
   <Created>${now.toISOString()}</Created>
  </DocumentProperties>
  <Styles>
@@ -16705,7 +17040,7 @@ class NexusApp {
    <Column ss:Width="120"/>
 
    <Row ss:Height="28">
-    <Cell ss:MergeAcross="4" ss:StyleID="TitleHeader"><Data ss:Type="String">  CHARLES JOYAS SAS — REPORTE GENERAL OPERATIVO Y ESTADO DE RESULTADOS (P&amp;L)</Data></Cell>
+    <Cell ss:MergeAcross="4" ss:StyleID="TitleHeader"><Data ss:Type="String">  REPORTE GENERAL OPERATIVO Y ESTADO DE RESULTADOS (P&amp;L)</Data></Cell>
    </Row>
    <Row ss:Height="18">
     <Cell ss:MergeAcross="4" ss:StyleID="SubTitleHeader"><Data ss:Type="String">  NIT: 901838998-0 | Joyería Fina &amp; Taller | Consolidado Integral de Operaciones, Ventas, Gastos y Tesorería</Data></Cell>
@@ -16818,7 +17153,7 @@ class NexusApp {
    <Column ss:Width="100"/>
 
    <Row ss:Height="28">
-    <Cell ss:MergeAcross="13" ss:StyleID="TitleHeader"><Data ss:Type="String">  CHARLES JOYAS SAS — LIBRO DETALLADO DE VENTAS Y FACTURACIÓN POS</Data></Cell>
+    <Cell ss:MergeAcross="13" ss:StyleID="TitleHeader"><Data ss:Type="String">  LIBRO DETALLADO DE VENTAS Y FACTURACIÓN POS</Data></Cell>
    </Row>
    <Row ss:Height="18">
     <Cell ss:MergeAcross="13" ss:StyleID="SubTitleHeader"><Data ss:Type="String">  Auditoría Nominal de Tickets Emitidos, Clientes, Artículos, Gramajes y Medios de Pago</Data></Cell>
@@ -16884,7 +17219,7 @@ class NexusApp {
    <Column ss:Width="100"/>
 
    <Row ss:Height="28">
-    <Cell ss:MergeAcross="7" ss:StyleID="TitleHeader"><Data ss:Type="String">  CHARLES JOYAS SAS — LIBRO DETALLADO DE GASTOS OPERATIVOS (OPEX)</Data></Cell>
+    <Cell ss:MergeAcross="7" ss:StyleID="TitleHeader"><Data ss:Type="String">  LIBRO DETALLADO DE GASTOS OPERATIVOS (OPEX)</Data></Cell>
    </Row>
    <Row ss:Height="18">
     <Cell ss:MergeAcross="7" ss:StyleID="SubTitleHeader"><Data ss:Type="String">  Auditoría Nominal de Egresos, Nómina, Arrendamiento, Servicios y Mantenimiento de Taller</Data></Cell>
@@ -16944,7 +17279,7 @@ class NexusApp {
    <Column ss:Width="110"/>
 
    <Row ss:Height="28">
-    <Cell ss:MergeAcross="11" ss:StyleID="TitleHeader"><Data ss:Type="String">  CHARLES JOYAS SAS — AUDITORÍA DE COMPRAS DE MERCANCÍA Y PROVEEDORES</Data></Cell>
+    <Cell ss:MergeAcross="11" ss:StyleID="TitleHeader"><Data ss:Type="String">  AUDITORÍA DE COMPRAS DE MERCANCÍA Y PROVEEDORES</Data></Cell>
    </Row>
    <Row ss:Height="18">
     <Cell ss:MergeAcross="11" ss:StyleID="SubTitleHeader"><Data ss:Type="String">  Adquisición de Joyas, Oro 18k, Plata 925, Insumos de Taller y Cuentas por Pagar Generadas</Data></Cell>
@@ -17011,7 +17346,7 @@ class NexusApp {
    <Column ss:Width="100"/>
 
    <Row ss:Height="28">
-    <Cell ss:MergeAcross="11" ss:StyleID="TitleHeader"><Data ss:Type="String">  CHARLES JOYAS SAS — CONTROL DE ARQUEOS Y CIERRES DE CAJA</Data></Cell>
+    <Cell ss:MergeAcross="11" ss:StyleID="TitleHeader"><Data ss:Type="String">  CONTROL DE ARQUEOS Y CIERRES DE CAJA</Data></Cell>
    </Row>
    <Row ss:Height="18">
     <Cell ss:MergeAcross="11" ss:StyleID="SubTitleHeader"><Data ss:Type="String">  Auditoría Operativa de Gaveta, Turnos de Cajeros, Conciliación de Efectivo y Discrepancias</Data></Cell>
@@ -17052,7 +17387,7 @@ class NexusApp {
 </Workbook>`;
 
     const cleanPeriodName = (periodText || dateStr).replace(/[^a-zA-Z0-9_-]/g, '_').replace(/__+/g, '_');
-    this._downloadExcelWorkbook(xml, `Reporte_General_Operativo_CharlesJoyas_${cleanPeriodName}`);
+    this._downloadExcelWorkbook(xml, `Reporte_General_Operativo_${cleanPeriodName}`);
     this.showToast(`Libro Operativo General descargado exitosamente (${periodText || dateStr})`, 'success');
   }
 
@@ -17133,7 +17468,7 @@ class NexusApp {
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
     const cleanPeriodName = (periodText || new Date().toISOString().slice(0, 10)).replace(/[^a-zA-Z0-9_-]/g, '_').replace(/__+/g, '_');
-    link.setAttribute('download', `Reporte_General_Operativo_CharlesJoyas_${cleanPeriodName}.csv`);
+    link.setAttribute('download', `Reporte_General_Operativo_${cleanPeriodName}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -17190,7 +17525,7 @@ class NexusApp {
     }
 
     const dateStr = new Date().toISOString().split('T')[0];
-    const storeName = this.data.store?.name || 'Charles Joyas';
+    const storeName = this.data.store?.name || 'Sede Principal';
     const periodText = (this.repProdStartDate && this.repProdEndDate)
       ? `Período: ${this.repProdStartDate.toISOString().split('T')[0]} al ${this.repProdEndDate.toISOString().split('T')[0]}`
       : 'Histórico Completo Consolidado';
@@ -17390,9 +17725,9 @@ class NexusApp {
     } = options;
 
     const store = this.data.store || {};
-    const storeName = this.escapeHtml(store.name || 'Charles Joyas');
+    const storeName = this.escapeHtml(store.name || 'Joyería Demo');
     const metalLey = this.escapeHtml(this.getLeyMetalFromItems(items));
-    const legalName = this.escapeHtml(store.legalName || 'Inversiones Charles Joyas S.A.S');
+    const legalName = this.escapeHtml(store.legalName || 'Joyería Demo S.A.S');
     const address = this.escapeHtml(store.address || '');
     const addressExtra = this.escapeHtml(store.addressExtra || '');
     const phone = this.escapeHtml(store.phone || '');
@@ -17738,7 +18073,7 @@ class NexusApp {
     const totalLiabilities = liabilitiesShort + liabilitiesLong;
     const netEquity = totalAssets - totalLiabilities;
 
-    const storeName = this.data.store?.name || 'Charles Joyas SAS';
+    const storeName = this.data.store?.name || 'Sede Principal';
 
     if (kpiContainer) {
       kpiContainer.innerHTML = `
@@ -17841,7 +18176,7 @@ class NexusApp {
         .replace(/'/g, '&apos;');
     };
 
-    const storeName = this.data.store?.name || 'Charles Joyas SAS';
+    const storeName = this.data.store?.name || 'Sede Principal';
     const storeNit = this.data.store?.nit || '901.847.291-3';
     const now = new Date();
     const dateStr = now.toISOString().split('T')[0];
@@ -18739,7 +19074,7 @@ class NexusApp {
  </Worksheet>
 </Workbook>`;
 
-    this._downloadExcelWorkbook(xml, 'Balance_General_Consolidado_CharlesJoyas');
+    this._downloadExcelWorkbook(xml, 'Balance_General_Consolidado');
     this.showToast('Balance General exportado exitosamente a Excel (4 Hojas)', 'success');
   }
 
@@ -19805,10 +20140,10 @@ class NexusApp {
  xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
  xmlns:html="http://www.w3.org/TR/REC-html40">
  <DocumentProperties xmlns="urn:schemas-microsoft-com:office:office">
-  <Author>Charles Joyas SAS - Sistema POS</Author>
+  <Author>Nexus POS SaaS</Author>
   <LastAuthor>${escapeXml(this.currentUser?.name || 'Administración')}</LastAuthor>
   <Created>${now.toISOString()}</Created>
-  <Company>CHARLES JOYAS SAS</Company>
+  <Company>Joyería Demo</Company>
  </DocumentProperties>
  <Styles>
   <Style ss:ID="Default" ss:Name="Normal">
@@ -20114,7 +20449,7 @@ class NexusApp {
    <Column ss:Width="160"/>
 
    <Row ss:Height="28">
-    <Cell ss:MergeAcross="14" ss:StyleID="TitleHeader"><Data ss:Type="String">  CHARLES JOYAS SAS — INFORME COMPARATIVA DE PERIODOS Y UTILIDADES</Data></Cell>
+    <Cell ss:MergeAcross="14" ss:StyleID="TitleHeader"><Data ss:Type="String">  INFORME COMPARATIVA DE PERIODOS Y UTILIDADES</Data></Cell>
    </Row>
    <Row ss:Height="18">
     <Cell ss:MergeAcross="14" ss:StyleID="SubTitleHeader"><Data ss:Type="String">  NIT: 901838998-0 | Joyería Fina &amp; Taller | Auditoría Mensual de Facturación, Gastos, Utilidades y Márgenes</Data></Cell>
@@ -20209,7 +20544,7 @@ class NexusApp {
    <Column ss:Width="100"/>
 
    <Row ss:Height="26">
-    <Cell ss:MergeAcross="13" ss:StyleID="TitleHeader"><Data ss:Type="String">  CHARLES JOYAS SAS — REGISTRO HISTÓRICO DETALLADO DE VENTAS POR PERÍODO</Data></Cell>
+    <Cell ss:MergeAcross="13" ss:StyleID="TitleHeader"><Data ss:Type="String">  REGISTRO HISTÓRICO DETALLADO DE VENTAS POR PERÍODO</Data></Cell>
    </Row>
    <Row ss:Height="18">
     <Cell ss:MergeAcross="13" ss:StyleID="SubTitleHeader"><Data ss:Type="String">  Desglose de cada transacción, artículos vendidos, clientes, medios de pago y facturación</Data></Cell>
@@ -20263,7 +20598,7 @@ class NexusApp {
    <Column ss:Width="150"/>
 
    <Row ss:Height="26">
-    <Cell ss:MergeAcross="8" ss:StyleID="TitleHeader"><Data ss:Type="String">  CHARLES JOYAS SAS — REGISTRO HISTÓRICO DE GASTOS OPERATIVOS POR PERÍODO</Data></Cell>
+    <Cell ss:MergeAcross="8" ss:StyleID="TitleHeader"><Data ss:Type="String">  REGISTRO HISTÓRICO DE GASTOS OPERATIVOS POR PERÍODO</Data></Cell>
    </Row>
    <Row ss:Height="18">
     <Cell ss:MergeAcross="8" ss:StyleID="SubTitleHeader"><Data ss:Type="String">  Auditoría de egresos, conceptos, nómina, alquiler, taller y responsables</Data></Cell>
@@ -20313,7 +20648,7 @@ class NexusApp {
    <Column ss:Width="140"/>
 
    <Row ss:Height="26">
-    <Cell ss:MergeAcross="9" ss:StyleID="TitleHeader"><Data ss:Type="String">  CHARLES JOYAS SAS — RANKING HISTÓRICO DE MESES POR UTILIDAD GENERADA</Data></Cell>
+    <Cell ss:MergeAcross="9" ss:StyleID="TitleHeader"><Data ss:Type="String">  RANKING HISTÓRICO DE MESES POR UTILIDAD GENERADA</Data></Cell>
    </Row>
    <Row ss:Height="18">
     <Cell ss:MergeAcross="9" ss:StyleID="SubTitleHeader"><Data ss:Type="String">  Análisis de contribución a la utilidad, participación en facturación y ticket promedio</Data></Cell>
@@ -20354,7 +20689,7 @@ class NexusApp {
    <Column ss:Width="360"/>
 
    <Row ss:Height="26">
-    <Cell ss:MergeAcross="2" ss:StyleID="TitleHeader"><Data ss:Type="String">  CHARLES JOYAS SAS — METODOLOGÍA CONTABLE Y FÓRMULAS DE CÁLCULO</Data></Cell>
+    <Cell ss:MergeAcross="2" ss:StyleID="TitleHeader"><Data ss:Type="String">  METODOLOGÍA CONTABLE Y FÓRMULAS DE CÁLCULO</Data></Cell>
    </Row>
    <Row ss:Height="18">
     <Cell ss:MergeAcross="2" ss:StyleID="SubTitleHeader"><Data ss:Type="String">  Glosario explicativo de cada indicador de la Comparativa de Periodos</Data></Cell>
@@ -20407,7 +20742,7 @@ class NexusApp {
 </Workbook>`;
 
     const cleanPeriodName = (periodLabel || dateStr).replace(/[^a-zA-Z0-9_-]/g, '_').replace(/__+/g, '_');
-    this._downloadExcelWorkbook(xml, `Comparativa_Periodos_${cleanPeriodName}_CharlesJoyas`);
+    this._downloadExcelWorkbook(xml, `Comparativa_Periodos`);
     this.showToast(`Libro de Comparativa de Periodos (${periodLabel}) descargado exitosamente`, 'success');
   }
 
@@ -20462,7 +20797,7 @@ class NexusApp {
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
     const cleanPeriodName = (periodLabel || new Date().toISOString().slice(0, 10)).replace(/[^a-zA-Z0-9_-]/g, '_').replace(/__+/g, '_');
-    link.setAttribute('download', `Comparativa_Periodos_${cleanPeriodName}_CharlesJoyas.csv`);
+    link.setAttribute('download', `Comparativa_Periodos.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -21019,7 +21354,7 @@ class NexusApp {
   sendCobranzaWhatsApp(phone, customerName, balance, daysOverdue) {
     const cleanPhone = (phone || '').replace(/[^0-9]/g, '');
     const formattedBalance = this.formatCurrency(balance);
-    const storeName = this.data.store?.branding?.appName || this.data.store?.name || 'Charles Joyas SAS';
+    const storeName = this.data.store?.branding?.appName || this.data.store?.name || 'Sede Principal';
     
     let msg = `Hola estimado(a) ${customerName}, te saludamos cordialmente de ${storeName}. `;
     if (daysOverdue > 0) {
@@ -21220,8 +21555,8 @@ class NexusApp {
  xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
  xmlns:html="http://www.w3.org/TR/REC-html40">
  <DocumentProperties xmlns="urn:schemas-microsoft-com:office:office">
-  <Author>Charles Joyas SAS</Author>
-  <Company>Inversiones Charles Joyas S.A.S</Company>
+  <Author>Nexus POS</Author>
+  <Company>Joyería Demo S.A.S</Company>
   <Created>${now.toISOString()}</Created>
  </DocumentProperties>
  <Styles>
@@ -21251,7 +21586,7 @@ class NexusApp {
    <Column ss:Width="330"/>
 
    <Row ss:Height="28">
-    <Cell ss:MergeAcross="5" ss:StyleID="TitleHeader"><Data ss:Type="String">  CHARLES JOYAS SAS — TABLERO DE CONTROL Y MATRIZ DE AGING DE CARTERA</Data></Cell>
+    <Cell ss:MergeAcross="5" ss:StyleID="TitleHeader"><Data ss:Type="String">  TABLERO DE CONTROL Y MATRIZ DE AGING DE CARTERA</Data></Cell>
    </Row>
    <Row ss:Height="18">
     <Cell ss:MergeAcross="5" ss:StyleID="SubTitleHeader"><Data ss:Type="String">  NIT: 901838998-0 | Joyería Fina &amp; Taller | Indicadores de Cartera, Cobranzas y Antigüedad de Saldos</Data></Cell>
@@ -21350,7 +21685,7 @@ class NexusApp {
    <Column ss:Width="230"/>
 
    <Row ss:Height="28">
-    <Cell ss:MergeAcross="21" ss:StyleID="TitleHeader"><Data ss:Type="String">  CHARLES JOYAS SAS — LIBRO MAESTRO DE CARTERA Y CRÉDITOS DE CLIENTES</Data></Cell>
+    <Cell ss:MergeAcross="21" ss:StyleID="TitleHeader"><Data ss:Type="String">  LIBRO MAESTRO DE CARTERA Y CRÉDITOS DE CLIENTES</Data></Cell>
    </Row>
    <Row ss:Height="18">
     <Cell ss:MergeAcross="21" ss:StyleID="SubTitleHeader"><Data ss:Type="String">  Auditoría Nominal de Cuentas por Cobrar, Vencimientos, Abonos, Morosidad y Acciones de Cobranza</Data></Cell>
@@ -21426,7 +21761,7 @@ class NexusApp {
    <Column ss:Width="100"/>
 
    <Row ss:Height="28">
-    <Cell ss:MergeAcross="10" ss:StyleID="TitleHeader"><Data ss:Type="String">  CHARLES JOYAS SAS — HISTORIAL DE ABONOS Y RECAUDOS DE CARTERA</Data></Cell>
+    <Cell ss:MergeAcross="10" ss:StyleID="TitleHeader"><Data ss:Type="String">  HISTORIAL DE ABONOS Y RECAUDOS DE CARTERA</Data></Cell>
    </Row>
    <Row ss:Height="18">
     <Cell ss:MergeAcross="10" ss:StyleID="SubTitleHeader"><Data ss:Type="String">  Registro Cronológico de Cobranzas, Pagos en Caja y Transferencias de Créditos y Planes Separe</Data></Cell>
@@ -21471,7 +21806,7 @@ class NexusApp {
  </Worksheet>
 </Workbook>`;
 
-    this._downloadExcelWorkbook(xml, `Cartera_Clientes_SuperCompleto_CharlesJoyas_${dateStr}`);
+    this._downloadExcelWorkbook(xml, `Cartera_Clientes_SuperCompleto_${dateStr}`);
     this.showToast('Libro Excel de Cartera descargado exitosamente (3 Hojas)', 'success');
   }
 
@@ -21553,7 +21888,7 @@ class NexusApp {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `Cartera_Clientes_Detallada_CharlesJoyas_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute('download', `Cartera_Clientes_Detallada_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -22198,7 +22533,7 @@ class NexusApp {
  xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
  xmlns:html="http://www.w3.org/TR/REC-html40">
  <DocumentProperties xmlns="urn:schemas-microsoft-com:office:office">
-  <Author>Charles Joyas POS</Author>
+  <Author>Joyería Demo POS</Author>
   <Created>${new Date().toISOString()}</Created>
  </DocumentProperties>
  <Styles>
@@ -23699,7 +24034,7 @@ class NexusApp {
     const baseAccounts = [
       'Cuenta Carlos',
       'Cuenta Sharick',
-      'CUENTA CHARLES JOYAS SAS'
+      'CUENTA PRINCIPAL NEGOCIO'
     ];
 
     const discoveredAccounts = [];
@@ -23724,7 +24059,7 @@ class NexusApp {
       const lower = acc.toLowerCase();
       const alreadyCovered = (lower.includes('carlos') && accountsSet.has('cuenta carlos')) ||
                              ((lower.includes('zharick') || lower.includes('sharick')) && accountsSet.has('cuenta sharick')) ||
-                             (lower.includes('charles joyas') && accountsSet.has('cuenta charles joyas sas'));
+                             (lower.includes('cuenta principal') && accountsSet.has('cuenta principal negocio'));
       if (!alreadyCovered && !accountsSet.has(lower)) {
         accountsSet.add(lower);
         finalAccounts.push(acc);
