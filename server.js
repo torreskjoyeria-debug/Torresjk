@@ -13,9 +13,17 @@ if (!process.env.VERCEL) {
 }
 
 const app = express();
-const PORT = process.env.PORT || 3000;
-const DIRECT_MONGO_URI = 'mongodb://charlesjoyass_db_user:57XZqt7XTrFdkaKt@ac-3th3i0i-shard-00-00.ceb3uhz.mongodb.net:27017,ac-3th3i0i-shard-00-01.ceb3uhz.mongodb.net:27017,ac-3th3i0i-shard-00-02.ceb3uhz.mongodb.net:27017/charlesjoyas_pos?ssl=true&replicaSet=atlas-xpgtcp-shard-0&authSource=admin&retryWrites=true&w=majority';
+const PORT = process.env.PORT || 4000;
+
+// ISOLATED DATABASE URI FOR CLIENTE 2 (cliente2_demo_pos)
+const DIRECT_MONGO_URI = 'mongodb://charlesjoyass_db_user:57XZqt7XTrFdkaKt@ac-3th3i0i-shard-00-00.ceb3uhz.mongodb.net:27017,ac-3th3i0i-shard-00-01.ceb3uhz.mongodb.net:27017,ac-3th3i0i-shard-00-02.ceb3uhz.mongodb.net:27017/cliente2_demo_pos?ssl=true&replicaSet=atlas-xpgtcp-shard-0&authSource=admin&retryWrites=true&w=majority';
 let MONGO_URI = process.env.MONGO_URI || DIRECT_MONGO_URI;
+
+// STRICT SECURITY GUARD: Ensure this project NEVER touches the production database of Charles Joyas (charlesjoyas_pos)
+if (MONGO_URI.includes('charlesjoyas_pos')) {
+  console.error('⛔ BLOQUEO CRÍTICO DE SEGURIDAD: Conexión denegada. Este proyecto replica está estrictamente aislado y NUNCA puede conectarse a charlesjoyas_pos.');
+  process.exit(1);
+}
 
 // If URI uses SRV for cluster0.ceb3uhz.mongodb.net, prefer the direct replica set URI to prevent querySrv ECONNREFUSED in serverless environments (AWS/Vercel)
 if (MONGO_URI.includes('cluster0.ceb3uhz.mongodb.net') && MONGO_URI.startsWith('mongodb+srv://')) {
@@ -26,6 +34,7 @@ const DB_FILE = path.join(__dirname, 'db.json');
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
+
 // Security Middleware: Strict restriction on internal database, config and server files
 app.use((req, res, next) => {
   const blockedPatterns = [
@@ -91,10 +100,10 @@ async function ensureDbConnected() {
     await connectingPromise;
     mongoConnected = true;
     lastMongoError = null;
-    console.log('[Nexus Server] Conectado exitosamente a MongoDB Atlas');
+    console.log('[Nexus Server - Cliente 2] Conectado exitosamente a MongoDB Atlas (cliente2_demo_pos)');
     return true;
   } catch (err) {
-    console.warn('[Nexus Server] Error conectando a MongoDB Atlas:', err.message);
+    console.warn('[Nexus Server - Cliente 2] Error conectando a MongoDB Atlas:', err.message);
     mongoConnected = false;
     lastMongoError = err.message;
     connectingPromise = null;
@@ -125,7 +134,7 @@ function loadLocalDb() {
       const content = fs.readFileSync(DB_FILE, 'utf8');
       return JSON.parse(content);
     } catch (e) {
-      console.error('[Nexus Server] Error leyendo db.json:', e);
+      console.error('[Nexus Server - Cliente 2] Error leyendo db.json:', e);
     }
   }
   return null;
@@ -142,7 +151,7 @@ function saveLocalDb(data) {
     fs.writeFileSync(tmpFile, JSON.stringify(data, null, 2), 'utf8');
     fs.renameSync(tmpFile, DB_FILE);
   } catch (e) {
-    console.error('[Nexus Server] Error escribiendo db.json:', e);
+    console.error('[Nexus Server - Cliente 2] Error escribiendo db.json:', e);
     try {
       if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile);
     } catch (_) {}
@@ -153,6 +162,8 @@ function saveLocalDb(data) {
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
+    project: 'Nexus POS - Cliente 2 Demo',
+    database: 'cliente2_demo_pos',
     mongoConnected,
     storageMode: mongoConnected ? 'MongoDB' : 'Local JSON / Storage',
     lastMongoError,
@@ -234,7 +245,7 @@ app.post('/api/data', async (req, res) => {
       return res.status(503).json({ error: 'Error de persistencia: No se pudo conectar a MongoDB Atlas en Vercel.' });
     }
 
-    res.json({ success: true, mode: mongoConnected ? 'MongoDB' : 'Local JSON', timestamp: new Date() });
+    res.json({ success: true, mode: mongoConnected ? 'MongoDB (cliente2_demo_pos)' : 'Local JSON', timestamp: new Date() });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -242,9 +253,9 @@ app.post('/api/data', async (req, res) => {
 
 if (!process.env.VERCEL && require.main === module) {
   app.listen(PORT, () => {
-    console.log(`[Nexus Server] Servidor Nexus POS SaaS corriendo en http://localhost:${PORT}`);
+    console.log(`[Nexus Server - Cliente 2] Servidor corriendo en http://localhost:${PORT}`);
+    console.log(`[Nexus Server - Cliente 2] Base de datos asignada: cliente2_demo_pos`);
   });
 }
 
 module.exports = app;
-

@@ -12,7 +12,7 @@
     "cashier": "Administrador",
     "shiftStatus": "Cerrado",
     "shiftStartTime": "08:00 AM",
-    "cashInBox": 0,
+    "cashInBox": 163500000,
     "taxRate": 0,
     "branding": {
       "appName": "JOYERÍA POS",
@@ -24,22 +24,24 @@
       "fontBody": "Outfit"
     },
     "metalRates": {
-      "oro18k": 580000,
-      "oro14k": 510000,
+      "oro18k": 520000,
+      "oro18kItaliano": 520000,
+      "oro14k": 420000,
+      "oro18kNacional": 420000,
       "balineria": 400000,
       "plata925": 400000
     }
   },
   "kpis": {
-    "salesToday": 0,
+    "salesToday": 122500000,
     "salesTrend": "0%",
-    "transactionsToday": 0,
+    "transactionsToday": 4,
     "txTrend": "0%",
-    "inventoryValue": 4520000,
-    "avgCostPerGram": 410000,
-    "avgCostGrams": 11.02,
-    "skusCount": 3,
-    "totalGrams": 11.02,
+    "inventoryValue": 56700000,
+    "avgCostPerGram": 1800000,
+    "avgCostGrams": 31.5,
+    "skusCount": 2,
+    "totalGrams": 28,
     "netMargin": "28%",
     "marginTrend": "0%",
     "totalCustomers": 0,
@@ -57,7 +59,8 @@
       "status": "Active",
       "lastLogin": "Hoy 08:00 AM",
       "avatar": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80",
-      "customPermissions": null
+      "customPermissions": null,
+      "storeId": "*"
     },
     {
       "id": "USR-002",
@@ -80,11 +83,39 @@
         "cuadre_caja",
         "abonos_ventas",
         "abonos_compras"
-      ]
+      ],
+      "storeId": "store_1"
+    },
+    {
+      "id": "USR-003",
+      "name": "Eduardo Martinez",
+      "email": "Edumarc@nexus.io.com",
+      "password": "1234567",
+      "role": "Gerente de Tienda Regional",
+      "storeId": "store_2",
+      "customPermissions": null,
+      "status": "Active",
+      "lastLogin": "Ahora mismo",
+      "avatar": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80"
     }
   ],
   "customers": [],
-  "suppliers": [],
+  "suppliers": [
+    {
+      "id": "PRV-846",
+      "docType": "CC",
+      "nit": "111111",
+      "name": "PIPE",
+      "phone": "2234566",
+      "email": "PIPE@GMAIL.COM",
+      "address": "CENTRO",
+      "accountType": "Ahorros",
+      "accountNumber": "1123445",
+      "bank": "BANCOLOMBOA",
+      "creditBalance": 0,
+      "status": "Active"
+    }
+  ],
   "perfiles": [
     {
       "id": "PRF-01",
@@ -179,7 +210,17 @@
       ]
     }
   ],
-  "expenses": [],
+  "expenses": [
+    {
+      "id": "EXP-1162",
+      "date": "2026-10-01",
+      "description": "COOMPRA AGUA",
+      "category": "Suministros",
+      "amount": 100000,
+      "status": "Pagado",
+      "method": "Efectivo"
+    }
+  ],
   "paymentMethods": [
     {
       "id": "PM-01",
@@ -227,16 +268,18 @@
       "name": "Oro 18K Italiano & Ley",
       "itemsCount": 2,
       "color": "#F59E0B",
-      "availableGrams": 7.35,
-      "cost": 410000
+      "availableGrams": 28,
+      "cost": 1800000,
+      "totalValuation": 50400000
     },
     {
       "id": "plata925",
       "name": "Plata 925 Fina",
-      "itemsCount": 1,
+      "itemsCount": 0,
       "color": "#94A3B8",
-      "availableGrams": 3.67,
-      "cost": 28000
+      "availableGrams": 0,
+      "cost": 280000,
+      "totalValuation": 0
     },
     {
       "id": "diamantes",
@@ -244,7 +287,8 @@
       "itemsCount": 0,
       "color": "#6366F1",
       "availableGrams": 0,
-      "cost": 850000
+      "cost": 850000,
+      "totalValuation": 0
     },
     {
       "id": "relojes",
@@ -252,73 +296,102 @@
       "itemsCount": 0,
       "color": "#10B981",
       "availableGrams": 0,
-      "cost": 1200000
+      "cost": 1200000,
+      "totalValuation": 0
     }
   ],
   "products": [
     {
-      "id": "PROD-001",
-      "code": "AN-001",
-      "name": "Anillo Solitario Circones Oro 18K",
+      "id": "PRD-173",
+      "sku": "001",
+      "name": "Cadena lazo",
+      "measureType": "Unidades",
+      "weightUnit": "u.",
+      "unit": "u.",
+      "pieceWeight": 3.5,
+      "weight": 3.5,
       "category": "oro18k",
-      "type": "Anillo",
-      "metal": "Oro 18k",
-      "weight": 2.85,
-      "cost": 1150000,
-      "price": 1650000,
-      "stock": 5,
-      "minStock": 1,
-      "image": "https://images.unsplash.com/photo-1605100804763-247f67b3557e?w=300&auto=format&fit=crop&q=80",
-      "status": "Disponible"
-    },
-    {
-      "id": "PROD-002",
-      "code": "CAD-001",
-      "name": "Cadena Eslabón Fígaro 50cm Oro 18K",
-      "category": "oro18k",
-      "type": "Cadena",
-      "metal": "Oro 18k",
-      "weight": 4.5,
+      "categoryName": "Oro 18K Italiano & Ley",
+      "supplier": "ANONIMO",
       "cost": 1800000,
-      "price": 2450000,
-      "stock": 3,
-      "minStock": 1,
-      "image": "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=300&auto=format&fit=crop&q=80",
-      "status": "Disponible"
+      "price": 0,
+      "stock": 8,
+      "isExtra": false,
+      "minStock": 2,
+      "status": "active",
+      "sold30d": 3,
+      "monthlySales": {
+        "2026-10": {
+          "3": 3
+        }
+      }
     },
     {
-      "id": "PROD-003",
-      "code": "PUL-001",
-      "name": "Pulsera Tejida Italiana Plata 925",
-      "category": "plata925",
-      "type": "Pulsera",
-      "metal": "Plata 925",
-      "weight": 3.67,
-      "cost": 280000,
-      "price": 420000,
-      "stock": 8,
+      "id": "PRD-469",
+      "sku": "001",
+      "name": "Cadena lazo",
+      "measureType": "Unidades",
+      "weightUnit": "u.",
+      "unit": "u.",
+      "pieceWeight": 3.5,
+      "weight": 3.5,
+      "category": "oro18k",
+      "categoryName": "Oro 18K Italiano & Ley",
+      "supplier": "ANONIMO",
+      "cost": 1800000,
+      "price": 0,
+      "stock": 0,
+      "isExtra": false,
       "minStock": 2,
-      "image": "https://images.unsplash.com/photo-1611591475155-42848c26f0f2?w=300&auto=format&fit=crop&q=80",
-      "status": "Disponible"
+      "status": "out_of_stock",
+      "sold30d": 1,
+      "monthlySales": {
+        "2026-10": {
+          "3": 1
+        }
+      }
     }
   ],
-  "assets": [],
+  "assets": [
+    {
+      "id": "ACT-86",
+      "name": "CAJA FUERTE",
+      "category": "Equipamiento POS",
+      "purchaseDate": "2026-10-01",
+      "costValue": 20000000,
+      "currentVal": 20000000,
+      "status": "Excelente"
+    }
+  ],
   "cashShiftLog": {
-    "shiftId": "TURNO-001",
-    "openedAt": "08:00 AM",
-    "openingCash": 0,
-    "cashSales": 0,
+    "shiftId": "TURNO-686",
+    "openedAt": "12:54",
+    "openingCash": 1000000,
+    "cashSales": 172500000,
     "cardSales": 0,
     "qrSales": 0,
-    "cashExpenses": 0,
-    "expectedCashInDrawer": 0,
+    "cashExpenses": 10000000,
+    "expectedCashInDrawer": 163500000,
     "actualCashInDrawer": 0,
     "discrepancy": 0,
-    "status": "Cerrado"
+    "status": "Abierto",
+    "openedBy": "Administrador",
+    "openedDate": "2026-10-01"
   },
   "cashShiftsHistory": [],
   "abonosVentas": [],
-  "abonosCompras": [],
+  "abonosCompras": [
+    {
+      "id": "AB-C667467",
+      "date": "2026-10-01",
+      "supplier": "PIPE",
+      "poId": "OC-432896",
+      "amount": 10000000,
+      "method": "Efectivo (Caja)",
+      "cashier": "Administrador",
+      "status": "Confirmado"
+    }
+  ],
   "balanceSheet": {
     "assetsCurrent": 4520000,
     "assetsFixed": 0,
@@ -360,9 +433,186 @@
       0
     ]
   },
-  "recentTransactions": [],
-  "sales": [],
-  "financialLedger": [],
+  "recentTransactions": [
+    {
+      "id": "TX-97236",
+      "customer": "Cliente Mostrador",
+      "customerDoc": "",
+      "customerDocType": "CC",
+      "customerAddress": "",
+      "customerPhone": "",
+      "time": "04:45:39 p.m.",
+      "date": "03/10/2026",
+      "type": "Venta POS Joyería",
+      "itemsCount": 3.5,
+      "items": [
+        {
+          "id": "PRD-173",
+          "sku": "001",
+          "name": "Cadena lazo",
+          "qty": 3.5,
+          "quantity": 3.5,
+          "unit": "u.",
+          "measureType": "Unidades",
+          "pieceWeight": 3.5,
+          "price": 10000000,
+          "total": 35000000
+        }
+      ],
+      "subtotal": 35000000,
+      "tax": 0,
+      "total": 35000000,
+      "paymentMethod": "Efectivo",
+      "cashier": "Administrador",
+      "status": "completed"
+    },
+    {
+      "id": "TX-95062",
+      "customer": "Cliente Mostrador",
+      "customerDoc": "",
+      "customerDocType": "CC",
+      "customerAddress": "",
+      "customerPhone": "",
+      "time": "04:41:16 p.m.",
+      "date": "03/10/2026",
+      "type": "Venta POS Joyería",
+      "itemsCount": 3.5,
+      "items": [
+        {
+          "id": "PRD-173",
+          "sku": "001",
+          "name": "Cadena lazo",
+          "qty": 3.5,
+          "quantity": 3.5,
+          "unit": "u.",
+          "measureType": "Unidades",
+          "pieceWeight": 3.5,
+          "price": 10000000,
+          "total": 35000000
+        }
+      ],
+      "subtotal": 35000000,
+      "tax": 0,
+      "total": 35000000,
+      "paymentMethod": "Efectivo",
+      "cashier": "Administrador",
+      "status": "completed"
+    },
+    {
+      "id": "TX-92723",
+      "customer": "Cliente Mostrador",
+      "customerDoc": "",
+      "customerDocType": "CC",
+      "customerAddress": "",
+      "customerPhone": "",
+      "time": "04:32:35 p.m.",
+      "date": "03/10/2026",
+      "type": "Venta POS Joyería",
+      "itemsCount": 3.5,
+      "items": [
+        {
+          "id": "PRD-469",
+          "sku": "001",
+          "name": "Cadena lazo",
+          "qty": 3.5,
+          "quantity": 3.5,
+          "unit": "u.",
+          "measureType": "Unidades",
+          "pieceWeight": 3.5,
+          "price": 10000000,
+          "total": 35000000
+        }
+      ],
+      "subtotal": 35000000,
+      "tax": 0,
+      "total": 35000000,
+      "paymentMethod": "Efectivo",
+      "cashier": "Administrador",
+      "status": "completed"
+    },
+    {
+      "id": "TX-91960",
+      "customer": "Cliente Mostrador",
+      "customerDoc": "",
+      "customerDocType": "CC",
+      "customerAddress": "",
+      "customerPhone": "",
+      "time": "04:10:56 p.m.",
+      "date": "03/10/2026",
+      "type": "Venta POS Joyería",
+      "itemsCount": 3.5,
+      "items": [
+        {
+          "id": "PRD-173",
+          "sku": "001",
+          "name": "Cadena lazo",
+          "qty": 3.5,
+          "quantity": 3.5,
+          "unit": "u.",
+          "measureType": "Unidades",
+          "pieceWeight": 3.5,
+          "price": 5000000,
+          "total": 17500000
+        }
+      ],
+      "subtotal": 17500000,
+      "tax": 0,
+      "total": 17500000,
+      "paymentMethod": "Efectivo",
+      "cashier": "Administrador",
+      "status": "completed"
+    },
+    {
+      "id": "TX-96126",
+      "customer": "Cliente Mostrador",
+      "customerDoc": "",
+      "customerDocType": "CC",
+      "customerAddress": "",
+      "customerPhone": "",
+      "time": "12:54:16",
+      "date": "01/10/2026",
+      "type": "Venta POS Joyería",
+      "itemsCount": 5,
+      "items": [
+        {
+          "id": "PROD-001",
+          "sku": "001",
+          "name": "Anillo Solitario Circones Oro 18K",
+          "qty": 5,
+          "quantity": 5,
+          "unit": "g",
+          "measureType": "Pesaje",
+          "pieceWeight": 2.85,
+          "price": 10000000,
+          "total": 50000000
+        }
+      ],
+      "subtotal": 50000000,
+      "tax": 0,
+      "total": 50000000,
+      "paymentMethod": "Efectivo",
+      "cashier": "Administrador",
+      "status": "completed"
+    }
+  ],
+  "financialLedger": [
+    {
+      "id": "LED-DEL-6167258",
+      "date": "2026-10-03",
+      "type": "Eliminación CXP",
+      "description": "Deuda CP-967 con PIPE eliminada por Super Admin (Administrador). Monto pendiente condonado: $ 20.000.000 COP.",
+      "amount": -20000000,
+      "user": "Administrador"
+    },
+    {
+      "id": "LED-DEL-6165933",
+      "date": "2026-10-03",
+      "type": "Eliminación CXP",
+      "description": "Deuda OC-432896 con PIPE eliminada por Super Admin (Administrador). Monto pendiente condonado: $ 35.000.000 COP.",
+      "amount": -35000000,
+      "user": "Administrador"
+    }
+  ],
   "chartData": {
     "weeklySales": {
       "labels": [
@@ -440,5 +690,7 @@
       ]
     }
   },
-  "updatedAt": "2026-10-01T06:11:48.091Z"
+  "sales": [],
+  "updatedAt": "2026-10-03T21:45:38.939Z",
+  "_storeId": "store_1"
 }

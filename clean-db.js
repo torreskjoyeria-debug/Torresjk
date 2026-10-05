@@ -11,15 +11,20 @@ if (CLIENT2_MONGO_URI.includes('charlesjoyas_pos') || CLIENT2_DB_FILE.includes('
   process.exit(1);
 }
 
-const cleanData = {
+const DEFAULT_STORES_LIST = [
+  { id: 'store_1', name: 'Sede Principal', code: 'SP', address: 'Avenida Principal # 10 - 20, Local 101', phone: '300 123 4567', email: 'principal@nexuspos.io', color: '#0284c7' },
+  { id: 'store_2', name: 'Sede Centro', code: 'SC', address: 'Calle 48 # 50 - 15, Local 102 (C.C. Centro Joyero)', phone: '310 987 6543', email: 'centro@nexuspos.io', color: '#0d9488' }
+];
+
+const baseStoreData = {
   store: {
-    name: "Joyería & Taller Demo",
+    name: "Sede Principal",
     slogan: "Oro 18k & Plata 925",
-    legalName: "Joyería Demo S.A.S",
-    taxId: "900123456-7",
+    legalName: "Joyería Demo S.A.S - Sede Principal",
+    taxId: "900123456-1",
     currency: "$",
     phone: "300 123 4567",
-    email: "contacto@nexuspos.io",
+    email: "principal@nexuspos.io",
     address: "Avenida Principal # 10 - 20",
     addressExtra: "Local 101",
     cashier: "Administrador",
@@ -29,7 +34,7 @@ const cleanData = {
     taxRate: 0,
     branding: {
       appName: "JOYERÍA POS",
-      appBadge: "DEMO",
+      appBadge: "SEDE 1",
       logoUrl: "",
       primaryColor: "#0284c7",
       secondaryColor: "#0d9488",
@@ -48,12 +53,12 @@ const cleanData = {
     salesTrend: "0%",
     transactionsToday: 0,
     txTrend: "0%",
-    inventoryValue: 4520000,
-    avgCostPerGram: 410000,
-    avgCostGrams: 11.02,
-    skusCount: 3,
-    totalGrams: 11.02,
-    netMargin: "28%",
+    inventoryValue: 0,
+    avgCostPerGram: 0,
+    avgCostGrams: 0,
+    skusCount: 0,
+    totalGrams: 0,
+    netMargin: "0%",
     marginTrend: "0%",
     totalCustomers: 0,
     totalSuppliers: 0,
@@ -63,36 +68,44 @@ const cleanData = {
   users: [
     {
       id: "USR-001",
-      name: "Administrador",
+      name: "Carlos Garzón (Super Admin)",
       email: "carlos@nexuspos.io",
-      password: "1234567",
+      password: "123456",
       role: "Super Admin",
       status: "Active",
+      storeId: "*",
       lastLogin: "Hoy 08:00 AM",
       avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80",
       customPermissions: null
     },
     {
       id: "USR-002",
-      name: "Cajero de Turno",
-      email: "cajero@nexuspos.io",
-      password: "1234567",
+      name: "Cajero Sede Principal",
+      email: "cajeroprincipal@nexuspos.io",
+      password: "123456",
       role: "Cajero",
       status: "Active",
+      storeId: "store_1",
       lastLogin: "Hoy 08:00 AM",
       avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80",
       customPermissions: [
-        "dashboard",
-        "pos",
-        "ventas",
-        "clientes",
-        "creditos_clientes",
-        "comprar",
-        "gastos",
-        "formas_pago",
-        "cuadre_caja",
-        "abonos_ventas",
-        "abonos_compras"
+        "dashboard", "pos", "ventas", "clientes", "creditos_clientes",
+        "gastos", "formas_pago", "cuadre_caja", "abonos_ventas"
+      ]
+    },
+    {
+      id: "USR-003",
+      name: "Cajero Sede Centro",
+      email: "cajerocentro@nexuspos.io",
+      password: "123456",
+      role: "Cajero",
+      status: "Active",
+      storeId: "store_2",
+      lastLogin: "Hoy 08:00 AM",
+      avatar: "https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=120&auto=format&fit=crop&q=80",
+      customPermissions: [
+        "dashboard", "pos", "ventas", "clientes", "creditos_clientes",
+        "gastos", "formas_pago", "cuadre_caja", "abonos_ventas"
       ]
     }
   ],
@@ -102,41 +115,18 @@ const cleanData = {
     {
       id: "PRF-01",
       name: "Super Admin",
-      permissions: "Acceso total sin restricciones: Gestión Global, Usuarios, Ajustes, Inventario, Finanzas y POS",
+      permissions: "Acceso total sin restricciones: Gestión Global, Sedes, Usuarios, Ajustes, Inventario, Finanzas y POS",
       usersCount: 1,
       badgeColor: "#F59E0B",
       allowedModules: ["*"]
     },
     {
-      id: "PRF-62",
-      name: "Gerente de Tienda Regional",
-      permissions: "Acceso total a finanzas y reportes",
-      usersCount: 0,
-      allowedModules: ["dashboard", "pos", "clientes", "proveedores", "gastos", "formas_pago", "ventas", "comprar", "creditos_clientes", "creditos_proveedores", "productos", "servicios", "categorias", "activos", "reports", "informes"]
-    },
-    {
-      id: "PRF-02",
-      name: "Supervisor de Tienda",
-      permissions: "Gestión de POS, Ventas, Inventario y Modificación de Precios",
-      usersCount: 0,
-      badgeColor: "#6366F1",
-      allowedModules: ["dashboard", "pos", "clientes", "proveedores", "gastos", "formas_pago", "ventas", "comprar", "creditos_clientes", "creditos_proveedores", "productos", "servicios", "categorias", "activos", "reports", "informes"]
-    },
-    {
       id: "PRF-03",
       name: "Cajero",
       permissions: "Ventas en POS, Cobros, Apertura y Cierre de Caja Chica",
-      usersCount: 1,
+      usersCount: 2,
       badgeColor: "#10B981",
       allowedModules: ["pos", "clientes", "cuadre_caja", "ventas", "abonos_ventas", "abonos_compras"]
-    },
-    {
-      id: "PRF-04",
-      name: "Contador / Auditor",
-      permissions: "Acceso de lectura a Finanzas, Reportes, Balances e Informes",
-      usersCount: 0,
-      badgeColor: "#8B5CF6",
-      allowedModules: ["dashboard", "gastos", "formas_pago", "ventas", "creditos_clientes", "creditos_proveedores", "reports", "informes", "cuadre_caja"]
     }
   ],
   expenses: [],
@@ -152,58 +142,12 @@ const cleanData = {
   supplierCredits: [],
   services: [],
   categories: [
-    { id: "oro18k", name: "Oro 18K Italiano & Ley", itemsCount: 2, color: "#F59E0B", availableGrams: 7.35, cost: 410000.00 },
-    { id: "plata925", name: "Plata 925 Fina", itemsCount: 1, color: "#94A3B8", availableGrams: 3.67, cost: 28000.00 },
-    { id: "diamantes", name: "Piedras Preciosas & Dijes", itemsCount: 0, color: "#6366F1", availableGrams: 0.00, cost: 850000.00 },
-    { id: "relojes", name: "Relojería de Lujo", itemsCount: 0, color: "#10B981", availableGrams: 0.00, cost: 1200000.00 }
+    { id: "oro18k", name: "Oro 18K Italiano & Ley", itemsCount: 0, color: "#F59E0B", availableGrams: 0, cost: 444000.00 },
+    { id: "plata925", name: "Plata 925 Fina", itemsCount: 0, color: "#94A3B8", availableGrams: 0, cost: 28000.00 },
+    { id: "diamantes", name: "Piedras Preciosas & Dijes", itemsCount: 0, color: "#6366F1", availableGrams: 0, cost: 850000.00 },
+    { id: "relojes", name: "Relojería de Lujo", itemsCount: 0, color: "#10B981", availableGrams: 0, cost: 1200000.00 }
   ],
-  products: [
-    {
-      id: "PROD-001",
-      code: "AN-001",
-      name: "Anillo Solitario Circones Oro 18K",
-      category: "oro18k",
-      type: "Anillo",
-      metal: "Oro 18k",
-      weight: 2.85,
-      cost: 1150000,
-      price: 1650000,
-      stock: 5,
-      minStock: 1,
-      image: "https://images.unsplash.com/photo-1605100804763-247f67b3557e?w=300&auto=format&fit=crop&q=80",
-      status: "Disponible"
-    },
-    {
-      id: "PROD-002",
-      code: "CAD-001",
-      name: "Cadena Eslabón Fígaro 50cm Oro 18K",
-      category: "oro18k",
-      type: "Cadena",
-      metal: "Oro 18k",
-      weight: 4.50,
-      cost: 1800000,
-      price: 2450000,
-      stock: 3,
-      minStock: 1,
-      image: "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=300&auto=format&fit=crop&q=80",
-      status: "Disponible"
-    },
-    {
-      id: "PROD-003",
-      code: "PUL-001",
-      name: "Pulsera Tejida Italiana Plata 925",
-      category: "plata925",
-      type: "Pulsera",
-      metal: "Plata 925",
-      weight: 3.67,
-      cost: 280000,
-      price: 420000,
-      stock: 8,
-      minStock: 2,
-      image: "https://images.unsplash.com/photo-1611591475155-42848c26f0f2?w=300&auto=format&fit=crop&q=80",
-      status: "Disponible"
-    }
-  ],
+  products: [],
   assets: [],
   cashShiftLog: {
     shiftId: "TURNO-001",
@@ -222,19 +166,19 @@ const cleanData = {
   abonosVentas: [],
   abonosCompras: [],
   balanceSheet: {
-    assetsCurrent: 4520000,
+    assetsCurrent: 0,
     assetsFixed: 0,
-    totalAssets: 4520000,
+    totalAssets: 0,
     liabilitiesShort: 0,
     liabilitiesLong: 0,
     totalLiabilities: 0,
-    netEquity: 4520000
+    netEquity: 0
   },
   stockRadarData: {
     categories: ["Oro 18K Italiano & Ley", "Plata 925 Fina", "Piedras Preciosas & Dijes", "Relojería de Lujo"],
     turnover: [0, 0, 0, 0],
-    stockLevel: [8, 8, 0, 0],
-    profitability: [28, 33, 0, 0],
+    stockLevel: [0, 0, 0, 0],
+    profitability: [0, 0, 0, 0],
     stockRisk: [0, 0, 0, 0]
   },
   recentTransactions: [],
@@ -259,10 +203,35 @@ const cleanData = {
   updatedAt: new Date().toISOString()
 };
 
+function createStore2Data(base) {
+  const s2 = JSON.parse(JSON.stringify(base));
+  s2.store.name = "Sede Centro";
+  s2.store.legalName = "Joyería Demo S.A.S - Sede Centro";
+  s2.store.taxId = "900123456-2";
+  s2.store.phone = "310 987 6543";
+  s2.store.email = "centro@nexuspos.io";
+  s2.store.address = "Calle 48 # 50 - 15";
+  s2.store.addressExtra = "Local 102 (C.C. Centro Joyero)";
+  s2.store.branding.appBadge = "SEDE 2";
+  s2.store.branding.primaryColor = "#0d9488";
+  s2.store.branding.secondaryColor = "#0284c7";
+  return s2;
+}
+
+const multiDbPayload = {
+  storesList: DEFAULT_STORES_LIST,
+  activeStoreId: 'store_1',
+  stores: {
+    store_1: baseStoreData,
+    store_2: createStore2Data(baseStoreData)
+  },
+  updatedAt: new Date().toISOString()
+};
+
 async function run() {
-  console.log('[Clean Script] 1. Escribiendo copia local limpia en:', CLIENT2_DB_FILE);
-  fs.writeFileSync(CLIENT2_DB_FILE, JSON.stringify(cleanData, null, 2), 'utf8');
-  console.log('[Clean Script] Local db.json para cliente 2 guardado exitosamente.');
+  console.log('[Clean Script] 1. Escribiendo multi-tienda limpio en:', CLIENT2_DB_FILE);
+  fs.writeFileSync(CLIENT2_DB_FILE, JSON.stringify(multiDbPayload, null, 2), 'utf8');
+  console.log('[Clean Script] Local db.json multi-tienda guardado exitosamente.');
 
   console.log('[Clean Script] 2. Conectando a MongoDB Atlas base de datos aislada: cliente2_demo_pos');
   await mongoose.connect(CLIENT2_MONGO_URI);
@@ -275,18 +244,39 @@ async function run() {
   });
   const DataModel = mongoose.model('NexusData', DataSchema);
 
+  // Guardar store_1, store_2 y manifest
   await DataModel.findOneAndUpdate(
-    { key: 'main_store' },
-    { content: cleanData, updatedAt: new Date() },
+    { key: 'stores_manifest' },
+    { content: { storesList: DEFAULT_STORES_LIST, activeStoreId: 'store_1' }, updatedAt: new Date() },
     { upsert: true, new: true }
   );
 
-  console.log('[Clean Script] Documento main_store guardado exitosamente en cliente2_demo_pos!');
+  await DataModel.findOneAndUpdate(
+    { key: 'store_1' },
+    { content: multiDbPayload.stores.store_1, updatedAt: new Date() },
+    { upsert: true, new: true }
+  );
+
+  await DataModel.findOneAndUpdate(
+    { key: 'store_2' },
+    { content: multiDbPayload.stores.store_2, updatedAt: new Date() },
+    { upsert: true, new: true }
+  );
+
+  // Espejo retrocompatible para main_store
+  await DataModel.findOneAndUpdate(
+    { key: 'main_store' },
+    { content: multiDbPayload.stores.store_1, updatedAt: new Date() },
+    { upsert: true, new: true }
+  );
+
+  console.log('[Clean Script] Documentos store_1, store_2, stores_manifest y main_store guardados exitosamente!');
   await mongoose.disconnect();
-  console.log('[Clean Script] Proceso completado al 100%.');
+  console.log('[Clean Script] Proceso multi-tienda completado al 100%.');
 }
 
 run().catch(err => {
   console.error('[Clean Script] Error:', err);
   process.exit(1);
 });
+

@@ -22,10 +22,10 @@
   <link rel="dns-prefetch" href="https://fonts.googleapis.com">
 
   <!-- Preload critical stylesheet for faster first paint -->
-  <link rel="preload" href="css/styles.css?v=38" as="style" onload="this.onload=null;this.rel='stylesheet'">
-  <noscript><link rel="stylesheet" href="css/styles.css?v=38"></noscript>
+  <link rel="preload" href="css/styles.css?v=59" as="style" onload="this.onload=null;this.rel='stylesheet'">
+  <noscript><link rel="stylesheet" href="css/styles.css?v=59"></noscript>
   <!-- Stylesheet -->
-  <link rel="stylesheet" href="css/styles.css?v=38">
+  <link rel="stylesheet" href="css/styles.css?v=59">
 
   <!-- Thermal Receipt Styles & Print Rules -->
   <style>
@@ -34,6 +34,13 @@
       padding: 10px;
       display: flex;
       justify-content: center;
+    }
+    #receipt-modal-title,
+    #receipt-modal-body,
+    #receipt-modal-body *,
+    .thermal-ticket-card,
+    .thermal-ticket-card * {
+      font-weight: 700 !important;
     }
     .thermal-ticket-card {
       font-family: 'Courier New', Courier, monospace;
@@ -47,6 +54,7 @@
       border-radius: 4px;
       border: 1px dashed #cbd5e1;
       box-sizing: border-box;
+      font-weight: 700 !important;
     }
     @media print {
       @page {
@@ -116,20 +124,26 @@
         color: #000000 !important;
         visibility: visible !important;
         overflow: visible !important;
+        font-weight: 700 !important;
       }
       #receipt-modal-body * {
         visibility: visible !important;
         color: #000000 !important;
+        font-weight: 700 !important;
       }
       .thermal-ticket-card {
         border: none !important;
         box-shadow: none !important;
-        padding: 4mm 2mm !important;
+        padding: 2mm 1mm !important;
         margin: 0 auto !important;
-        width: 100% !important;
+        width: 76mm !important;
         max-width: 76mm !important;
         background: #ffffff !important;
         color: #000000 !important;
+      }
+      .thermal-ticket-card * {
+        color: #000000 !important;
+        font-weight: 700 !important;
       }
     }
   </style>
@@ -617,7 +631,13 @@
                 <h1 class="section-title">Directorio de Clientes</h1>
                 <p class="section-subtitle">Gestión de datos de contacto, saldo de crédito disponible e historial.</p>
               </div>
-              <button class="btn btn-primary" id="open-customer-modal-btn">+ Nuevo Cliente</button>
+              <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+                <button type="button" class="btn btn-outline" onclick="app.exportCustomersExcel()" style="display:inline-flex; align-items:center; gap:0.5rem; border:1px solid #10B981; color:#059669; font-weight:600; padding:0.6rem 1rem; border-radius:8px; background:var(--card-bg, #fff); cursor:pointer;">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                  <span>Exportar Excel (.xls)</span>
+                </button>
+                <button class="btn btn-primary" id="open-customer-modal-btn">+ Nuevo Cliente</button>
+              </div>
             </div>
             <div class="table-wrapper">
               <div class="table-container">
@@ -638,7 +658,13 @@
                 <h1 class="section-title">Directorio de Proveedores</h1>
                 <p class="section-subtitle">Gestión de distribuidores, condiciones de pago y saldo de crédito pendiente.</p>
               </div>
-              <button class="btn btn-primary" id="open-supplier-modal-btn" onclick="app.openSupplierModal()">+ Nuevo Proveedor</button>
+              <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+                <button type="button" class="btn btn-outline" onclick="app.exportSuppliersExcel()" style="display:inline-flex; align-items:center; gap:0.5rem; border:1px solid #10B981; color:#059669; font-weight:600; padding:0.6rem 1rem; border-radius:8px; background:var(--card-bg, #fff); cursor:pointer;">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                  <span>Exportar Excel (.xls)</span>
+                </button>
+                <button class="btn btn-primary" id="open-supplier-modal-btn" onclick="app.openSupplierModal()">+ Nuevo Proveedor</button>
+              </div>
             </div>
             <div class="table-wrapper">
               <div class="table-container">
@@ -691,7 +717,13 @@
                 <h1 class="section-title">Registro de Gastos Operativos</h1>
                 <p class="section-subtitle">Auditoría de egresos, pagos de servicios, nómina y mantenimiento.</p>
               </div>
-              <button class="btn btn-primary" id="open-expense-modal-btn">+ Registrar Gasto</button>
+              <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+                <button type="button" class="btn btn-outline" onclick="app.exportExpensesExcel()" style="display:inline-flex; align-items:center; gap:0.5rem; border:1px solid #10B981; color:#059669; font-weight:600; padding:0.6rem 1rem; border-radius:8px; background:var(--card-bg, #fff); cursor:pointer;">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                  <span>Exportar Excel (.xls)</span>
+                </button>
+                <button class="btn btn-primary" id="open-expense-modal-btn">+ Registrar Gasto</button>
+              </div>
             </div>
             <div class="table-wrapper">
               <div class="table-container">
@@ -826,13 +858,83 @@
                 <h1 class="section-title">Historial de Ventas & Facturación</h1>
                 <p class="section-subtitle">Consulta comprobantes emitidos, cajero responsable, estado de pagos y método utilizado.</p>
               </div>
-              <div style="display: flex; gap: 0.5rem;">
-                <button class="btn btn-secondary" onclick="app.exportReportExcel()" title="Exportar reporte en formato Excel (.xls)" style="display:inline-flex; align-items:center; gap:0.35rem; color:#059669; font-weight:700;">
+              <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                <button class="btn btn-secondary" onclick="app.exportFinVentasExcel()" title="Exportar historial filtrado a Excel (.xls)" style="display:inline-flex; align-items:center; gap:0.35rem; color:#059669; font-weight:700; border-color:#059669;">
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>
                   Exportar Excel
                 </button>
               </div>
             </div>
+
+            <!-- TOOLBAR DE FILTRADO POR FECHAS Y RANGOS ESPECÍFICOS -->
+            <div class="card" style="padding: 1rem 1.25rem; margin-bottom: 1.25rem; background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: var(--radius-lg);">
+              <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 0.85rem;">
+                <div>
+                  <h3 style="margin: 0 0 0.25rem 0; font-size: 0.98rem; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 0.45rem;">
+                    <span>📅</span> Filtrar Historial por Fechas Específicas
+                  </h3>
+                  <p style="margin: 0; font-size: 0.8rem; color: var(--text-muted);">
+                    Selecciona un período rápido o elige las fechas exactas desde y hasta para consultar comprobantes y ventas.
+                  </p>
+                </div>
+                <!-- BUSCADOR RÁPIDO DE TICKETS / CLIENTE -->
+                <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+                  <div style="position: relative; min-width: 220px;">
+                    <input type="text" id="fin-ventas-search" class="form-input" placeholder="Buscar ticket, cliente, cajero..." style="padding: 0.35rem 0.65rem 0.35rem 1.85rem; font-size: 0.82rem; height: 32px; width: 100%; border-radius: 6px;" oninput="app.onFinVentasSearch(this.value)">
+                    <span style="position: absolute; left: 0.55rem; top: 50%; transform: translateY(-50%); font-size: 0.8rem; color: var(--text-muted); pointer-events: none;">🔍</span>
+                  </div>
+                  <button type="button" class="btn btn-secondary text-xs" onclick="app.resetFinVentasFilter()" style="height: 32px; padding: 0 0.75rem; font-weight: 600; display: inline-flex; align-items: center; gap: 0.3rem;" title="Restablecer todos los filtros y ver histórico completo">
+                    🔄 Restablecer
+                  </button>
+                </div>
+              </div>
+
+              <!-- FILAS DE FILTROS: PILLS Y DATE PICKERS -->
+              <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+                <!-- PILLS DE PERÍODOS -->
+                <div class="finanzas-period-selector" id="fin-ventas-period-pills" style="display: flex; flex-wrap: wrap; gap: 2px;">
+                  <button type="button" class="finanzas-period-pill active" data-period="all" onclick="app.setFinVentasPeriod('all', this)">Histórico Completo</button>
+                  <button type="button" class="finanzas-period-pill" data-period="today" onclick="app.setFinVentasPeriod('today', this)">Hoy</button>
+                  <button type="button" class="finanzas-period-pill" data-period="yesterday" onclick="app.setFinVentasPeriod('yesterday', this)">Ayer</button>
+                  <button type="button" class="finanzas-period-pill" data-period="this_week" onclick="app.setFinVentasPeriod('this_week', this)">Esta Semana</button>
+                  <button type="button" class="finanzas-period-pill" data-period="this_month" onclick="app.setFinVentasPeriod('this_month', this)">Este Mes</button>
+                  <button type="button" class="finanzas-period-pill" data-period="last_month" onclick="app.setFinVentasPeriod('last_month', this)">Mes Pasado</button>
+                  <button type="button" class="finanzas-period-pill" data-period="custom" id="fin-ventas-pill-custom" onclick="app.setFinVentasPeriod('custom', this)">Personalizado</button>
+                </div>
+
+                <!-- SELECTOR DE FECHAS DESDE Y HASTA -->
+                <div class="finanzas-date-range-box" id="fin-ventas-date-range-box" style="padding: 3px 8px;">
+                  <span style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); display: inline-flex; align-items: center; gap: 0.25rem;">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                    Desde:
+                  </span>
+                  <input type="date" id="fin-ventas-date-from" title="Fecha inicial para filtrar ventas" onchange="app.onFinVentasDateChange()">
+                  <span style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted);">Hasta:</span>
+                  <input type="date" id="fin-ventas-date-to" title="Fecha final para filtrar ventas" onchange="app.onFinVentasDateChange()">
+                  <button type="button" class="btn btn-primary text-xs" onclick="app.applyFinVentasCustomRange()" style="padding: 0.25rem 0.65rem; height: 28px; font-weight: 700; border-radius: 6px;" title="Aplicar filtro por rango de fechas">
+                    Filtrar
+                  </button>
+                </div>
+              </div>
+
+              <!-- BARRA DE RESUMEN DEL FILTRO / KPIS DE VENTAS ENCONTRADAS -->
+              <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.85rem; padding-top: 0.75rem; border-top: 1px dashed var(--border-color); font-size: 0.82rem;">
+                <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+                  <span id="fin-ventas-period-badge" class="badge" style="background: rgba(99, 102, 241, 0.1); color: #4F46E5; font-weight: 700; padding: 4px 10px; border-radius: 12px;">
+                    📅 Período: Histórico Completo
+                  </span>
+                  <span id="fin-ventas-count-badge" class="badge" style="background: var(--bg-surface-elevated, #F1F5F9); border: 1px solid var(--border-color); color: var(--text-main); font-weight: 700; padding: 4px 10px; border-radius: 12px;">
+                    0 Ventas
+                  </span>
+                </div>
+                <div>
+                  <span id="fin-ventas-total-badge" class="badge" style="background: rgba(16, 185, 129, 0.12); color: #047857; font-weight: 800; font-size: 0.86rem; padding: 4px 12px; border-radius: 12px; border: 1px solid rgba(16, 185, 129, 0.25);">
+                    Total Facturado: $0 COP
+                  </span>
+                </div>
+              </div>
+            </div>
+
             <div class="table-wrapper">
               <div class="table-container">
                 <table class="data-table">
@@ -882,6 +984,12 @@
                 <h1 class="section-title">Créditos de Clientes (Cuentas por Cobrar)</h1>
                 <p class="section-subtitle">Control de créditos otorgados, vencimientos y saldos pendientes.</p>
               </div>
+              <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+                <button type="button" class="btn btn-secondary text-sm" onclick="app.exportCarteraExcel()" style="display: flex; align-items: center; gap: 0.4rem; font-weight: 700; background: #059669; color: #ffffff; border-color: #059669;" title="Exportar Auditoría Completa de Cartera, Cobranzas y Aging a Excel (.xls)">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                  📊 Exportar Cartera Completa (.xls)
+                </button>
+              </div>
             </div>
             <div class="table-wrapper">
               <div class="table-container">
@@ -901,6 +1009,12 @@
               <div>
                 <h1 class="section-title">Créditos con Proveedores (Cuentas por Pagar)</h1>
                 <p class="section-subtitle">Auditoría de deudas con distribuidores y compromisos comerciales.</p>
+              </div>
+              <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+                <button type="button" class="btn btn-secondary text-sm" onclick="app.exportCreditosProveedoresExcel()" style="display: flex; align-items: center; gap: 0.4rem; font-weight: 700;" title="Exportar Auditoría Completa de Créditos y Cuentas por Pagar a Excel Multi-Hoja">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                  📊 Exportar Cartera &amp; Pendientes (.xls)
+                </button>
               </div>
             </div>
             <div class="table-wrapper">
@@ -1018,7 +1132,13 @@
                 <h1 class="section-title">Activos Fijos & Equipamiento</h1>
                 <p class="section-subtitle">Control patrimonial, valor de compra y depreciación de bienes.</p>
               </div>
-              <button class="btn btn-primary" id="open-asset-modal-btn">+ Registrar Activo</button>
+              <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+                <button type="button" class="btn btn-outline" onclick="app.exportAssetsExcel()" style="display:inline-flex; align-items:center; gap:0.5rem; border:1px solid #10B981; color:#059669; font-weight:600; padding:0.6rem 1rem; border-radius:8px; background:var(--card-bg, #fff); cursor:pointer;">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                  <span>Exportar Excel (.xls)</span>
+                </button>
+                <button class="btn btn-primary" id="open-asset-modal-btn">+ Registrar Activo</button>
+              </div>
             </div>
             <div class="table-wrapper">
               <div class="table-container">
@@ -1058,11 +1178,25 @@
                   <button type="button" class="finanzas-period-pill active" onclick="app.setFinanzasPeriod('month', this)">Este Mes</button>
                   <button type="button" class="finanzas-period-pill" onclick="app.setFinanzasPeriod('30d', this)">Últimos 30d</button>
                   <button type="button" class="finanzas-period-pill" onclick="app.setFinanzasPeriod('all', this)">Histórico</button>
+                  <button type="button" class="finanzas-period-pill" id="finanzas-pill-custom" onclick="app.setFinanzasPeriod('custom', this)">Personalizado</button>
+                </div>
+
+                <div class="finanzas-date-range-box" id="finanzas-date-range-box">
+                  <span style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); display: inline-flex; align-items: center; gap: 0.25rem;">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                    Desde:
+                  </span>
+                  <input type="date" id="finanzas-date-from" title="Fecha inicial del reporte" onchange="app.onFinanzasCustomDateChanged()">
+                  <span style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted);">Hasta:</span>
+                  <input type="date" id="finanzas-date-to" title="Fecha final del reporte" onchange="app.onFinanzasCustomDateChanged()">
+                  <button type="button" class="btn btn-primary" id="finanzas-btn-apply" onclick="app.applyFinanzasCustomDateRange()" style="padding: 0.2rem 0.65rem; font-size: 0.76rem; height: 28px; font-weight: 700; border-radius: 6px; display: inline-flex; align-items: center; gap: 0.3rem;" title="Filtrar reporte, gráficas y excel">
+                    Filtrar
+                  </button>
                 </div>
 
                 <button class="btn btn-secondary text-sm" onclick="app.exportFinancesPAndLExcel()" style="display: flex; align-items: center; gap: 0.4rem; font-weight: 700;">
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-                  Exportar P&L (Excel)
+                  Exportar P&amp;L (Excel)
                 </button>
 
                 <button class="btn btn-secondary text-sm" onclick="app.renderRepFinanzas(); app.showToast('Métricas financieras recalculadas', 'success')" title="Recalcular">
@@ -1369,11 +1503,75 @@
           </div>
 
           <div class="sub-view-pane" id="pane-reports-rep_general">
-            <div class="section-header">
-              <div><h1 class="section-title">Reporte General Operativo</h1><p class="section-subtitle">Resumen ejecutivo consolidado y exportación de datos.</p></div>
-              <button class="btn btn-primary text-sm" onclick="app.exportReportCSV()">📥 Exportar Reporte (CSV)</button>
+            <div class="section-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
+              <div>
+                <h1 class="section-title">Reporte General Operativo</h1>
+                <p class="section-subtitle">Resumen ejecutivo consolidado, auditoría de ingresos, gastos y exportación completa de datos.</p>
+              </div>
+              <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+                <button type="button" class="btn btn-secondary text-sm" onclick="app.exportReportGeneralExcel()" style="display:flex; align-items:center; gap:0.4rem; font-weight:700; background:#059669; color:#ffffff; border-color:#059669; height:42px; padding:0 1.1rem;" title="Descargar Libro Completo Multi-Hoja de Auditoría Operativa en Excel (.xls)">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                  <span>📊 Exportar Libro Operativo Completo (.xls)</span>
+                </button>
+                <button type="button" class="btn btn-secondary text-sm" onclick="app.exportReportCSV()" style="display:flex; align-items:center; gap:0.4rem; font-weight:600; height:42px; padding:0 0.85rem;" title="Exportar Resumen Consolidado en CSV">
+                  <span>CSV</span>
+                </button>
+              </div>
             </div>
+
+            <!-- TOOLBAR DE FILTRADO POR FECHAS PARA REPORTE GENERAL -->
+            <div class="card" style="margin-bottom:1.5rem; padding:1.25rem; border:1px solid var(--border-color); background:var(--card-bg); box-shadow:0 2px 8px rgba(0,0,0,0.04);">
+              <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.75rem; margin-bottom:1rem;">
+                <div>
+                  <h3 style="margin:0 0 0.25rem 0; font-size:0.98rem; font-weight:700; color:var(--text-main); display:flex; align-items:center; gap:0.45rem;">
+                    <span>📅</span> Filtrar Reporte General por Fechas Específicas
+                  </h3>
+                  <p style="margin:0; font-size:0.8rem; color:var(--text-muted);">
+                    Selecciona un período predeterminado o elige un rango de fechas personalizado para auditar ingresos, compras, gastos OPEX y utilidad neta. Al exportar a Excel, se descargará exactamente el período seleccionado.
+                  </p>
+                </div>
+                <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+                  <span class="badge" id="rep-general-period-badge" style="background:rgba(5, 150, 105, 0.12); color:#059669; font-weight:700; padding:6px 12px; border-radius:20px; font-size:0.82rem;">
+                    📅 Período: Histórico Completo
+                  </span>
+                </div>
+              </div>
+
+              <!-- BOTONES RÁPIDOS Y SELECTOR DE FECHAS -->
+              <div style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:1rem;">
+                <!-- PILLS DE PERÍODO -->
+                <div class="finanzas-period-selector" id="rep-general-period-pills" style="display:inline-flex; flex-wrap:wrap; gap:4px; background:var(--bg-main, #f8fafc); padding:4px; border-radius:var(--radius-md, 8px); border:1px solid var(--border-color, #e2e8f0);">
+                  <button type="button" class="finanzas-period-pill active" data-period="all" onclick="app.setRepGeneralPeriod('all', this)">Histórico Completo</button>
+                  <button type="button" class="finanzas-period-pill" data-period="today" onclick="app.setRepGeneralPeriod('today', this)">Hoy</button>
+                  <button type="button" class="finanzas-period-pill" data-period="yesterday" onclick="app.setRepGeneralPeriod('yesterday', this)">Ayer</button>
+                  <button type="button" class="finanzas-period-pill" data-period="this_week" onclick="app.setRepGeneralPeriod('this_week', this)">Esta Semana</button>
+                  <button type="button" class="finanzas-period-pill" data-period="this_month" onclick="app.setRepGeneralPeriod('this_month', this)">Este Mes</button>
+                  <button type="button" class="finanzas-period-pill" data-period="last_month" onclick="app.setRepGeneralPeriod('last_month', this)">Mes Pasado</button>
+                  <button type="button" class="finanzas-period-pill" id="rep-general-pill-custom" data-period="custom" onclick="document.getElementById('rep-general-date-from').focus()">Personalizado</button>
+                </div>
+
+                <!-- SELECTOR RANGO PERSONALIZADO -->
+                <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+                  <div style="display:flex; align-items:center; gap:0.35rem;">
+                    <label for="rep-general-date-from" style="font-size:0.8rem; font-weight:700; color:var(--text-muted);">Desde:</label>
+                    <input type="date" id="rep-general-date-from" class="form-input text-xs" onchange="app.onRepGeneralDateChange()" style="padding:0.4rem 0.5rem; width:135px; border-radius:6px; height:34px; border:1px solid var(--border-color); background:var(--card-bg); color:var(--text-main);">
+                  </div>
+                  <div style="display:flex; align-items:center; gap:0.35rem;">
+                    <label for="rep-general-date-to" style="font-size:0.8rem; font-weight:700; color:var(--text-muted);">Hasta:</label>
+                    <input type="date" id="rep-general-date-to" class="form-input text-xs" onchange="app.onRepGeneralDateChange()" style="padding:0.4rem 0.5rem; width:135px; border-radius:6px; height:34px; border:1px solid var(--border-color); background:var(--card-bg); color:var(--text-main);">
+                  </div>
+                  <button type="button" class="btn btn-secondary text-xs" onclick="app.applyRepGeneralCustomRange()" style="height:34px; padding:0 0.85rem; font-weight:700;" title="Aplicar rango de fechas">
+                    <span>🔍 Filtrar</span>
+                  </button>
+                  <button type="button" class="btn btn-secondary text-xs" onclick="app.resetRepGeneralFilter()" style="height:34px; padding:0 0.85rem; font-weight:600; color:var(--text-muted);" title="Restablecer a todo el histórico">
+                    <span>🔄 Restablecer</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
             <div class="kpi-grid" id="rep-general-kpi-grid"></div>
+            <div id="rep-general-extended-content" style="margin-top:1.5rem;"></div>
           </div>
 
           <div class="sub-view-pane" id="pane-reports-cuadre_caja">
@@ -1530,16 +1728,202 @@
              ---------------------------------------------------------------- -->
         <section class="view-container" id="view-informes">
           <div class="sub-view-pane active" id="pane-informes-inf_balance">
-            <div class="section-header"><div><h1 class="section-title">Informe: Balance General</h1><p class="section-subtitle">Estado patrimonial de activos, pasivos y patrimonio neto.</p></div></div>
+            <div class="section-header">
+              <div>
+                <h1 class="section-title">Informe: Balance General</h1>
+                <p class="section-subtitle">Estado patrimonial de activos, pasivos y patrimonio neto.</p>
+              </div>
+              <button type="button" class="btn btn-secondary text-sm" onclick="app.exportBalanceGeneralExcel()" style="display: flex; align-items: center; gap: 0.4rem; font-weight: 700; background: #059669; color: #ffffff; border-color: #059669;" title="Exportar Balance General Completo y Detallado a Excel (.xls)">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                Exportar Excel (.xls)
+              </button>
+            </div>
             <div class="kpi-grid" id="inf-balance-kpis"></div>
             <div class="card" style="margin-top:1.5rem;" id="inf-balance-table-card"></div>
           </div>
 
           <div class="sub-view-pane" id="pane-informes-inf_ventas_producto">
-            <div class="section-header"><div><h1 class="section-title">Informe: Ventas por Producto</h1><p class="section-subtitle">Ranking de productos más vendidos y facturación aportada.</p></div>
-              <button class="btn btn-secondary text-sm" onclick="app.exportTopProductsCSV()">📥 Exportar Ranking</button>
+            <!-- HEADER -->
+            <div style="margin-bottom: 1.25rem;">
+              <h1 style="font-size: 1.55rem; font-weight: 800; color: var(--text-main); display: flex; align-items: center; gap: 0.6rem; margin: 0 0 0.25rem 0; font-family: var(--font-heading);">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: #6366F1;">
+                  <line x1="18" y1="20" x2="18" y2="10"></line>
+                  <line x1="12" y1="20" x2="12" y2="4"></line>
+                  <line x1="6" y1="20" x2="6" y2="14"></line>
+                </svg>
+                Informe: Ventas por Producto
+              </h1>
+              <p style="color: var(--text-muted); font-size: 0.88rem; margin: 0;">
+                Ranking de productos más vendidos, rotación de inventario y facturación aportada en tiempo real.
+              </p>
             </div>
-            <div class="card"><div class="chart-container"><canvas id="infTopProductsChart"></canvas></div></div>
+
+            <!-- TOOLBAR: METRIC SELECTOR, TOP LIMIT, DATE RANGE & ACTIONS -->
+            <div class="finanzas-toolbar" style="margin-bottom: 1.25rem;">
+              <!-- METRIC TYPE -->
+              <div class="finanzas-period-selector" id="rep-prod-metric-btns">
+                <button type="button" class="finanzas-period-pill active" id="rep-prod-metric-revenue-btn" onclick="app.setRepProductosMetric('revenue')">Por Facturación ($)</button>
+                <button type="button" class="finanzas-period-pill" id="rep-prod-metric-qty-btn" onclick="app.setRepProductosMetric('qty')">Por Cantidad (u/g)</button>
+              </div>
+
+              <!-- LIMIT SELECTOR -->
+              <div style="display: flex; align-items: center; gap: 0.35rem;">
+                <span style="font-size: 0.76rem; font-weight: 700; color: var(--text-muted);">Mostrar:</span>
+                <select id="rep-prod-limit-select" class="form-control" style="width: auto; height: 32px; padding: 0 0.5rem; font-size: 0.78rem; font-weight: 600; border-radius: 6px;" onchange="app.setRepProductosLimit(this.value)">
+                  <option value="5">Top 5</option>
+                  <option value="10" selected>Top 10</option>
+                  <option value="20">Top 20</option>
+                  <option value="all">Todos</option>
+                </select>
+              </div>
+
+              <!-- DATE RANGE BOX -->
+              <div class="finanzas-date-range-box" id="rep-prod-date-range-box">
+                <span style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); display: inline-flex; align-items: center; gap: 0.25rem;">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                  Desde:
+                </span>
+                <input type="date" id="rep-prod-date-from" title="Fecha inicial del ranking">
+                <span style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted);">Hasta:</span>
+                <input type="date" id="rep-prod-date-to" title="Fecha final del ranking">
+                <button type="button" class="btn btn-primary" onclick="app.applyRepProductosDateRange()" style="padding: 0.2rem 0.65rem; font-size: 0.76rem; height: 28px; font-weight: 700; border-radius: 6px;" title="Filtrar ranking">
+                  Filtrar
+                </button>
+                <button type="button" class="btn btn-secondary" onclick="app.clearRepProductosDateRange()" style="padding: 0.2rem 0.5rem; font-size: 0.76rem; height: 28px; border-radius: 6px;" title="Limpiar filtro de fechas">
+                  Limpiar
+                </button>
+              </div>
+
+              <!-- EXPORT & REFRESH -->
+              <div style="display: flex; align-items: center; gap: 0.5rem; margin-left: auto;">
+                <button type="button" class="btn btn-secondary text-sm" onclick="app.exportTopProductsExcel()" style="display: flex; align-items: center; gap: 0.4rem; font-weight: 700; background: #059669; color: #ffffff; border-color: #059669;" title="Exportar Ranking detallado a Excel (.xls)">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                  Exportar Ranking (.xls)
+                </button>
+                <button type="button" class="btn btn-secondary text-sm" onclick="app.exportTopProductsCSV()" style="display: flex; align-items: center; gap: 0.4rem; font-weight: 600;" title="Exportar CSV">
+                  CSV
+                </button>
+                <button type="button" class="btn btn-secondary text-sm" onclick="app.renderInformesVentasProducto(); app.showToast('Ranking actualizado', 'success')" title="Actualizar datos">
+                  🔄
+                </button>
+              </div>
+            </div>
+
+            <!-- KPI GRID (4 CARDS) -->
+            <div class="finanzas-kpi-grid" id="rep-prod-kpi-grid">
+              <!-- CARD 1: FACTURACIÓN TOTAL -->
+              <div class="finanzas-kpi-card" style="background: linear-gradient(135deg, #3730A3 0%, #4F46E5 100%); border: 1px solid rgba(255, 255, 255, 0.12);">
+                <div class="finanzas-kpi-label">
+                  <span>Facturación Total</span>
+                  <span class="finanzas-kpi-badge" id="rep-prod-kpi-rev-badge">100%</span>
+                </div>
+                <div class="finanzas-kpi-val" id="rep-prod-kpi-rev-val">$ 0</div>
+                <div class="finanzas-kpi-sub">Ventas brutas acumuladas</div>
+                <div class="finanzas-kpi-watermark">
+                  <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+                </div>
+              </div>
+
+              <!-- CARD 2: CANTIDAD VENDIDA -->
+              <div class="finanzas-kpi-card" style="background: linear-gradient(135deg, #0F766E 0%, #14B8A6 100%); border: 1px solid rgba(255, 255, 255, 0.12);">
+                <div class="finanzas-kpi-label">
+                  <span>Volumen Total Vendido</span>
+                  <span class="finanzas-kpi-badge" id="rep-prod-kpi-qty-badge">Unidades / g</span>
+                </div>
+                <div class="finanzas-kpi-val" id="rep-prod-kpi-qty-val">0</div>
+                <div class="finanzas-kpi-sub">Gramos y piezas entregadas</div>
+                <div class="finanzas-kpi-watermark">
+                  <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>
+                </div>
+              </div>
+
+              <!-- CARD 3: PRODUCTO ESTRELLA (TOP 1) -->
+              <div class="finanzas-kpi-card" style="background: linear-gradient(135deg, #B45309 0%, #F59E0B 100%); border: 1px solid rgba(255, 255, 255, 0.12);">
+                <div class="finanzas-kpi-label">
+                  <span>Producto Estrella</span>
+                  <span class="finanzas-kpi-badge" id="rep-prod-kpi-star-pct">0%</span>
+                </div>
+                <div class="finanzas-kpi-val" id="rep-prod-kpi-star-val" style="font-size: 1.25rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">-</div>
+                <div class="finanzas-kpi-sub" id="rep-prod-kpi-star-sub">Mayor facturación aportada</div>
+                <div class="finanzas-kpi-watermark">
+                  <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                </div>
+              </div>
+
+              <!-- CARD 4: VARIEDAD DE PRODUCTOS CON VENTAS -->
+              <div class="finanzas-kpi-card" style="background: linear-gradient(135deg, #1E40AF 0%, #3B82F6 100%); border: 1px solid rgba(255, 255, 255, 0.12);">
+                <div class="finanzas-kpi-label">
+                  <span>Productos con Venta</span>
+                  <span class="finanzas-kpi-badge" id="rep-prod-kpi-prods-badge">Catálogo</span>
+                </div>
+                <div class="finanzas-kpi-val" id="rep-prod-kpi-prods-val">0</div>
+                <div class="finanzas-kpi-sub" id="rep-prod-kpi-prods-sub">Ítems con rotación activa</div>
+                <div class="finanzas-kpi-watermark">
+                  <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+                </div>
+              </div>
+            </div>
+
+            <!-- CHART CARD -->
+            <div class="card" style="margin-bottom: 1.5rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
+                <div>
+                  <h3 style="font-size: 1.15rem; font-weight: 700; color: var(--text-main); margin: 0;" id="rep-prod-chart-title">
+                    Gráfica: Ranking de Ventas por Producto
+                  </h3>
+                  <p style="font-size: 0.82rem; color: var(--text-muted); margin: 0.2rem 0 0 0;" id="rep-prod-chart-subtitle">
+                    Comparativa de facturación generada por los productos más demandados
+                  </p>
+                </div>
+              </div>
+              <div style="position: relative; height: 380px; width: 100%;">
+                <canvas id="infTopProductsChart"></canvas>
+              </div>
+            </div>
+
+            <!-- DETAILED RANKING TABLE CARD -->
+            <div class="card">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.75rem;">
+                <div>
+                  <h3 style="font-size: 1.15rem; font-weight: 700; color: var(--text-main); margin: 0;">
+                    Tabla Detallada de Rendimiento por Producto
+                  </h3>
+                  <p style="font-size: 0.82rem; color: var(--text-muted); margin: 0.2rem 0 0 0;">
+                    Desglose exhaustivo de unidades, transacciones, ingresos y participación sobre la facturación global
+                  </p>
+                </div>
+                <div style="position: relative; min-width: 260px;">
+                  <input type="text" id="rep-prod-search-input" class="form-control" placeholder="Buscar por código, nombre o categoría..." style="padding-left: 2rem; font-size: 0.85rem;" oninput="app.filterTopProductsTable(this.value)">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="position: absolute; left: 0.7rem; top: 50%; transform: translateY(-50%); color: var(--text-muted);">
+                    <circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                  </svg>
+                </div>
+              </div>
+
+              <div class="table-wrapper">
+                <div class="table-container">
+                  <table class="data-table">
+                    <thead>
+                      <tr>
+                        <th style="width: 70px; text-align: center;"># Rank</th>
+                        <th style="width: 100px;">Código</th>
+                        <th>Producto</th>
+                        <th>Categoría</th>
+                        <th>Tipo Medida</th>
+                        <th style="text-align: right;">Cant. Vendida</th>
+                        <th style="text-align: center;">N° Tickets</th>
+                        <th style="text-align: right;">Facturación COP</th>
+                        <th style="width: 140px;">% Aporte</th>
+                        <th style="text-align: center;">Stock Actual</th>
+                      </tr>
+                    </thead>
+                    <tbody id="rep-productos-tbody">
+                      <!-- Renderizado dinámicamente -->
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
           </div>
 
           <!-- PANE: TENDENCIA DE PRODUCTO (EVOLUCIÓN DIARIA DEL MES ACTUAL) -->
@@ -1654,8 +2038,84 @@
           </div>
 
           <div class="sub-view-pane" id="pane-informes-inf_listado_periodos">
-            <div class="section-header"><div><h1 class="section-title">Informe: Comparativa de Periodos</h1><p class="section-subtitle">Histórico mensual de rendimiento.</p></div></div>
-            <div class="table-wrapper"><div class="table-container"><table class="data-table"><thead><tr><th>Periodo</th><th>Facturación Total</th><th>Gastos</th><th>Margen %</th><th>Estado</th></tr></thead><tbody id="inf-periodos-tbody"></tbody></table></div></div>
+            <div class="section-header" style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:1rem; margin-bottom:1.25rem;">
+              <div>
+                <h1 class="section-title">Informe: Comparativa de Periodos</h1>
+                <p class="section-subtitle">Histórico mensual consolidado de ventas, gastos, utilidades y márgenes de rendimiento.</p>
+              </div>
+              <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
+                <button type="button" class="btn btn-primary" onclick="app.exportComparativaPeriodosExcel()" style="display:inline-flex; align-items:center; gap:0.5rem; background:linear-gradient(135deg, #059669 0%, #10B981 100%); border:none; color:#fff; font-weight:700; padding:0.6rem 1.15rem; border-radius:8px; box-shadow:0 2px 6px rgba(16,185,129,0.3); cursor:pointer;">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                  <span>📊 Descargar Comparativa Excel (.xls)</span>
+                </button>
+                <button type="button" class="btn btn-outline" onclick="app.exportComparativaPeriodosCSV()" style="display:inline-flex; align-items:center; gap:0.5rem; border:1px solid var(--border-color); background:var(--card-bg, #fff); color:var(--text-main); font-weight:600; padding:0.6rem 1rem; border-radius:8px; cursor:pointer;">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  <span>Exportar CSV</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Toolbar de Selección de Período y Filtros -->
+            <div class="fin-ventas-filter-bar" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.75rem; background:var(--card-bg, #fff); padding:0.85rem 1.15rem; border-radius:10px; border:1px solid var(--border-color); margin-bottom:1.25rem; box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+              <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
+                <div style="display:flex; align-items:center; gap:0.5rem;">
+                  <label for="inf-periodos-select" style="font-size:0.82rem; font-weight:700; color:var(--text-muted); display:flex; align-items:center; gap:4px; margin:0;">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                    <span>Período:</span>
+                  </label>
+                  <select id="inf-periodos-select" onchange="app.onInfPeriodoSelectChange(this.value)" class="form-control" style="font-weight:700; min-width:240px; cursor:pointer; height:36px; border-radius:8px; border:1px solid var(--border-color); background:var(--card-bg, #fff); color:var(--text-main); padding:0 0.75rem; font-size:0.85rem;">
+                    <option value="all">🌐 Todos los Períodos (Histórico Completo)</option>
+                  </select>
+                </div>
+
+                <div class="radar-filter-pills" style="display:flex; align-items:center; gap:0.4rem; flex-wrap:wrap; margin:0;">
+                  <button type="button" class="radar-filter-pill active" id="inf-pill-periodo-all" onclick="app.setInfPeriodoQuickFilter('all')">Todos</button>
+                  <button type="button" class="radar-filter-pill" id="inf-pill-periodo-current" onclick="app.setInfPeriodoQuickFilter('current')">Mes Actual</button>
+                  <button type="button" class="radar-filter-pill" id="inf-pill-periodo-prev" onclick="app.setInfPeriodoQuickFilter('prev')">Mes Anterior</button>
+                  <button type="button" class="radar-filter-pill" id="inf-pill-periodo-year" onclick="app.setInfPeriodoQuickFilter('year')">Año Actual</button>
+                </div>
+
+                <div id="inf-periodos-custom-dates" style="display:none; align-items:center; gap:0.4rem;">
+                  <span style="font-size:0.8rem; font-weight:600; color:var(--text-muted);">Desde:</span>
+                  <input type="date" id="inf-periodos-date-from" onchange="app.onInfPeriodoDateRangeChange()" class="form-control" style="width:130px; height:34px; font-size:0.8rem; padding:0 6px;">
+                  <span style="font-size:0.8rem; font-weight:600; color:var(--text-muted);">Hasta:</span>
+                  <input type="date" id="inf-periodos-date-to" onchange="app.onInfPeriodoDateRangeChange()" class="form-control" style="width:130px; height:34px; font-size:0.8rem; padding:0 6px;">
+                  <button type="button" class="btn btn-sm btn-primary" onclick="app.applyInfPeriodoCustomRange()" style="height:34px; padding:0 10px; font-size:0.8rem;">Filtrar</button>
+                </div>
+
+                <button type="button" class="btn btn-sm btn-outline" onclick="app.resetInfPeriodosFilter()" style="display:inline-flex; align-items:center; gap:4px; height:34px; padding:0 10px; font-size:0.8rem;" title="Restablecer a todos los períodos">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
+                  <span>Restablecer</span>
+                </button>
+              </div>
+
+              <div id="inf-periodo-active-badge" style="font-size:0.82rem; font-weight:700; color:var(--brand-primary); background:rgba(16,185,129,0.08); padding:0.35rem 0.75rem; border-radius:6px; border:1px solid rgba(16,185,129,0.2); white-space:nowrap;">
+                📅 Período Activo: Todos los Períodos
+              </div>
+            </div>
+
+            <!-- Resumen de Tarjetas KPI -->
+            <div id="inf-periodos-kpi-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:1rem; margin-bottom:1.5rem;"></div>
+
+            <div class="table-wrapper">
+              <div class="table-container">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Periodo</th>
+                      <th style="text-align:right;">Facturación Total</th>
+                      <th style="text-align:right;">Costo Mercancía (COGS)</th>
+                      <th style="text-align:right;">Gastos Operativos</th>
+                      <th style="text-align:right;">Utilidad Neta Real (COP)</th>
+                      <th style="text-align:center;">Margen Neto %</th>
+                      <th style="text-align:center;">Estado</th>
+                    </tr>
+                  </thead>
+                  <tbody id="inf-periodos-tbody"></tbody>
+                  <tfoot id="inf-periodos-tfoot"></tfoot>
+                </table>
+              </div>
+            </div>
           </div>
 
           <!-- PANE: RADAR DE STOCK (PROYECCIÓN DE AGOTAMIENTO 30 DÍAS) -->
@@ -1755,14 +2215,12 @@
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
                   <span>Imprimir</span>
                 </button>
-                <button type="button" class="radar-btn-excel" onclick="app.exportCarteraCSV()">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                    <polyline points="14 2 14 8 20 8"/>
-                    <line x1="8" y1="13" x2="16" y2="13"/>
-                    <line x1="8" y1="17" x2="16" y2="17"/>
-                  </svg>
-                  <span>Exportar CSV</span>
+                <button type="button" class="btn btn-secondary text-sm" onclick="app.exportCarteraExcel()" style="display: flex; align-items: center; gap: 0.4rem; font-weight: 700; background: #059669; color: #ffffff; border-color: #059669; height: 42px; padding: 0 1rem;" title="Exportar Libro Completo Multi-Hoja de Cartera, Cobranzas y Aging a Excel (.xls)">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                  <span>Exportar Cartera Completa (.xls)</span>
+                </button>
+                <button type="button" class="btn btn-secondary text-sm" onclick="app.exportCarteraCSV()" style="display: flex; align-items: center; gap: 0.4rem; font-weight: 600; height: 42px; padding: 0 0.85rem;" title="Exportar CSV">
+                  <span>CSV</span>
                 </button>
               </div>
             </div>
@@ -3995,6 +4453,7 @@
         <div style="background:var(--canvas-bg); padding:1rem; border-radius:var(--radius-md); margin-bottom:1rem; border:1px solid var(--border-color);">
           <div style="display:flex; justify-content:space-between; margin-bottom:0.45rem;"><span>Efectivo Teórico en Gaveta:</span><strong id="cash-theoretical-amount" style="color:var(--primary-indigo); font-size:1.05rem;">$0.00</strong></div>
           <div style="display:flex; justify-content:space-between; margin-bottom:0.35rem; font-size:0.88rem;"><span>💵 Ventas en Efectivo:</span><strong id="cash-shift-sales" style="color:var(--emerald-text);">+$0.00</strong></div>
+          <div id="cash-shift-abonos-row" style="display:none; justify-content:space-between; margin-bottom:0.35rem; font-size:0.88rem;"><span>📥 Abonos Cartera en Efectivo:</span><strong id="cash-shift-abonos-cash" style="color:var(--emerald-text);">+$0.00</strong></div>
           <div style="display:flex; justify-content:space-between; margin-bottom:0.35rem; font-size:0.88rem;"><span>🏦 Ventas por Transferencia:</span><strong id="cash-shift-transfers" style="color:#4F46E5;">+$0.00</strong></div>
           <div id="cash-shift-cards-row" style="display:none; justify-content:space-between; margin-bottom:0.35rem; font-size:0.88rem;"><span>💳 Ventas con Tarjeta:</span><strong id="cash-shift-cards" style="color:#9333EA;">+$0.00</strong></div>
           <div id="cash-shift-credit-row" style="display:none; justify-content:space-between; margin-bottom:0.35rem; font-size:0.88rem;"><span>🏷️ Ventas a Crédito (Por Cobrar):</span><strong id="cash-shift-credit" style="color:#D97706;">+$0.00</strong></div>
@@ -4204,6 +4663,6 @@
   <!-- defer: scripts download in parallel with HTML parsing, execute in order after DOM is ready -->
   <script src="js/chart.min.js" defer></script>
   <script src="js/data.js?v=47" defer></script>
-  <script src="js/app.js?v=50" defer></script>
+  <script src="js/app.js?v=81" defer></script>
 </body>
 </html>
