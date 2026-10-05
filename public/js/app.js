@@ -17695,9 +17695,9 @@ class NexusApp {
   }
 
   getLeyMetalFromItems(items) {
-    // Requerimiento de Joyería: En la cabecera superior del recibo siempre se muestra fijo "Oro 18k",
-    // independientemente de los artículos, metales o categorías que se vendan en la transacción.
-    return (this.data.store?.slogan && /oro/i.test(this.data.store.slogan)) ? this.data.store.slogan : 'Oro 18k';
+    // Si la tienda tiene slogan personalizado, mostrarlo; nunca forzar ley fija o metales en la factura
+    const slogan = (this.data.store?.slogan || '').trim();
+    return slogan;
   }
 
   buildThermalTicketHtml(options) {
@@ -17743,12 +17743,34 @@ class NexusApp {
     const isVenta = type === 'venta';
 
     const itemsRowsHtml = items.map(item => {
-      const name = this.escapeHtml(item.name || 'Producto Joya');
+      let rawName = item.name || item.product?.name || 'Producto';
+      let cleanName = rawName
+        .replace(/\s*[-–—]?\s*\(?\s*(?:peso\s*:\s*)?\d+(?:[.,]\d+)?\s*(?:g|gr|gramos|g\.)\s*\)?/gi, '')
+        .replace(/\s*\(?\s*peso\s*:\s*\d+(?:[.,]\d+)?\s*\)?/gi, '')
+        .replace(/\bpeso\s*:\s*\d+(?:[.,]\d+)?\b/gi, '')
+        .trim();
+
+      const name = this.escapeHtml(cleanName);
       const sku = item.sku || item.product?.sku || item.productSku || (item.product?.id ? item.product.id : '');
       const codePrefix = sku ? `[${this.escapeHtml(sku)}] ` : '';
-      const qtyStr = item.formattedQty || `${item.qty || 1}`;
-      const priceStr = item.formattedUnitPrice || this.formatCurrency(item.price || 0);
+
+      let cleanQtyStr = String(item.formattedQty || `${item.qty || 1} u.`)
+        .replace(/\s*\(\s*\d+(?:[.,]\d+)?\s*(?:g|gr|gramos)\s*\)/gi, '')
+        .replace(/(?:g|gr|gramos)\b/gi, 'u.')
+        .trim();
+      if (!cleanQtyStr.includes('u.') && !cleanQtyStr.includes('kg')) {
+        cleanQtyStr = `${cleanQtyStr} u.`;
+      }
+
+      let cleanPriceStr = String(item.formattedUnitPrice || this.formatCurrency(item.price || 0))
+        .replace(/\/(?:g|gr|gramos)\b/gi, '/u.')
+        .replace(/\/g\b/gi, '')
+        .trim();
+
       const totalStr = item.formattedLineTotal || this.formatCurrency(item.total || (item.price * item.qty));
+
+      const qtyNum = Number(item.unitsCount !== undefined ? item.unitsCount : item.qty) || 1;
+      const unitPriceVal = Number(item.unitPrice !== undefined ? item.unitPrice : (item.price || (item.total / (qtyNum || 1)))) || 0;
 
       if (isVenta) {
         return `
@@ -17756,6 +17778,7 @@ class NexusApp {
             <div style="display:flex; justify-content:space-between; align-items:flex-start; font-size:12px; font-weight:700;">
               <div style="font-weight:700; color:#000; flex:2.2; padding-right:8px; line-height:1.3;">
                 ${codePrefix}${name}
+                ${qtyNum > 1 ? `<div style="font-size:11px; font-weight:600; color:#444; margin-top:1px;">${qtyNum} u. x ${this.formatCurrency(unitPriceVal)}</div>` : ''}
               </div>
               <div style="flex:1.1; text-align:right; font-weight:700; color:#000; white-space:nowrap;">
                 ${totalStr}
@@ -17769,8 +17792,8 @@ class NexusApp {
         <div style="margin-bottom:6px; font-weight:700;">
           <div style="font-weight:700; font-size:12px; color:#000;">${codePrefix}${name}</div>
           <div style="display:flex; justify-content:space-between; font-size:11.5px; color:#111; margin-top:1px; font-weight:700;">
-            <span style="flex:1.2; text-align:left; font-weight:700;">${qtyStr}</span>
-            <span style="flex:1.5; text-align:center; font-weight:700;">${priceStr}</span>
+            <span style="flex:1.2; text-align:left; font-weight:700;">${cleanQtyStr}</span>
+            <span style="flex:1.5; text-align:center; font-weight:700;">${cleanPriceStr}</span>
             <span style="flex:1.3; text-align:right; font-weight:700;">${totalStr}</span>
           </div>
         </div>
@@ -17783,7 +17806,7 @@ class NexusApp {
         <div style="text-align:center; margin-bottom:4px; font-weight:700;">
           ${logoHtml ? `<div style="margin-bottom:4px;">${logoHtml}</div>` : ''}
           <div style="font-size:21px; font-weight:800; font-family:Georgia, serif; letter-spacing:0.4px; color:#000; line-height:1.2;">${storeName}</div>
-          <div style="font-size:13px; font-style:italic; font-family:Georgia, serif; color:#222; margin-top:2px; font-weight:700;">${metalLey}</div>
+          ${metalLey ? `<div style="font-size:13px; font-style:italic; font-family:Georgia, serif; color:#222; margin-top:2px; font-weight:700;">${metalLey}</div>` : ''}
           <div style="border-bottom:1px dotted #333; margin:6px 0;"></div>
         </div>
 
@@ -17916,28 +17939,52 @@ class NexusApp {
     const ticketItems = (tx.items && Array.isArray(tx.items) && tx.items.length > 0)
       ? tx.items.map(i => {
           const p = this.data.products?.find(prod => prod.id === i.id || prod.sku === i.sku || prod.name === i.name);
-          const isPesaje = p ? (p.measureType || 'Pesaje') === 'Pesaje' : false;
           const pWeight = p ? parseFloat(String(p.pieceWeight !== undefined && p.pieceWeight !== null ? p.pieceWeight : (p.weight || 0)).replace(',', '.')) || 0 : 0;
-          const isUnitWithWeight = !isPesaje && pWeight > 0;
-          const unit = (isPesaje || isUnitWithWeight) ? 'g' : (p?.weightUnit || 'u.');
-          const qtyStr = `${this.formatNumberWithCommas(i.qty, isPesaje || isUnitWithWeight)}${unit}`;
-          const pPrice = Number(i.price) || 0;
-          const totalStr = this.formatCurrency(i.total || (pPrice * i.qty));
+          
+          let unitsCount = 1;
+          if (i.unitsCount !== undefined && i.unitsCount !== null) {
+            unitsCount = Number(i.unitsCount) || 1;
+          } else if (pWeight > 0 && i.qty >= pWeight) {
+            unitsCount = Math.round((i.qty / pWeight) * 100) / 100;
+          } else {
+            unitsCount = Math.round(Number(i.qty || 1) * 100) / 100;
+          }
+          if (unitsCount <= 0) unitsCount = 1;
+
+          const totalVal = Number(i.total) || (Number(i.price || 0) * Number(i.qty || 1));
+          const unitPriceVal = unitsCount > 0 ? (totalVal / unitsCount) : Number(i.price || 0);
+
+          let cleanName = (i.name || p?.name || 'Producto')
+            .replace(/\s*[-–—]?\s*\(?\s*(?:peso\s*:\s*)?\d+(?:[.,]\d+)?\s*(?:g|gr|gramos|g\.)\s*\)?/gi, '')
+            .replace(/\s*\(?\s*peso\s*:\s*\d+(?:[.,]\d+)?\s*\)?/gi, '')
+            .replace(/\bpeso\s*:\s*\d+(?:[.,]\d+)?\b/gi, '')
+            .trim();
+
+          const qtyStr = `${unitsCount} u.`;
+          const formattedUnitPrice = `${this.formatCurrency(unitPriceVal)}/u.`;
+          const totalStr = this.formatCurrency(totalVal);
           const itemSku = i.sku || p?.sku || (p?.id ? p.id : '');
+
           return {
-            name: i.name,
+            name: cleanName,
             sku: itemSku,
             product: p,
+            qty: unitsCount,
+            unitsCount: unitsCount,
+            unitPrice: unitPriceVal,
             formattedQty: qtyStr,
-            formattedUnitPrice: `${this.formatCurrency(pPrice)}/${unit}`,
+            formattedUnitPrice: formattedUnitPrice,
             formattedLineTotal: totalStr,
-            total: i.total || (pPrice * i.qty)
+            total: totalVal
           };
         })
       : [{
           name: tx.type || 'Venta POS',
           sku: '',
-          formattedQty: `${tx.itemsCount || 1} u.`,
+          qty: 1,
+          unitsCount: 1,
+          unitPrice: Math.abs(tx.total),
+          formattedQty: `1 u.`,
           formattedUnitPrice: this.formatCurrency(Math.abs(tx.total)),
           formattedLineTotal: this.formatCurrency(Math.abs(tx.total)),
           total: Math.abs(tx.total)
@@ -17987,21 +18034,25 @@ class NexusApp {
     const supplier = (this.data.suppliers || []).find(s => s.name === po.supplier);
     const prod = (this.data.products || []).find(p => p.id === po.productId || p.sku === po.productSku || p.name === po.productName);
 
-    const hasGrams = (Number(po.totalGrams) || 0) > 0;
-    const unitLabel = isPesaje ? 'g' : (prod?.weightUnit || 'u.');
-    const qtyVal = isPesaje ? (po.totalGrams || po.quantity || 1) : (po.quantity || po.itemsCount || 1);
-    const formattedQty = (hasGrams && !isPesaje)
-      ? `${this.formatNumberWithCommas(qtyVal, false)} u. (${this.formatNumberWithCommas(po.totalGrams, true)} g)`
-      : `${this.formatNumberWithCommas(qtyVal, isPesaje)} ${unitLabel}`;
-    const formattedUnitPrice = (hasGrams || isPesaje)
-      ? `${this.formatCurrency(po.unitCost || 0)}/g`
-      : `${this.formatCurrency(po.unitCost || 0)}/u`;
+    const qtyVal = Number(po.quantity || po.itemsCount || 1) || 1;
+    const formattedQty = `${this.formatNumberWithCommas(qtyVal, false)} u.`;
+    const unitCostVal = po.total && qtyVal > 0 ? (po.total / qtyVal) : (po.unitCost || 0);
+    const formattedUnitPrice = `${this.formatCurrency(unitCostVal)}/u.`;
     const formattedTotal = this.formatCurrency(po.total || 0);
 
+    let cleanProdName = (po.productName || prod?.name || 'Mercancía General')
+      .replace(/\s*[-–—]?\s*\(?\s*(?:peso\s*:\s*)?\d+(?:[.,]\d+)?\s*(?:g|gr|gramos|g\.)\s*\)?/gi, '')
+      .replace(/\s*\(?\s*peso\s*:\s*\d+(?:[.,]\d+)?\s*\)?/gi, '')
+      .replace(/\bpeso\s*:\s*\d+(?:[.,]\d+)?\b/gi, '')
+      .trim();
+
     const ticketItems = [{
-      name: po.productName || 'Metal en Bruto',
+      name: cleanProdName,
       sku: po.productSku || prod?.sku || '',
       product: prod,
+      qty: qtyVal,
+      unitsCount: qtyVal,
+      unitPrice: unitCostVal,
       formattedQty,
       formattedUnitPrice,
       formattedLineTotal: formattedTotal,
@@ -24416,8 +24467,8 @@ class NexusApp {
       customerPhone: cust?.phone || '',
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
       date: `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`,
-      type: "Venta POS Joyería",
-      itemsCount: this.cart.reduce((acc, i) => acc + i.qty, 0),
+      type: "Venta POS",
+      itemsCount: this.cart.reduce((acc, i) => acc + (i.unitsCount || 1), 0),
       items: this.cart.map(i => {
         const pPrice = this.getCartItemPrice(i);
         const isPesaje = (i.product?.measureType || 'Pesaje') === 'Pesaje';
@@ -24449,29 +24500,32 @@ class NexusApp {
     this.data.kpis.salesToday += grandTotal;
     this.data.kpis.transactionsToday += 1;
 
-    // Build Thermal Receipt HTML based on jewelry mold
+    // Build Thermal Receipt HTML - Factura POS limpia: sin gramos, sin valor del gramo y sin peso
     const ticketItems = this.cart.map(i => {
-      const isPesaje = (i.product.measureType || 'Pesaje') === 'Pesaje';
       const pWeight = parseFloat(String(i.product.pieceWeight !== undefined && i.product.pieceWeight !== null ? i.product.pieceWeight : (i.product.weight || 0)).replace(',', '.')) || 0;
-      const isUnitWithWeight = !isPesaje && pWeight > 0;
-      const unit = (isPesaje || isUnitWithWeight) ? 'g' : (i.product.weightUnit || 'u.');
-      const pPrice = this.getCartItemPrice(i);
-      const unitsCount = isUnitWithWeight ? Math.round((i.qty / pWeight) * 100) / 100 : i.qty;
-      const formattedQty = `${this.formatNumberWithCommas(i.qty, isPesaje || isUnitWithWeight)}${unit}`;
-      const formattedUnitPrice = `${this.formatCurrency(pPrice)}/${unit}`;
-      const formattedLineTotal = this.formatCurrency(pPrice * i.qty);
+      const unitsCount = pWeight > 0 ? Math.max(1, Math.round((i.qty / pWeight) * 100) / 100) : Math.max(1, Math.round(i.qty * 100) / 100);
+      const totalItemVal = this.getCartItemPrice(i) * i.qty;
+      const unitPriceVal = unitsCount > 0 ? (totalItemVal / unitsCount) : this.getCartItemPrice(i);
+
+      let cleanName = (i.product.name || 'Producto')
+        .replace(/\s*[-–—]?\s*\(?\s*(?:peso\s*:\s*)?\d+(?:[.,]\d+)?\s*(?:g|gr|gramos|g\.)\s*\)?/gi, '')
+        .replace(/\s*\(?\s*peso\s*:\s*\d+(?:[.,]\d+)?\s*\)?/gi, '')
+        .replace(/\bpeso\s*:\s*\d+(?:[.,]\d+)?\b/gi, '')
+        .trim();
 
       return {
         product: i.product,
-        name: i.product.name,
+        name: cleanName,
         sku: i.product.sku || i.product.id || '',
-        qty: i.qty,
-        unit,
-        price: pPrice,
-        formattedQty,
-        formattedUnitPrice,
-        formattedLineTotal,
-        total: pPrice * i.qty
+        qty: unitsCount,
+        unitsCount: unitsCount,
+        unit: 'u.',
+        price: unitPriceVal,
+        unitPrice: unitPriceVal,
+        formattedQty: `${unitsCount} u.`,
+        formattedUnitPrice: `${this.formatCurrency(unitPriceVal)}/u.`,
+        formattedLineTotal: this.formatCurrency(totalItemVal),
+        total: totalItemVal
       };
     });
 
