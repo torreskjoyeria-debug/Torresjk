@@ -1,13 +1,20 @@
 const fs = require('fs');
 const path = require('path');
+const dns = require('dns');
 const mongoose = require('mongoose');
 
-const CLIENT2_MONGO_URI = 'mongodb://charlesjoyass_db_user:57XZqt7XTrFdkaKt@ac-3th3i0i-shard-00-00.ceb3uhz.mongodb.net:27017,ac-3th3i0i-shard-00-01.ceb3uhz.mongodb.net:27017,ac-3th3i0i-shard-00-02.ceb3uhz.mongodb.net:27017/cliente2_demo_pos?ssl=true&replicaSet=atlas-xpgtcp-shard-0&authSource=admin&retryWrites=true&w=majority';
+if (!process.env.VERCEL) {
+  try {
+    dns.setServers(['8.8.8.8', '1.1.1.1']);
+  } catch (e) {}
+}
+
+const CLIENT2_MONGO_URI = process.env.MONGO_URI || 'mongodb://torreskjoyeria_db_user:URoLcZKCyxXsc7x3@ac-e37s3f2-shard-00-00.i2bsl70.mongodb.net:27017,ac-e37s3f2-shard-00-01.i2bsl70.mongodb.net:27017,ac-e37s3f2-shard-00-02.i2bsl70.mongodb.net:27017/torreskjoyeria_pos?ssl=true&replicaSet=atlas-14ojy7-shard-0&authSource=admin&retryWrites=true&w=majority';
 const CLIENT2_DB_FILE = path.join(__dirname, 'db.json');
 
-// Triple-check that we are NOT touching charlesjoyas_pos or main repo
-if (CLIENT2_MONGO_URI.includes('charlesjoyas_pos') || CLIENT2_DB_FILE.includes('nexus-pos-saas')) {
-  console.error('ERROR CRITICO DE SEGURIDAD: Intento de conexion a Charles Joyas detectado. Abortando de inmediato.');
+// Triple-check that we are strictly using torreskjoyeria_pos and NOT touching charlesjoyas
+if (!CLIENT2_MONGO_URI.includes('torreskjoyeria_pos') || CLIENT2_MONGO_URI.includes('charlesjoyas') || CLIENT2_DB_FILE.includes('nexus-pos-saas')) {
+  console.error('ERROR CRITICO DE SEGURIDAD: Configuracion invalida o intento de conexion no autorizada. Abortando de inmediato.');
   process.exit(1);
 }
 
@@ -233,9 +240,9 @@ async function run() {
   fs.writeFileSync(CLIENT2_DB_FILE, JSON.stringify(multiDbPayload, null, 2), 'utf8');
   console.log('[Clean Script] Local db.json multi-tienda guardado exitosamente.');
 
-  console.log('[Clean Script] 2. Conectando a MongoDB Atlas base de datos aislada: cliente2_demo_pos');
+  console.log('[Clean Script] 2. Conectando a MongoDB Atlas base de datos aislada: torreskjoyeria_pos');
   await mongoose.connect(CLIENT2_MONGO_URI);
-  console.log('[Clean Script] Conectado a MongoDB Atlas en cliente2_demo_pos');
+  console.log('[Clean Script] Conectado a MongoDB Atlas en torreskjoyeria_pos');
 
   const DataSchema = new mongoose.Schema({
     key: { type: String, default: 'main_store', unique: true },

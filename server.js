@@ -15,18 +15,18 @@ if (!process.env.VERCEL) {
 const app = express();
 const PORT = process.env.PORT || 4000;
 
-// ISOLATED DATABASE URI FOR CLIENTE 2 (cliente2_demo_pos)
-const DIRECT_MONGO_URI = 'mongodb://charlesjoyass_db_user:57XZqt7XTrFdkaKt@ac-3th3i0i-shard-00-00.ceb3uhz.mongodb.net:27017,ac-3th3i0i-shard-00-01.ceb3uhz.mongodb.net:27017,ac-3th3i0i-shard-00-02.ceb3uhz.mongodb.net:27017/cliente2_demo_pos?ssl=true&replicaSet=atlas-xpgtcp-shard-0&authSource=admin&retryWrites=true&w=majority';
+// ISOLATED DATABASE URI FOR TORRES JOYERÍA (torreskjoyeria_pos)
+const DIRECT_MONGO_URI = 'mongodb://torreskjoyeria_db_user:URoLcZKCyxXsc7x3@ac-e37s3f2-shard-00-00.i2bsl70.mongodb.net:27017,ac-e37s3f2-shard-00-01.i2bsl70.mongodb.net:27017,ac-e37s3f2-shard-00-02.i2bsl70.mongodb.net:27017/torreskjoyeria_pos?ssl=true&replicaSet=atlas-14ojy7-shard-0&authSource=admin&retryWrites=true&w=majority';
 let MONGO_URI = process.env.MONGO_URI || DIRECT_MONGO_URI;
 
-// STRICT SECURITY GUARD: Ensure this project can ONLY EVER connect to cliente2_demo_pos
-if (!MONGO_URI.includes('cliente2_demo_pos') || MONGO_URI.includes('charlesjoyas_pos')) {
-  console.error('⛔ BLOQUEO CRÍTICO DE SEGURIDAD: Conexión denegada. Este proyecto replica está estrictamente configurado para conectarse ÚNICA Y EXCLUSIVAMENTE a cliente2_demo_pos.');
+// STRICT SECURITY GUARD: Ensure this project can ONLY EVER connect to torreskjoyeria_pos and never touches charlesjoyas
+if (!MONGO_URI.includes('torreskjoyeria_pos') || MONGO_URI.includes('charlesjoyas')) {
+  console.error('⛔ BLOQUEO CRÍTICO DE SEGURIDAD: Conexión denegada. Este proyecto está estrictamente configurado para conectarse ÚNICA Y EXCLUSIVAMENTE a torreskjoyeria_pos.');
   process.exit(1);
 }
 
-// If URI uses SRV for cluster0.ceb3uhz.mongodb.net, prefer the direct replica set URI to prevent querySrv ECONNREFUSED in serverless environments (AWS/Vercel)
-if (MONGO_URI.includes('cluster0.ceb3uhz.mongodb.net') && MONGO_URI.startsWith('mongodb+srv://')) {
+// If URI uses SRV for cluster0.i2bsl70.mongodb.net, prefer the direct replica set URI to prevent querySrv ECONNREFUSED in serverless environments (AWS/Vercel)
+if (MONGO_URI.includes('cluster0.i2bsl70.mongodb.net') && MONGO_URI.startsWith('mongodb+srv://')) {
   MONGO_URI = DIRECT_MONGO_URI;
 }
 
@@ -100,10 +100,10 @@ async function ensureDbConnected() {
     await connectingPromise;
     mongoConnected = true;
     lastMongoError = null;
-    console.log('[Nexus Server - Cliente 2] Conectado exitosamente a MongoDB Atlas (cliente2_demo_pos)');
+    console.log('[Nexus Server - Torres Joyería] Conectado exitosamente a MongoDB Atlas (torreskjoyeria_pos)');
     return true;
   } catch (err) {
-    console.warn('[Nexus Server - Cliente 2] Error conectando a MongoDB Atlas:', err.message);
+    console.warn('[Nexus Server - Torres Joyería] Error conectando a MongoDB Atlas:', err.message);
     mongoConnected = false;
     lastMongoError = err.message;
     connectingPromise = null;
@@ -193,11 +193,11 @@ function saveLocalDb(data, storeId = 'store_1') {
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
-    project: 'Nexus POS - Cliente 2 Demo',
-    database: 'cliente2_demo_pos',
+    project: 'Torres Joyería POS - SaaS',
+    database: 'torreskjoyeria_pos',
     multiStore: true,
     mongoConnected,
-    storageMode: mongoConnected ? 'MongoDB (cliente2_demo_pos)' : 'Local JSON / Storage',
+    storageMode: mongoConnected ? 'MongoDB (torreskjoyeria_pos)' : 'Local JSON / Storage',
     lastMongoError,
     uriType: MONGO_URI.startsWith('mongodb+srv') ? 'SRV' : 'Direct ReplicaSet',
     hasEnvMongoUri: !!process.env.MONGO_URI,
@@ -369,7 +369,7 @@ app.post('/api/data', async (req, res) => {
       return res.status(503).json({ error: 'Error de persistencia: No se pudo conectar a MongoDB Atlas en Vercel.' });
     }
 
-    res.json({ success: true, storeId, mode: mongoConnected ? 'MongoDB (cliente2_demo_pos)' : 'Local JSON', timestamp: new Date() });
+    res.json({ success: true, storeId, mode: mongoConnected ? 'MongoDB (torreskjoyeria_pos)' : 'Local JSON', timestamp: new Date() });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -377,8 +377,8 @@ app.post('/api/data', async (req, res) => {
 
 if (!process.env.VERCEL && require.main === module) {
   app.listen(PORT, () => {
-    console.log(`[Nexus Server - Cliente 2] Servidor corriendo en http://localhost:${PORT}`);
-    console.log(`[Nexus Server - Cliente 2] Base de datos asignada: cliente2_demo_pos`);
+    console.log(`[Nexus Server - Torres Joyería] Servidor corriendo en http://localhost:${PORT}`);
+    console.log(`[Nexus Server - Torres Joyería] Base de datos asignada: torreskjoyeria_pos`);
   });
 }
 
