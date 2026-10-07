@@ -182,7 +182,7 @@ function saveLocalDb(data, storeId = 'store_1') {
     fs.writeFileSync(tmpFile, JSON.stringify(fullDb, null, 2), 'utf8');
     fs.renameSync(tmpFile, DB_FILE);
   } catch (e) {
-    console.error('[Nexus Server - Cliente 2] Error escribiendo db.json:', e);
+    console.error('[Nexus Server - Torres Joyería] Error escribiendo db.json:', e);
     try {
       if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile);
     } catch (_) {}
