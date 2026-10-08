@@ -57,7 +57,7 @@ const INITIAL_DATA = {
       name: "Jojan Torres", 
       email: "jojan@nexuspos.io", 
       password: "admin123",
-      role: "Super Admin", 
+      role: "Administrador", 
       status: "Active", 
       storeId: "*",
       lastLogin: "Hoy 08:00 AM",

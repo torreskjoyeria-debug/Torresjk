@@ -78,7 +78,7 @@ const baseStoreData = {
       name: "Jojan Torres",
       email: "jojan@nexuspos.io",
       password: "admin123",
-      role: "Super Admin",
+      role: "Administrador",
       status: "Active",
       storeId: "*",
       lastLogin: "Hoy 08:00 AM",
@@ -123,9 +123,22 @@ const baseStoreData = {
       id: "PRF-01",
       name: "Super Admin",
       permissions: "Acceso total sin restricciones: Gestión Global, Sedes, Usuarios, Ajustes, Inventario, Finanzas y POS",
-      usersCount: 1,
+      usersCount: 0,
       badgeColor: "#F59E0B",
       allowedModules: ["*"]
+    },
+    {
+      id: "PRF-02",
+      name: "Administrador",
+      permissions: "Gestión de Operaciones, POS, Ventas, Inventario, Clientes, Proveedores, Reportes y Finanzas",
+      usersCount: 1,
+      badgeColor: "#3B82F6",
+      allowedModules: [
+        "dashboard", "pos", "ventas", "clientes", "creditos_clientes",
+        "comprar", "proveedores", "creditos_proveedores", "productos",
+        "servicios", "categorias", "activos", "gastos", "formas_pago",
+        "cuadre_caja", "abonos_ventas", "abonos_compras", "reports", "informes"
+      ]
     },
     {
       id: "PRF-03",
