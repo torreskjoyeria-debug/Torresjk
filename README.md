@@ -46,7 +46,7 @@ El sistema estará accesible en `http://localhost:4000`.
 ---
 
 ## 🔑 Credenciales Iniciales
-- **Usuario Super Admin:** `carlos@nexuspos.io` / `123456`
+- **Usuario Super Admin (Jojan Torres):** `jojan@nexuspos.io` / `admin123`
 - **Usuario Cajero Sede Principal:** `cajeroprincipal@nexuspos.io` / `123456`
 - **Usuario Cajero Sede Centro:** `cajerocentro@nexuspos.io` / `123456`
 

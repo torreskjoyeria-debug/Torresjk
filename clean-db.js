@@ -75,9 +75,9 @@ const baseStoreData = {
   users: [
     {
       id: "USR-001",
-      name: "Carlos Garzón (Super Admin)",
-      email: "carlos@nexuspos.io",
-      password: "123456",
+      name: "Jojan Torres",
+      email: "jojan@nexuspos.io",
+      password: "admin123",
       role: "Super Admin",
       status: "Active",
       storeId: "*",

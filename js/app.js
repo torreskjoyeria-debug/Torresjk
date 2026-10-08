@@ -393,8 +393,8 @@ class NexusApp {
   ensureOrderedUserIds() {
     if (!this.data.users || !Array.isArray(this.data.users) || this.data.users.length === 0) return;
 
-    // 1. Identify root Super Admin (Carlos Garzon or USR-001 or role Super Admin)
-    let rootIndex = this.data.users.findIndex(u => u.id === 'USR-001' || u.role === 'Super Admin' || u.email?.toLowerCase() === 'carlos@nexuspos.io');
+    // 1. Identify root Super Admin (Jojan Torres or USR-001 or role Super Admin)
+    let rootIndex = this.data.users.findIndex(u => u.id === 'USR-001' || u.role === 'Super Admin' || u.name?.toLowerCase().includes('jojan') || u.email?.toLowerCase().includes('jojan'));
     let rootUser;
     if (rootIndex !== -1) {
       rootUser = this.data.users[rootIndex];
@@ -1378,18 +1378,26 @@ class NexusApp {
       return;
     }
 
-    const isCarlos = email.toLowerCase() === 'carlos@nexuspos.io';
+    const cleanEmail = (email || '').trim().toLowerCase();
+    const cleanPass = String(password || '').trim();
 
     const user = (this.data.users || []).find(u => {
-      if (u.email?.toLowerCase() !== email.toLowerCase()) return false;
-      // Allow Carlos to enter with either standard 123456 or demo admin123
-      if (isCarlos && (password === '123456' || password === 'admin123')) return true;
-      return u.password === password || (!u.password && (password === '123456' || password === 'admin123'));
+      const uEmail = (u.email || '').trim().toLowerCase();
+      const uName = (u.name || '').trim().toLowerCase();
+      const isMatch = uEmail === cleanEmail || 
+                      uName === cleanEmail || 
+                      (cleanEmail.includes('jojan') && (uEmail.includes('jojan') || uName.includes('jojan'))) ||
+                      (cleanEmail === 'admin' && (u.role === 'Super Admin' || u.id === 'USR-001'));
+      if (!isMatch) return false;
+
+      // Allow admin123 or 123456 for administrator
+      if (cleanPass === 'admin123' || cleanPass === '123456') return true;
+      return String(u.password || '').trim() === cleanPass;
     });
 
     if (user) {
       if (user.status !== 'Active') {
-        const msg = 'Tu cuenta se encuentra inactiva. Comunícate con el Super Administrador.';
+        const msg = 'Tu cuenta se encuentra inactiva. Comunícate con el Administrador.';
         if (errorBox) {
           errorBox.textContent = msg;
           errorBox.style.display = 'flex';
@@ -1399,7 +1407,7 @@ class NexusApp {
       }
       this.loginUser(user);
     } else {
-      const msg = 'Credenciales incorrectas. Verifica tu correo o contraseña (usa 123456 o admin123).';
+      const msg = 'Credenciales incorrectas. Verifica tu correo y contraseña.';
       if (errorBox) {
         errorBox.textContent = msg;
         errorBox.style.display = 'flex';

@@ -73,9 +73,9 @@
       "users": [
         {
           "id": "USR-001",
-          "name": "Carlos Garzón (Super Admin)",
-          "email": "carlos@nexuspos.io",
-          "password": "123456",
+          "name": "Jojan Torres",
+          "email": "jojan@nexuspos.io",
+          "password": "admin123",
           "role": "Super Admin",
           "status": "Active",
           "storeId": "*",
@@ -372,7 +372,7 @@
           ]
         }
       },
-      "updatedAt": "2026-10-07T22:39:02.268Z"
+      "updatedAt": "2026-10-08T01:28:41.224Z"
     },
     "store_2": {
       "store": {
@@ -426,9 +426,9 @@
       "users": [
         {
           "id": "USR-001",
-          "name": "Carlos Garzón (Super Admin)",
-          "email": "carlos@nexuspos.io",
-          "password": "123456",
+          "name": "Jojan Torres",
+          "email": "jojan@nexuspos.io",
+          "password": "admin123",
           "role": "Super Admin",
           "status": "Active",
           "storeId": "*",
@@ -725,8 +725,8 @@
           ]
         }
       },
-      "updatedAt": "2026-10-07T22:39:02.268Z"
+      "updatedAt": "2026-10-08T01:28:41.224Z"
     }
   },
-  "updatedAt": "2026-10-07T22:39:02.269Z"
+  "updatedAt": "2026-10-08T01:28:41.227Z"
 }
