@@ -50,17 +50,40 @@ const INITIAL_DATA = {
     totalAssetsValue: 0
   },
 
-  // 1. DASHBOARD SUB-MODAL DATA & ROLES (SOLO USUARIO ADMINISTRADOR)
+  // 1. DASHBOARD SUB-MODAL DATA & ROLES (USUARIOS DEL SISTEMA)
   users: [
     { 
       id: "USR-001", 
-      name: "Carlos Mendoza", 
+      name: "Carlos Garzón (Super Admin)", 
       email: "carlos@nexuspos.io", 
-      password: "admin123",
+      password: "123456",
       role: "Super Admin", 
       status: "Active", 
-      lastLogin: "Hoy 08:15 AM",
+      storeId: "*",
+      lastLogin: "Hoy 08:00 AM",
       avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80"
+    },
+    {
+      id: "USR-002",
+      name: "Cajero Sede Principal",
+      email: "cajeroprincipal@nexuspos.io",
+      password: "123456",
+      role: "Cajero",
+      status: "Active",
+      storeId: "store_1",
+      lastLogin: "Hoy 08:00 AM",
+      avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80"
+    },
+    {
+      id: "USR-003",
+      name: "Cajero Sede Centro",
+      email: "cajerocentro@nexuspos.io",
+      password: "123456",
+      role: "Cajero",
+      status: "Active",
+      storeId: "store_2",
+      lastLogin: "Hoy 08:00 AM",
+      avatar: "https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=120&auto=format&fit=crop&q=80"
     }
   ],
 

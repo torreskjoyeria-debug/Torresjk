@@ -1353,10 +1353,21 @@ class NexusApp {
 
   handleFormLogin() {
     const email = document.getElementById('login-email')?.value?.trim();
-    const password = document.getElementById('login-password')?.value;
+    const password = document.getElementById('login-password')?.value?.trim();
+    const errorBox = document.getElementById('login-error-alert');
+
+    if (errorBox) {
+      errorBox.style.display = 'none';
+      errorBox.textContent = '';
+    }
 
     if (!email || !password) {
-      this.showToast('Por favor ingresa tu correo y contraseña.', 'warning');
+      const msg = 'Por favor ingresa tu correo y contraseña.';
+      if (errorBox) {
+        errorBox.textContent = msg;
+        errorBox.style.display = 'flex';
+      }
+      this.showToast(msg, 'warning');
       return;
     }
 
@@ -1367,32 +1378,49 @@ class NexusApp {
       return;
     }
 
-    const user = (this.data.users || []).find(u => 
-      u.email?.toLowerCase() === email.toLowerCase() && 
-      (u.password === password || (!u.password && password === '123456'))
-    );
+    const isCarlos = email.toLowerCase() === 'carlos@nexuspos.io';
+
+    const user = (this.data.users || []).find(u => {
+      if (u.email?.toLowerCase() !== email.toLowerCase()) return false;
+      // Allow Carlos to enter with either standard 123456 or demo admin123
+      if (isCarlos && (password === '123456' || password === 'admin123')) return true;
+      return u.password === password || (!u.password && (password === '123456' || password === 'admin123'));
+    });
 
     if (user) {
       if (user.status !== 'Active') {
-        this.showToast('Tu cuenta se encuentra inactiva. Comunícate con el Super Administrador.', 'danger');
+        const msg = 'Tu cuenta se encuentra inactiva. Comunícate con el Super Administrador.';
+        if (errorBox) {
+          errorBox.textContent = msg;
+          errorBox.style.display = 'flex';
+        }
+        this.showToast(msg, 'danger');
         return;
       }
       this.loginUser(user);
     } else {
-      this.showToast('Credenciales incorrectas. Verifica tu correo o contraseña.', 'danger');
+      const msg = 'Credenciales incorrectas. Verifica tu correo o contraseña (usa 123456 o admin123).';
+      if (errorBox) {
+        errorBox.textContent = msg;
+        errorBox.style.display = 'flex';
+      }
+      this.showToast(msg, 'danger');
     }
   }
 
   async quickLogin(roleName) {
-    const term = roleName?.toLowerCase();
+    const term = (roleName || '').toLowerCase();
     let user = null;
-    if (term === 'cajero') {
-      user = this.data.users.find(u => (u.id === 'USR-003' || u.email === 'javier@nexuspos.io') && u.status === 'Active');
-    } else if (term === 'admin') {
-      user = this.data.users.find(u => (u.id === 'USR-002' || u.email === 'elena@nexuspos.io') && u.status === 'Active');
-    } else if (term?.includes('super')) {
-      user = this.data.users.find(u => (u.id === 'USR-001' || u.email === 'carlos@nexuspos.io') && u.status === 'Active');
+    if (term.includes('super') || term.includes('admin') || term === 'carlos') {
+      user = this.data.users.find(u => (u.email?.toLowerCase() === 'carlos@nexuspos.io' || u.role === 'Super Admin') && u.status === 'Active');
+    } else if (term.includes('principal') || term === 'cajero_1' || term === 'store_1') {
+      user = this.data.users.find(u => (u.email?.toLowerCase() === 'cajeroprincipal@nexuspos.io' || u.storeId === 'store_1') && u.status === 'Active');
+    } else if (term.includes('centro') || term === 'cajero_2' || term === 'store_2') {
+      user = this.data.users.find(u => (u.email?.toLowerCase() === 'cajerocentro@nexuspos.io' || u.storeId === 'store_2') && u.status === 'Active');
+    } else if (term === 'cajero') {
+      user = this.data.users.find(u => u.role?.toLowerCase() === 'cajero' && u.status === 'Active');
     }
+
     if (!user) {
       user = this.data.users.find(u => 
         u.status === 'Active' && (
@@ -1407,7 +1435,7 @@ class NexusApp {
     if (user) {
       await this.loginUser(user);
     } else {
-      this.showToast(`No se encontró un usuario activo con el rol de ${roleName}.`, 'warning');
+      this.showToast(`No se encontró un usuario activo para el acceso rápido solicitado.`, 'warning');
     }
   }
 

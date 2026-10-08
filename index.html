@@ -184,18 +184,32 @@
 
       <!-- FORM RIGHT PANEL -->
       <div class="login-form-pane">
-        <!-- DYNAMIC STORE BRAND HEADER -->
         <div class="login-brand-header" id="login-brand-container">
           <div class="login-brand-logo" id="login-brand-logo-box">
             <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
           </div>
-          <span class="login-brand-title" id="login-brand-title-text"><span class="brand-name-str">JOYERÍA DEMO</span> <span class="login-brand-badge">POS</span></span>
+          <span class="login-brand-title" id="login-brand-title-text"><span class="brand-name-str">TORRES JOYERÍA</span> <span class="login-brand-badge">POS</span></span>
         </div>
 
         <div class="login-header-text">
           <h2 class="login-title">Iniciar Sesión</h2>
-          <p class="login-subtitle">Ingresa tus credenciales para acceder al sistema.</p>
+          <p class="login-subtitle">Ingresa tus credenciales o accede con 1 clic.</p>
         </div>
+
+        <!-- PESTAÑAS DE AUTENTICACIÓN -->
+        <div class="auth-tabs">
+          <button type="button" class="auth-tab-btn active" id="tab-cred-btn" onclick="app.switchAuthTab('cred')">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <span>Credenciales</span>
+          </button>
+          <button type="button" class="auth-tab-btn" id="tab-quick-btn" onclick="app.switchAuthTab('quick')">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            <span>Acceso 1-Clic</span>
+          </button>
+        </div>
+
+        <!-- ALERTA DE ERROR VISIBLE -->
+        <div id="login-error-alert" class="login-alert-box" style="display: none;"></div>
 
         <!-- FORMULARIO DE CREDENCIALES -->
         <div class="auth-tab-pane active" id="auth-pane-credentials">
@@ -211,14 +225,14 @@
             </div>
 
             <div class="login-form-group">
-              <label class="login-label">Contraseña</label>
+              <label class="login-label">Contraseña (123456 o admin123)</label>
               <div class="input-with-icon">
                 <span class="input-icon-left">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                 </span>
-                <input type="password" id="login-password" class="login-input" placeholder="••••••••" required value="admin123">
+                <input type="password" id="login-password" class="login-input" placeholder="••••••••" required value="123456">
                 <button type="button" class="toggle-password-btn" onclick="app.togglePasswordVisibility()">
-                  <svg id="pwd-eye-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                  <svg id="pwd-eye-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                 </button>
               </div>
             </div>
@@ -228,7 +242,7 @@
                 <input type="checkbox" id="login-remember" checked>
                 <span>Recordarme en este dispositivo</span>
               </label>
-              <a href="#" class="forgot-password-link" onclick="event.preventDefault(); app.showToast('Contacta al Super Admin para redefinir tu contraseña', 'warning');">¿Olvidaste tu clave?</a>
+              <a href="#" class="forgot-password-link" onclick="event.preventDefault(); app.showToast('Contraseña por defecto: 123456 o admin123', 'info');">¿Olvidaste tu clave?</a>
             </div>
 
             <button type="submit" class="btn-login-submit">
@@ -236,6 +250,53 @@
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
             </button>
           </form>
+        </div>
+
+        <!-- TAB 2: ACCESO RÁPIDO 1-CLIC -->
+        <div class="auth-tab-pane" id="auth-pane-quick">
+          <div class="quick-roles-grid">
+            <button type="button" class="role-card-btn" onclick="app.quickLogin('super')">
+              <div class="role-card-info">
+                <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80" class="role-avatar" alt="Carlos">
+                <div>
+                  <div class="role-card-title">
+                    <span>Carlos Garzón</span>
+                    <span class="role-badge-pill role-badge-super" style="color: #F59E0B;">Super Admin</span>
+                  </div>
+                  <div class="role-card-subtitle">Acceso Total Multi-Sede & Ajustes</div>
+                </div>
+              </div>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+            </button>
+
+            <button type="button" class="role-card-btn" onclick="app.quickLogin('principal')">
+              <div class="role-card-info">
+                <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80" class="role-avatar" alt="Cajero Principal">
+                <div>
+                  <div class="role-card-title">
+                    <span>Cajero Sede Principal</span>
+                    <span class="role-badge-pill" style="background: rgba(2, 132, 199, 0.15); color: #38bdf8;">Sede 1</span>
+                  </div>
+                  <div class="role-card-subtitle">Ventas POS, Facturación & Caja Chica</div>
+                </div>
+              </div>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+            </button>
+
+            <button type="button" class="role-card-btn" onclick="app.quickLogin('centro')">
+              <div class="role-card-info">
+                <img src="https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=120&auto=format&fit=crop&q=80" class="role-avatar" alt="Cajero Centro">
+                <div>
+                  <div class="role-card-title">
+                    <span>Cajero Sede Centro</span>
+                    <span class="role-badge-pill" style="background: rgba(13, 148, 136, 0.15); color: #2dd4bf;">Sede 2</span>
+                  </div>
+                  <div class="role-card-subtitle">Ventas POS, Facturación & Caja Chica</div>
+                </div>
+              </div>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2dd4bf" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+            </button>
+          </div>
         </div>
       </div>
     </div>
