@@ -2798,7 +2798,27 @@
               <option value="Transferencia">🏦 Transferencia Bancaria</option>
               <option value="Tarjeta">💳 Tarjeta Débito / Crédito</option>
               <option value="Bizum / Pago QR">📱 Bizum / Pago QR</option>
+              <option value="Pago Mixto">🔀 Pago Mixto (Efectivo + Electrónico)</option>
             </select>
+          </div>
+
+          <!-- CAJA DISTRIBUCIÓN PAGO MIXTO PARA ABONOS -->
+          <div id="abono-mixed-box" style="display:none; flex-direction:column; gap:0.75rem; background:rgba(99,102,241,0.06); border:1px solid rgba(99,102,241,0.25); padding:1rem; border-radius:var(--radius-md); margin-bottom:1.25rem;">
+            <div style="font-size:0.82rem; font-weight:700; color:var(--primary-indigo); display:flex; align-items:center; gap:6px;">🔀 Distribución del Abono Mixto:</div>
+            <div class="grid-2" style="gap:0.75rem;">
+              <div>
+                <label style="font-size:0.75rem; font-weight:600; color:var(--text-muted); display:block; margin-bottom:0.25rem;">Monto Efectivo (Caja) *</label>
+                <input type="text" inputmode="numeric" id="abono-mixed-cash" class="form-input" placeholder="0" style="font-weight:700; font-size:0.95rem;" oninput="app.updateAbonoMixedCalc()">
+              </div>
+              <div>
+                <label style="font-size:0.75rem; font-weight:600; color:var(--text-muted); display:block; margin-bottom:0.25rem;">Monto Electrónico / Tarjeta *</label>
+                <input type="text" inputmode="numeric" id="abono-mixed-electronic" class="form-input" placeholder="0" style="font-weight:700; font-size:0.95rem;" oninput="app.updateAbonoMixedCalc()">
+              </div>
+            </div>
+            <div style="font-size:0.78rem; color:var(--text-muted); display:flex; justify-content:space-between; align-items:center; padding-top:4px;">
+              <span>Suma distribuida: <b id="abono-mixed-sum" style="color:var(--text-main); font-weight:700;">$0</b></span>
+              <span id="abono-mixed-diff" style="color:var(--rose-danger); font-weight:700;"></span>
+            </div>
           </div>
 
           <!-- CAJA INFORMATIVA: DESCUENTO DE CAJA (PARA PROVEEDORES) -->
@@ -2992,7 +3012,7 @@
 
         <div style="margin-bottom:1.5rem;">
           <label style="font-size:0.8rem; font-weight:600; color:var(--text-muted); display:block; margin-bottom:0.5rem;">Método de Pago</label>
-          <div style="display:grid; grid-template-columns:repeat(5, 1fr); gap:0.5rem;" id="checkout-pay-methods-grid">
+          <div style="display:grid; grid-template-columns:repeat(6, 1fr); gap:0.5rem;" id="checkout-pay-methods-grid">
             <button type="button" class="btn pay-method-btn active" data-pay-type="cash" id="pay-btn-cash">
               <span style="font-size:1.15rem;">💵</span>
               <span>Efectivo</span>
@@ -3004,6 +3024,10 @@
             <button type="button" class="btn pay-method-btn" data-pay-type="transfer" id="pay-btn-transfer">
               <span style="font-size:1.15rem;">🏦</span>
               <span>Transferencia</span>
+            </button>
+            <button type="button" class="btn pay-method-btn" data-pay-type="mixed" id="pay-btn-mixed">
+              <span style="font-size:1.15rem;">🔀</span>
+              <span>Pago Mixto</span>
             </button>
             <button type="button" class="btn pay-method-btn" data-pay-type="credit" id="pay-btn-credit">
               <span style="font-size:1.15rem;">🏷️</span>
@@ -3077,6 +3101,88 @@
           <div>
             <label style="font-size:0.78rem; font-weight:600; color:var(--text-muted); display:block; margin-bottom:0.35rem;">N° de Comprobante / Transacción (Opcional)</label>
             <input type="text" id="checkout-transfer-voucher-input" class="form-input" placeholder="Ej: #048291 / Nequi M1234" style="font-size:0.85rem;">
+          </div>
+        </div>
+
+        <!-- PAGO MIXTO (COMBINADO EFECTIVO + TARJETA + TRANSFERENCIA) -->
+        <div id="mixed-info-box" style="display:none; flex-direction:column; gap:0.85rem; margin-bottom:1.5rem; background:rgba(99,102,241,0.06); border:1px solid rgba(99,102,241,0.25); padding:1.1rem; border-radius:var(--radius-md);">
+          <div style="font-weight:700; font-size:0.92rem; color:var(--primary-indigo); display:flex; align-items:center; justify-content:space-between;">
+            <span style="display:flex; align-items:center; gap:6px;">🔀 Pago Mixto Combinado</span>
+            <span id="mixed-total-to-pay" style="font-weight:800; font-size:0.95rem; color:var(--text-main);">Total: $0.00</span>
+          </div>
+          <div style="font-size:0.8rem; color:var(--text-muted);">
+            Distribuya los montos cobrados según los métodos utilizados. La suma total debe cubrir el valor de la venta.
+          </div>
+
+          <!-- Efectivo -->
+          <div style="background:var(--card-bg); padding:0.75rem; border-radius:var(--radius-sm); border:1px solid var(--border-color);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.35rem;">
+              <label style="font-size:0.8rem; font-weight:700; color:var(--text-main); display:flex; align-items:center; gap:4px; margin:0;">
+                💵 <span>Efectivo en Caja</span>
+              </label>
+              <button type="button" class="btn btn-secondary text-xs" style="padding:2px 8px; font-size:0.72rem; font-weight:700;" onclick="app.autoFillMixed('cash')">Rellenar Restante</button>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; align-items:center;">
+              <div>
+                <input type="text" inputmode="numeric" id="mixed-cash-amount" class="form-input" placeholder="0" style="font-size:1.05rem; font-weight:700;" oninput="app.updateMixedPaymentCalc()">
+              </div>
+              <div style="font-size:0.75rem; color:var(--text-muted); line-height:1.2;">
+                Ingresa directamente a la gaveta de caja física.
+              </div>
+            </div>
+          </div>
+
+          <!-- Tarjeta -->
+          <div style="background:var(--card-bg); padding:0.75rem; border-radius:var(--radius-sm); border:1px solid var(--border-color);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.35rem;">
+              <label style="font-size:0.8rem; font-weight:700; color:var(--text-main); display:flex; align-items:center; gap:4px; margin:0;">
+                💳 <span>Tarjeta / Datáfono</span>
+              </label>
+              <button type="button" class="btn btn-secondary text-xs" style="padding:2px 8px; font-size:0.72rem; font-weight:700;" onclick="app.autoFillMixed('card')">Rellenar Restante</button>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; margin-bottom:0.4rem;">
+              <div>
+                <input type="text" inputmode="numeric" id="mixed-card-amount" class="form-input" placeholder="0" style="font-size:1.05rem; font-weight:700;" oninput="app.updateMixedPaymentCalc()">
+              </div>
+              <div>
+                <select id="checkout-mixed-card-account" class="form-select" style="font-size:0.82rem; height:100%; font-weight:600;"></select>
+              </div>
+            </div>
+            <div>
+              <input type="text" id="checkout-mixed-card-voucher" class="form-input" placeholder="N° Voucher / Aprobación Datáfono (Opcional)" style="font-size:0.8rem; padding:5px 8px;">
+            </div>
+          </div>
+
+          <!-- Transferencia -->
+          <div style="background:var(--card-bg); padding:0.75rem; border-radius:var(--radius-sm); border:1px solid var(--border-color);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.35rem;">
+              <label style="font-size:0.8rem; font-weight:700; color:var(--text-main); display:flex; align-items:center; gap:4px; margin:0;">
+                🏦 <span>Transferencia / QR</span>
+              </label>
+              <button type="button" class="btn btn-secondary text-xs" style="padding:2px 8px; font-size:0.72rem; font-weight:700;" onclick="app.autoFillMixed('transfer')">Rellenar Restante</button>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; margin-bottom:0.4rem;">
+              <div>
+                <input type="text" inputmode="numeric" id="mixed-transfer-amount" class="form-input" placeholder="0" style="font-size:1.05rem; font-weight:700;" oninput="app.updateMixedPaymentCalc()">
+              </div>
+              <div>
+                <select id="checkout-mixed-transfer-account" class="form-select" style="font-size:0.82rem; height:100%; font-weight:600;"></select>
+              </div>
+            </div>
+            <div>
+              <input type="text" id="checkout-mixed-transfer-voucher" class="form-input" placeholder="N° Comprobante / Ref. Transferencia (Opcional)" style="font-size:0.8rem; padding:5px 8px;">
+            </div>
+          </div>
+
+          <!-- Indicador de Balance en Tiempo Real -->
+          <div style="background:var(--canvas-bg); padding:0.75rem 1rem; border-radius:var(--radius-sm); border:1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center;">
+            <div>
+              <div style="font-size:0.78rem; color:var(--text-muted); font-weight:600;">Total Cubierto: <b id="mixed-covered-amount" style="color:var(--text-main); font-size:0.95rem;">$0.00</b></div>
+              <div id="mixed-status-label" style="font-size:0.82rem; font-weight:700; color:#EF4444; margin-top:2px;">Falta por cubrir: $0.00</div>
+            </div>
+            <div id="mixed-status-badge" style="padding:4px 12px; border-radius:20px; font-size:0.8rem; font-weight:700; background:rgba(239,68,68,0.15); color:#EF4444;">
+              Incompleto
+            </div>
           </div>
         </div>
 
@@ -3506,6 +3612,16 @@
                   <div>
                     <div class="payment-check-title">Plan Separe</div>
                     <div class="payment-check-desc">Apartado con abonos</div>
+                  </div>
+                </div>
+              </label>
+              <label class="payment-check-card" id="card-cust-pay-mixed">
+                <input type="checkbox" id="cust-pay-mixed" value="Pago Mixto" checked>
+                <div class="payment-check-info">
+                  <span class="payment-check-icon">🔀</span>
+                  <div>
+                    <div class="payment-check-title">Pago Mixto</div>
+                    <div class="payment-check-desc">Efectivo + Electrónico</div>
                   </div>
                 </div>
               </label>
@@ -4179,6 +4295,7 @@
               <option value="Bancolombia / Nequi">📱 Bancolombia / Nequi</option>
               <option value="Tarjeta Débito">💳 Tarjeta Débito</option>
               <option value="Tarjeta Crédito">💳 Tarjeta Crédito</option>
+              <option value="Pago Mixto">🔀 Pago Mixto</option>
             </select>
           </div>
         </div>
@@ -4431,6 +4548,16 @@
                   <div>
                     <div class="payment-check-title">Plan Separe</div>
                     <div class="payment-check-desc">Apartado con abonos</div>
+                  </div>
+                </div>
+              </label>
+              <label class="payment-check-card" id="card-edit-cust-pay-mixed">
+                <input type="checkbox" id="edit-cust-pay-mixed" value="Pago Mixto">
+                <div class="payment-check-info">
+                  <span class="payment-check-icon">🔀</span>
+                  <div>
+                    <div class="payment-check-title">Pago Mixto</div>
+                    <div class="payment-check-desc">Efectivo + Electrónico</div>
                   </div>
                 </div>
               </label>

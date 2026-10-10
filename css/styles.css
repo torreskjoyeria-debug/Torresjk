@@ -5161,8 +5161,8 @@ html, body {
 
 .pay-method-btn {
   font-weight: 700;
-  font-size: 0.82rem;
-  padding: 0.6rem 0.4rem;
+  font-size: 0.8rem;
+  padding: 0.55rem 0.3rem;
   border-radius: var(--radius-md);
   border: 1px solid var(--border-color);
   background: var(--canvas-bg);
@@ -5175,6 +5175,7 @@ html, body {
   justify-content: center;
   gap: 4px;
   text-align: center;
+  min-width: 0;
 }
 
 .pay-method-btn:hover:not(:disabled) {
@@ -5193,6 +5194,12 @@ html, body {
   opacity: 0.38 !important;
   cursor: not-allowed !important;
   border-style: dashed;
+}
+
+@media (max-width: 640px) {
+  #checkout-pay-methods-grid {
+    grid-template-columns: repeat(3, 1fr) !important;
+  }
 }
 
 /* ==========================================================================
