@@ -19,12 +19,12 @@
       "color": "#0d9488"
     }
   ],
-  "activeStoreId": "store_1",
+  "activeStoreId": "store_2",
   "stores": {
     "store_1": {
       "store": {
         "name": "Sede Principal",
-        "slogan": "Oro 18k & Plata 925",
+        "slogan": "Exclusividad en Canada detalle",
         "legalName": "Joyería Demo S.A.S - Sede Principal",
         "taxId": "900123456-1",
         "currency": "$",
@@ -32,10 +32,10 @@
         "email": "principal@nexuspos.io",
         "address": "Avenida Principal # 10 - 20",
         "addressExtra": "Local 101",
-        "cashier": "Administrador",
+        "cashier": "Nexus Owner",
         "shiftStatus": "Cerrado",
         "shiftStartTime": "08:00 AM",
-        "cashInBox": 0,
+        "cashInBox": 11564000,
         "taxRate": 0,
         "branding": {
           "appName": "JOYERÍA POS",
@@ -58,11 +58,11 @@
         "salesTrend": "0%",
         "transactionsToday": 0,
         "txTrend": "0%",
-        "inventoryValue": 0,
-        "avgCostPerGram": 0,
-        "avgCostGrams": 0,
-        "skusCount": 0,
-        "totalGrams": 0,
+        "inventoryValue": 6916000,
+        "avgCostPerGram": 400000,
+        "avgCostGrams": 17.29,
+        "skusCount": 14,
+        "totalGrams": 17.29,
         "netMargin": "0%",
         "marginTrend": "0%",
         "totalCustomers": 0,
@@ -128,8 +128,44 @@
           ]
         }
       ],
-      "customers": [],
-      "suppliers": [],
+      "customers": [
+        {
+          "id": "CLI-905",
+          "docType": "CC",
+          "document": "1828383883",
+          "name": "Julia",
+          "phone": "727337",
+          "email": "jojan@nexuspos.io",
+          "address": "Jshsh",
+          "creditLimit": 5000000,
+          "creditBalance": 2822500,
+          "allowedPaymentMethods": [
+            "Efectivo",
+            "Tarjeta",
+            "Transferencia",
+            "Crédito",
+            "Plan Separe",
+            "Pago Mixto"
+          ],
+          "status": "Active"
+        }
+      ],
+      "suppliers": [
+        {
+          "id": "PRV-749",
+          "docType": "NIT",
+          "nit": "123445",
+          "name": "Carlos",
+          "phone": "1234567",
+          "email": "car2@hotmail.com",
+          "address": "Centro",
+          "accountType": "Ahorros",
+          "accountNumber": "12345678",
+          "bank": "fghjk",
+          "creditBalance": 0,
+          "status": "Active"
+        }
+      ],
       "perfiles": [
         {
           "id": "PRF-01",
@@ -148,25 +184,7 @@
           "usersCount": 1,
           "badgeColor": "#3B82F6",
           "allowedModules": [
-            "dashboard",
-            "pos",
-            "ventas",
-            "clientes",
-            "creditos_clientes",
-            "comprar",
-            "proveedores",
-            "creditos_proveedores",
-            "productos",
-            "servicios",
-            "categorias",
-            "activos",
-            "gastos",
-            "formas_pago",
-            "cuadre_caja",
-            "abonos_ventas",
-            "abonos_compras",
-            "reports",
-            "informes"
+            "*"
           ]
         },
         {
@@ -221,63 +239,404 @@
           "icon": "calendar",
           "fee": "0%",
           "active": true
+        },
+        {
+          "id": "PM-06",
+          "name": "Pago Mixto",
+          "icon": "shuffle",
+          "fee": "0%",
+          "active": true
         }
       ],
       "purchases": [],
-      "customerCredits": [],
+      "customerCredits": [
+        {
+          "id": "CC-866",
+          "customer": "Julia",
+          "totalGranted": 3322500,
+          "currentBalance": 2822500,
+          "dueDate": "2026-11-07",
+          "status": "Al Día"
+        }
+      ],
       "supplierCredits": [],
       "services": [],
       "categories": [
         {
+          "id": "nacional",
+          "name": "Nacional",
+          "type": "general",
+          "itemsCount": 8,
+          "color": "#6366f1",
+          "availableGrams": 15.56,
+          "cost": 400000,
+          "totalValuation": 6224000
+        },
+        {
           "id": "oro18k",
-          "name": "Oro 18K Italiano & Ley",
-          "itemsCount": 0,
-          "color": "#F59E0B",
-          "availableGrams": 0,
-          "cost": 444000
-        },
-        {
-          "id": "plata925",
-          "name": "Plata 925 Fina",
-          "itemsCount": 0,
-          "color": "#94A3B8",
-          "availableGrams": 0,
-          "cost": 28000
-        },
-        {
-          "id": "diamantes",
-          "name": "Piedras Preciosas & Dijes",
-          "itemsCount": 0,
-          "color": "#6366F1",
-          "availableGrams": 0,
-          "cost": 850000
-        },
-        {
-          "id": "relojes",
-          "name": "Relojería de Lujo",
-          "itemsCount": 0,
-          "color": "#10B981",
-          "availableGrams": 0,
-          "cost": 1200000
+          "name": "Italiano",
+          "itemsCount": 6,
+          "color": "#f59e0b",
+          "availableGrams": 1.73,
+          "cost": 400000,
+          "totalValuation": 692000
         }
       ],
-      "products": [],
+      "products": [
+        {
+          "id": "PRD-135",
+          "sku": "4002",
+          "name": "Pulso plano",
+          "measureType": "Unidades",
+          "weightUnit": "u.",
+          "unit": "u.",
+          "pieceWeight": 2,
+          "weight": 2,
+          "category": "oro18k",
+          "categoryName": "Italiano",
+          "supplier": "ANONIMO",
+          "cost": 400000,
+          "price": 0,
+          "stock": 0,
+          "isExtra": false,
+          "minStock": 2,
+          "status": "out_of_stock",
+          "sold30d": 1,
+          "monthlySales": {
+            "2026-10": {
+              "8": 1
+            }
+          }
+        },
+        {
+          "id": "PRD-443",
+          "sku": "4001",
+          "name": "Pulso cubano",
+          "measureType": "Unidades",
+          "weightUnit": "u.",
+          "unit": "u.",
+          "pieceWeight": 1.65,
+          "weight": 1.65,
+          "category": "oro18k",
+          "categoryName": "Italiano",
+          "supplier": "ANONIMO",
+          "cost": 400000,
+          "price": 0,
+          "stock": 0,
+          "isExtra": false,
+          "minStock": 2,
+          "status": "out_of_stock",
+          "sold30d": 1,
+          "monthlySales": {
+            "2026-10": {
+              "8": 1
+            }
+          }
+        },
+        {
+          "id": "PRD-543",
+          "sku": "4000",
+          "name": "Pulso lazo",
+          "measureType": "Unidades",
+          "weightUnit": "u.",
+          "unit": "u.",
+          "pieceWeight": 0.8,
+          "weight": 0.8,
+          "category": "nacional",
+          "categoryName": "Nacional",
+          "supplier": "ANONIMO",
+          "cost": 400000,
+          "price": 0,
+          "stock": 0,
+          "isExtra": false,
+          "minStock": 2,
+          "status": "out_of_stock",
+          "sold30d": 3,
+          "monthlySales": {
+            "2026-10": {
+              "8": 3
+            }
+          }
+        },
+        {
+          "id": "PRD-591",
+          "sku": "2004",
+          "name": "Cadena lazo",
+          "measureType": "Unidades",
+          "weightUnit": "u.",
+          "unit": "u.",
+          "pieceWeight": 2.46,
+          "weight": 2.46,
+          "category": "oro18k",
+          "categoryName": "Italiano",
+          "supplier": "ANONIMO",
+          "cost": 400000,
+          "price": 0,
+          "stock": 0,
+          "isExtra": false,
+          "minStock": 2,
+          "status": "out_of_stock",
+          "sold30d": 1,
+          "monthlySales": {
+            "2026-10": {
+              "8": 1
+            }
+          }
+        },
+        {
+          "id": "PRD-666",
+          "sku": "2003",
+          "name": "Cadena china",
+          "measureType": "Unidades",
+          "weightUnit": "u.",
+          "unit": "u.",
+          "pieceWeight": 2.34,
+          "weight": 2.34,
+          "category": "nacional",
+          "categoryName": "Nacional",
+          "supplier": "Carlos",
+          "cost": 400000,
+          "price": 0,
+          "stock": 1,
+          "isExtra": false,
+          "minStock": 2,
+          "status": "active"
+        },
+        {
+          "id": "PRD-324",
+          "sku": "2002",
+          "name": "Cadena cubana",
+          "measureType": "Unidades",
+          "weightUnit": "u.",
+          "unit": "u.",
+          "pieceWeight": 1.73,
+          "weight": 1.73,
+          "category": "oro18k",
+          "categoryName": "Italiano",
+          "supplier": "ANONIMO",
+          "cost": 400000,
+          "price": 0,
+          "stock": 1,
+          "isExtra": false,
+          "minStock": 2,
+          "status": "active"
+        },
+        {
+          "id": "PRD-499",
+          "sku": "2001",
+          "name": "Cadena cubana",
+          "measureType": "Unidades",
+          "weightUnit": "u.",
+          "unit": "u.",
+          "pieceWeight": 4.44,
+          "weight": 4.44,
+          "category": "oro18k",
+          "categoryName": "Italiano",
+          "supplier": "ANONIMO",
+          "cost": 400000,
+          "price": 0,
+          "stock": 0,
+          "isExtra": false,
+          "minStock": 2,
+          "status": "out_of_stock",
+          "sold30d": 1,
+          "monthlySales": {
+            "2026-10": {
+              "8": 1
+            }
+          }
+        },
+        {
+          "id": "PRD-365",
+          "sku": "2000",
+          "name": "Cadena cubana",
+          "measureType": "Unidades",
+          "weightUnit": "u.",
+          "unit": "u.",
+          "pieceWeight": 8.28,
+          "weight": 8.28,
+          "category": "oro18k",
+          "categoryName": "Italiano",
+          "supplier": "ANONIMO",
+          "cost": 440000,
+          "price": 0,
+          "stock": 0,
+          "isExtra": false,
+          "minStock": 2,
+          "status": "out_of_stock",
+          "sold30d": 1,
+          "monthlySales": {
+            "2026-10": {
+              "8": 1
+            }
+          }
+        },
+        {
+          "id": "PRD-234",
+          "sku": "8005",
+          "name": "Anillo troquel virgen",
+          "measureType": "Unidades",
+          "weightUnit": "u.",
+          "unit": "u.",
+          "pieceWeight": 2.11,
+          "weight": 2.11,
+          "category": "nacional",
+          "categoryName": "Nacional",
+          "supplier": "ANONIMO",
+          "cost": 400000,
+          "price": 0,
+          "stock": 0,
+          "isExtra": false,
+          "minStock": 2,
+          "status": "out_of_stock",
+          "sold30d": 1,
+          "monthlySales": {
+            "2026-10": {
+              "8": 1
+            }
+          }
+        },
+        {
+          "id": "PRD-475",
+          "sku": "8004",
+          "name": "Anillo cristo",
+          "measureType": "Unidades",
+          "weightUnit": "u.",
+          "unit": "u.",
+          "pieceWeight": 2.1,
+          "weight": 2.1,
+          "category": "nacional",
+          "categoryName": "Nacional",
+          "supplier": "ANONIMO",
+          "cost": 400000,
+          "price": 0,
+          "stock": 0,
+          "isExtra": false,
+          "minStock": 2,
+          "status": "out_of_stock",
+          "sold30d": 1,
+          "monthlySales": {
+            "2026-10": {
+              "8": 1
+            }
+          }
+        },
+        {
+          "id": "PRD-981",
+          "sku": "8003",
+          "name": "Anillo piedras",
+          "measureType": "Unidades",
+          "weightUnit": "u.",
+          "unit": "u.",
+          "pieceWeight": 2.12,
+          "weight": 2.12,
+          "category": "nacional",
+          "categoryName": "Nacional",
+          "supplier": "ANONIMO",
+          "cost": 400000,
+          "price": 0,
+          "stock": 1,
+          "isExtra": false,
+          "minStock": 2,
+          "status": "active"
+        },
+        {
+          "id": "PRD-286",
+          "sku": "8002",
+          "name": "Anillo virgen",
+          "measureType": "Unidades",
+          "weightUnit": "u.",
+          "unit": "u.",
+          "pieceWeight": 5.29,
+          "weight": 5.29,
+          "category": "nacional",
+          "categoryName": "Nacional",
+          "supplier": "ANONIMO",
+          "cost": 400000,
+          "price": 0,
+          "stock": 1,
+          "isExtra": false,
+          "minStock": 2,
+          "status": "active"
+        },
+        {
+          "id": "PRD-962",
+          "sku": "8001",
+          "name": "anillo virgen",
+          "measureType": "Unidades",
+          "weightUnit": "u.",
+          "unit": "u.",
+          "pieceWeight": 5.81,
+          "weight": 5.81,
+          "category": "nacional",
+          "categoryName": "Nacional",
+          "supplier": "ANONIMO",
+          "cost": 400000,
+          "price": 0,
+          "stock": 1,
+          "isExtra": false,
+          "minStock": 2,
+          "status": "active"
+        },
+        {
+          "id": "PRD-668",
+          "sku": "8000",
+          "name": "Anillo virgen",
+          "measureType": "Unidades",
+          "weightUnit": "u.",
+          "unit": "u.",
+          "pieceWeight": 5.39,
+          "weight": 5.39,
+          "category": "nacional",
+          "categoryName": "Nacional",
+          "supplier": "ANONIMO",
+          "cost": 400000,
+          "price": 0,
+          "stock": 0,
+          "isExtra": false,
+          "minStock": 2,
+          "status": "out_of_stock",
+          "sold30d": 1,
+          "monthlySales": {
+            "2026-10": {
+              "8": 1
+            }
+          }
+        }
+      ],
       "assets": [],
       "cashShiftLog": {
-        "shiftId": "TURNO-001",
-        "openedAt": "08:00 AM",
+        "shiftId": "TURNO-860",
+        "openedAt": "11:28 a.m.",
         "openingCash": 0,
-        "cashSales": 0,
-        "cardSales": 0,
+        "cashSales": 18160000,
+        "cardSales": 12880600,
         "qrSales": 0,
-        "cashExpenses": 0,
-        "expectedCashInDrawer": 0,
+        "cashExpenses": 6596000,
+        "expectedCashInDrawer": 11564000,
         "actualCashInDrawer": 0,
         "discrepancy": 0,
-        "status": "Cerrado"
+        "status": "Abierto",
+        "openedBy": "Jojan Torres",
+        "openedDate": "2026-10-08",
+        "openedTimestamp": 1791476938103,
+        "openedIso": "2026-10-08T16:28:58.103Z",
+        "transferSales": 5600000,
+        "tarjetaSales": 0,
+        "creditSales": 2822500
       },
       "cashShiftsHistory": [],
-      "abonosVentas": [],
+      "abonosVentas": [
+        {
+          "id": "AB-V646880",
+          "date": "2026-10-08 17:30",
+          "customer": "Julia",
+          "invoiceId": "TX-46881",
+          "amount": 500000,
+          "method": "Efectivo",
+          "cashier": "Jojan Torres"
+        }
+      ],
       "abonosCompras": [],
       "balanceSheet": {
         "assetsCurrent": 0,
@@ -320,8 +679,512 @@
           0
         ]
       },
-      "recentTransactions": [],
-      "sales": [],
+      "recentTransactions": [
+        {
+          "id": "TX-90423",
+          "customer": "Cliente Mostrador",
+          "customerDoc": "",
+          "customerDocType": "CC",
+          "customerAddress": "",
+          "customerPhone": "",
+          "time": "03:23:06 p.m.",
+          "date": "08/10/2026",
+          "type": "Venta POS",
+          "itemsCount": 1,
+          "items": [
+            {
+              "id": "PRD-234",
+              "sku": "8005",
+              "name": "Anillo troquel virgen",
+              "qty": 2.11,
+              "quantity": 2.11,
+              "unit": "u.",
+              "measureType": "Unidades",
+              "pieceWeight": 2.11,
+              "price": 520000,
+              "total": 1097200
+            }
+          ],
+          "subtotal": 1097200,
+          "tax": 0,
+          "total": 1097200,
+          "paymentMethod": "Efectivo",
+          "cashier": "Jojan Torres",
+          "status": "completed"
+        },
+        {
+          "id": "TX-92599",
+          "customer": "Julia",
+          "customerDoc": "1828383883",
+          "customerDocType": "CC",
+          "customerAddress": "Jshsh",
+          "customerPhone": "727337",
+          "time": "03:22:31 p.m.",
+          "date": "08/10/2026",
+          "type": "Venta POS",
+          "itemsCount": 2,
+          "items": [
+            {
+              "id": "PRD-668",
+              "sku": "8000",
+              "name": "Anillo virgen",
+              "qty": 5.39,
+              "quantity": 5.39,
+              "unit": "u.",
+              "measureType": "Unidades",
+              "pieceWeight": 5.39,
+              "price": 590000,
+              "total": 3180100
+            },
+            {
+              "id": "PRD-135",
+              "sku": "4002",
+              "name": "Pulso plano",
+              "qty": 2,
+              "quantity": 2,
+              "unit": "u.",
+              "measureType": "Unidades",
+              "pieceWeight": 2,
+              "price": 585000,
+              "total": 1170000
+            }
+          ],
+          "subtotal": 4350100,
+          "tax": 0,
+          "total": 4350100,
+          "paymentMethod": "Efectivo",
+          "cashier": "Jojan Torres",
+          "status": "completed"
+        },
+        {
+          "id": "TX-95314",
+          "customer": "Cliente Mostrador",
+          "customerDoc": "",
+          "customerDocType": "CC",
+          "customerAddress": "",
+          "customerPhone": "",
+          "time": "04:55:48 p.m.",
+          "date": "08/10/2026",
+          "type": "Venta POS",
+          "itemsCount": 1,
+          "items": [
+            {
+              "id": "PRD-443",
+              "sku": "4001",
+              "name": "Pulso cubano",
+              "qty": 1.65,
+              "quantity": 1.65,
+              "unit": "u.",
+              "measureType": "Unidades",
+              "pieceWeight": 1.65,
+              "price": 590000,
+              "total": 973500
+            }
+          ],
+          "subtotal": 973500,
+          "tax": 0,
+          "total": 973500,
+          "paymentMethod": "Efectivo",
+          "cashier": "Jojan Torres",
+          "status": "completed"
+        },
+        {
+          "id": "TX-95703",
+          "customer": "Cliente Mostrador",
+          "customerDoc": "",
+          "customerDocType": "CC",
+          "customerAddress": "",
+          "customerPhone": "",
+          "time": "04:54:08 p.m.",
+          "date": "08/10/2026",
+          "type": "Venta POS",
+          "itemsCount": 3,
+          "items": [
+            {
+              "id": "PRD-543",
+              "sku": "4000",
+              "name": "Pulso lazo",
+              "qty": 0.8,
+              "quantity": 0.8,
+              "unit": "u.",
+              "measureType": "Unidades",
+              "pieceWeight": 0.8,
+              "price": 590000,
+              "total": 472000
+            },
+            {
+              "id": "PRD-365",
+              "sku": "2000",
+              "name": "Cadena cubana",
+              "qty": 8.28,
+              "quantity": 8.28,
+              "unit": "u.",
+              "measureType": "Unidades",
+              "pieceWeight": 8.28,
+              "price": 590000,
+              "total": 4885200
+            },
+            {
+              "id": "PRD-591",
+              "sku": "2004",
+              "name": "Cadena lazo",
+              "qty": 2.46,
+              "quantity": 2.46,
+              "unit": "u.",
+              "measureType": "Unidades",
+              "pieceWeight": 2.46,
+              "price": 590000,
+              "total": 1451400
+            }
+          ],
+          "subtotal": 6808600,
+          "tax": 0,
+          "total": 6808600,
+          "paymentMethod": "Tarjeta (Cuenta Carlos)",
+          "targetAccount": "Cuenta Carlos",
+          "cashier": "Jojan Torres",
+          "status": "completed"
+        },
+        {
+          "id": "TX-93897",
+          "customer": "Cliente Mostrador",
+          "customerDoc": "",
+          "customerDocType": "CC",
+          "customerAddress": "",
+          "customerPhone": "",
+          "time": "04:42:32 p.m.",
+          "date": "08/10/2026",
+          "type": "Venta POS",
+          "itemsCount": 1,
+          "items": [
+            {
+              "id": "PRD-543",
+              "sku": "4000",
+              "name": "Pulso lazo",
+              "qty": 0.8,
+              "quantity": 0.8,
+              "unit": "u.",
+              "measureType": "Unidades",
+              "pieceWeight": 0.8,
+              "price": 590000,
+              "total": 472000
+            }
+          ],
+          "subtotal": 472000,
+          "tax": 0,
+          "total": 472000,
+          "paymentMethod": "Transferencia (CUENTA PRINCIPAL NEGOCIO)",
+          "targetAccount": "CUENTA PRINCIPAL NEGOCIO",
+          "cashier": "Jojan Torres",
+          "status": "completed"
+        },
+        {
+          "id": "TX-97882",
+          "customer": "Cliente Mostrador",
+          "customerDoc": "",
+          "customerDocType": "CC",
+          "customerAddress": "",
+          "customerPhone": "",
+          "time": "04:37:02 p.m.",
+          "date": "08/10/2026",
+          "type": "Venta POS",
+          "itemsCount": 3,
+          "items": [
+            {
+              "id": "PRD-475",
+              "sku": "8004",
+              "name": "Anillo cristo",
+              "qty": 2.1,
+              "quantity": 2.1,
+              "unit": "u.",
+              "measureType": "Unidades",
+              "pieceWeight": 2.1,
+              "price": 540000,
+              "total": 1134000
+            },
+            {
+              "id": "PRD-543",
+              "sku": "4000",
+              "name": "Pulso lazo",
+              "qty": 0.8,
+              "quantity": 0.8,
+              "unit": "u.",
+              "measureType": "Unidades",
+              "pieceWeight": 0.8,
+              "price": 590000,
+              "total": 472000
+            },
+            {
+              "id": "PRD-499",
+              "sku": "2001",
+              "name": "Cadena cubana",
+              "qty": 4.44,
+              "quantity": 4.44,
+              "unit": "u.",
+              "measureType": "Unidades",
+              "pieceWeight": 4.44,
+              "price": 580000,
+              "total": 2575200
+            }
+          ],
+          "subtotal": 4181200,
+          "tax": 0,
+          "total": 4181200,
+          "paymentMethod": "Efectivo",
+          "cashier": "Jojan Torres",
+          "status": "completed"
+        },
+        {
+          "id": "TX-93185",
+          "customer": "Julia",
+          "customerDoc": "1828383883",
+          "customerDocType": "CC",
+          "customerAddress": "Jshsh",
+          "customerPhone": "727337",
+          "time": "01:32:08 p.m.",
+          "date": "08/10/2026",
+          "type": "Venta POS",
+          "itemsCount": 1,
+          "items": [
+            {
+              "id": "PRD-697",
+              "sku": "002",
+              "name": "Herraje cruz",
+              "qty": 1,
+              "quantity": 1,
+              "unit": "u.",
+              "measureType": "Unidades",
+              "pieceWeight": 1,
+              "price": 500000,
+              "total": 500000
+            }
+          ],
+          "subtotal": 500000,
+          "tax": 0,
+          "total": 500000,
+          "paymentMethod": "Crédito",
+          "cashier": "Jojan Torres",
+          "status": "completed"
+        },
+        {
+          "id": "TX-89261",
+          "customer": "Cliente Mostrador",
+          "customerDoc": "",
+          "customerDocType": "CC",
+          "customerAddress": "",
+          "customerPhone": "",
+          "time": "12:34:49 p.m.",
+          "date": "08/10/2026",
+          "type": "Venta POS",
+          "itemsCount": 1,
+          "items": [
+            {
+              "id": "PRD-2400",
+              "sku": "3000",
+              "name": "Balineria",
+              "qty": 10,
+              "quantity": 10,
+              "unit": "g",
+              "measureType": "Pesaje",
+              "pieceWeight": 0,
+              "price": 500000,
+              "total": 5000000
+            }
+          ],
+          "subtotal": 5000000,
+          "tax": 0,
+          "total": 5000000,
+          "paymentMethod": "Transferencia (Cuenta Carlos)",
+          "targetAccount": "Cuenta Carlos",
+          "cashier": "Jojan Torres",
+          "status": "completed"
+        },
+        {
+          "id": "TX-90025",
+          "customer": "Cliente Mostrador",
+          "customerDoc": "",
+          "customerDocType": "CC",
+          "customerAddress": "",
+          "customerPhone": "",
+          "time": "12:34:31 p.m.",
+          "date": "08/10/2026",
+          "type": "Venta POS",
+          "itemsCount": 1,
+          "items": [
+            {
+              "id": "PRD-697",
+              "sku": "002",
+              "name": "Herraje cruz",
+              "qty": 1,
+              "quantity": 1,
+              "unit": "u.",
+              "measureType": "Unidades",
+              "pieceWeight": 1,
+              "price": 600000,
+              "total": 600000
+            }
+          ],
+          "subtotal": 600000,
+          "tax": 0,
+          "total": 600000,
+          "paymentMethod": "Transferencia (Cuenta Carlos)",
+          "targetAccount": "Cuenta Carlos",
+          "cashier": "Jojan Torres",
+          "status": "completed"
+        },
+        {
+          "id": "TX-92224",
+          "customer": "Julia",
+          "customerDoc": "1828383883",
+          "customerDocType": "CC",
+          "customerAddress": "Jshsh",
+          "customerPhone": "727337",
+          "time": "12:30:30 p.m.",
+          "date": "08/10/2026",
+          "type": "Venta POS",
+          "itemsCount": 2,
+          "items": [
+            {
+              "id": "PRD-648",
+              "sku": "2026",
+              "name": "herrajes santos",
+              "qty": 1,
+              "quantity": 1,
+              "unit": "g",
+              "measureType": "Pesaje",
+              "pieceWeight": 0,
+              "price": 400000,
+              "total": 400000
+            },
+            {
+              "id": "PRD-689",
+              "sku": "001",
+              "name": "Cadena cubana 50 cm",
+              "qty": 5.1,
+              "quantity": 5.1,
+              "unit": "u.",
+              "measureType": "Unidades",
+              "pieceWeight": 5.1,
+              "price": 475000,
+              "total": 2422500
+            }
+          ],
+          "subtotal": 2822500,
+          "tax": 0,
+          "total": 2822500,
+          "paymentMethod": "Crédito",
+          "cashier": "Jojan Torres",
+          "status": "completed"
+        },
+        {
+          "id": "TX-95199",
+          "customer": "Cliente Mostrador",
+          "customerDoc": "",
+          "customerDocType": "CC",
+          "customerAddress": "",
+          "customerPhone": "",
+          "time": "12:22:13 p.m.",
+          "date": "08/10/2026",
+          "type": "Venta POS",
+          "itemsCount": 1,
+          "items": [
+            {
+              "id": "PRD-648",
+              "sku": "2026",
+              "name": "herrajes santos",
+              "qty": 0.6,
+              "quantity": 0.6,
+              "unit": "g",
+              "measureType": "Pesaje",
+              "pieceWeight": 0,
+              "price": 400000,
+              "total": 240000
+            }
+          ],
+          "subtotal": 240000,
+          "tax": 0,
+          "total": 240000,
+          "paymentMethod": "Efectivo",
+          "cashier": "Jojan Torres",
+          "status": "completed"
+        },
+        {
+          "id": "TX-96127",
+          "customer": "Julia",
+          "customerDoc": "1828383883",
+          "customerDocType": "CC",
+          "customerAddress": "Jshsh",
+          "customerPhone": "727337",
+          "time": "11:51:18 a.m.",
+          "date": "08/10/2026",
+          "type": "Venta POS",
+          "itemsCount": 2,
+          "items": [
+            {
+              "id": "PRD-689",
+              "sku": "001",
+              "name": "Cadena cubana 50 cm",
+              "qty": 5.1,
+              "quantity": 5.1,
+              "unit": "u.",
+              "measureType": "Unidades",
+              "pieceWeight": 5.1,
+              "price": 590000,
+              "total": 3009000
+            },
+            {
+              "id": "PRD-697",
+              "sku": "002",
+              "name": "Herraje cruz",
+              "qty": 2,
+              "quantity": 2,
+              "unit": "u.",
+              "measureType": "Unidades",
+              "pieceWeight": 1,
+              "price": 400000,
+              "total": 800000
+            }
+          ],
+          "subtotal": 3809000,
+          "tax": 0,
+          "total": 3809000,
+          "paymentMethod": "Efectivo",
+          "cashier": "Jojan Torres",
+          "status": "completed"
+        },
+        {
+          "id": "TX-89111",
+          "customer": "Cliente Mostrador",
+          "customerDoc": "",
+          "customerDocType": "CC",
+          "customerAddress": "",
+          "customerPhone": "",
+          "time": "11:29:05 a.m.",
+          "date": "08/10/2026",
+          "type": "Venta POS",
+          "itemsCount": 1,
+          "items": [
+            {
+              "id": "PRD-689",
+              "sku": "001",
+              "name": "Cadena cubana 50 cm",
+              "qty": 5.1,
+              "quantity": 5.1,
+              "unit": "u.",
+              "measureType": "Unidades",
+              "pieceWeight": 5.1,
+              "price": 590000,
+              "total": 3009000
+            }
+          ],
+          "subtotal": 3009000,
+          "tax": 0,
+          "total": 3009000,
+          "paymentMethod": "Efectivo",
+          "cashier": "Jojan Torres",
+          "status": "completed"
+        }
+      ],
       "financialLedger": [],
       "chartData": {
         "weeklySales": {
@@ -400,7 +1263,8 @@
           ]
         }
       },
-      "updatedAt": "2026-10-08T01:46:01.885Z"
+      "sales": [],
+      "updatedAt": "2026-10-10T20:05:13.793Z"
     },
     "store_2": {
       "store": {
@@ -413,7 +1277,7 @@
         "email": "centro@nexuspos.io",
         "address": "Calle 48 # 50 - 15",
         "addressExtra": "Local 102 (C.C. Centro Joyero)",
-        "cashier": "Administrador",
+        "cashier": "Nexus Owner",
         "shiftStatus": "Cerrado",
         "shiftStartTime": "08:00 AM",
         "cashInBox": 0,
@@ -439,9 +1303,9 @@
         "salesTrend": "0%",
         "transactionsToday": 0,
         "txTrend": "0%",
-        "inventoryValue": 0,
-        "avgCostPerGram": 0,
-        "avgCostGrams": 0,
+        "inventoryValue": 183250000,
+        "avgCostPerGram": 339352,
+        "avgCostGrams": 540,
         "skusCount": 0,
         "totalGrams": 0,
         "netMargin": "0%",
@@ -529,25 +1393,7 @@
           "usersCount": 1,
           "badgeColor": "#3B82F6",
           "allowedModules": [
-            "dashboard",
-            "pos",
-            "ventas",
-            "clientes",
-            "creditos_clientes",
-            "comprar",
-            "proveedores",
-            "creditos_proveedores",
-            "productos",
-            "servicios",
-            "categorias",
-            "activos",
-            "gastos",
-            "formas_pago",
-            "cuadre_caja",
-            "abonos_ventas",
-            "abonos_compras",
-            "reports",
-            "informes"
+            "*"
           ]
         },
         {
@@ -602,6 +1448,13 @@
           "icon": "calendar",
           "fee": "0%",
           "active": true
+        },
+        {
+          "id": "PM-06",
+          "name": "Pago Mixto",
+          "icon": "shuffle",
+          "fee": "0%",
+          "active": true
         }
       ],
       "purchases": [],
@@ -615,7 +1468,8 @@
           "itemsCount": 0,
           "color": "#F59E0B",
           "availableGrams": 0,
-          "cost": 444000
+          "cost": 444000,
+          "totalValuation": 0
         },
         {
           "id": "plata925",
@@ -623,7 +1477,8 @@
           "itemsCount": 0,
           "color": "#94A3B8",
           "availableGrams": 0,
-          "cost": 28000
+          "cost": 28000,
+          "totalValuation": 0
         },
         {
           "id": "diamantes",
@@ -631,7 +1486,8 @@
           "itemsCount": 0,
           "color": "#6366F1",
           "availableGrams": 0,
-          "cost": 850000
+          "cost": 850000,
+          "totalValuation": 0
         },
         {
           "id": "relojes",
@@ -639,7 +1495,8 @@
           "itemsCount": 0,
           "color": "#10B981",
           "availableGrams": 0,
-          "cost": 1200000
+          "cost": 1200000,
+          "totalValuation": 0
         }
       ],
       "products": [],
@@ -702,7 +1559,6 @@
         ]
       },
       "recentTransactions": [],
-      "sales": [],
       "financialLedger": [],
       "chartData": {
         "weeklySales": {
@@ -781,8 +1637,9 @@
           ]
         }
       },
-      "updatedAt": "2026-10-08T01:46:01.885Z"
+      "sales": [],
+      "updatedAt": "2026-10-10T20:05:35.650Z"
     }
   },
-  "updatedAt": "2026-10-08T01:46:01.888Z"
+  "updatedAt": "2026-10-10T20:05:35.651Z"
 }

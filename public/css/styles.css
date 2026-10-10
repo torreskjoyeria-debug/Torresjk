@@ -4631,7 +4631,13 @@ html, body {
 #receipt-modal-body *,
 .thermal-ticket-card,
 .thermal-ticket-card * {
-  font-weight: 700 !important;
+  font-weight: 800 !important;
+  color: #000000 !important;
+}
+
+.thermal-ticket-card {
+  font-size: 13.5px !important;
+  line-height: 1.45 !important;
 }
 
 

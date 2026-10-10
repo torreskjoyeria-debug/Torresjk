@@ -1221,7 +1221,7 @@ class NexusApp {
       box-sizing: border-box;
       -webkit-print-color-adjust: exact !important;
       print-color-adjust: exact !important;
-      font-weight: 700 !important;
+      font-weight: 800 !important;
     }
     html, body {
       margin: 0;
@@ -1229,9 +1229,9 @@ class NexusApp {
       background: #ffffff !important;
       color: #000000 !important;
       font-family: 'Courier New', Courier, monospace;
-      font-size: 12px;
-      line-height: 1.35;
-      font-weight: 700 !important;
+      font-size: 13.5px;
+      line-height: 1.45;
+      font-weight: 800 !important;
     }
     .thermal-ticket-card {
       width: 76mm !important;
@@ -1243,11 +1243,13 @@ class NexusApp {
       border: none !important;
       box-shadow: none !important;
       box-sizing: border-box !important;
-      font-weight: 700 !important;
+      font-size: 13.5px !important;
+      line-height: 1.45 !important;
+      font-weight: 800 !important;
     }
     .thermal-ticket-card * {
       color: #000000 !important;
-      font-weight: 700 !important;
+      font-weight: 800 !important;
     }
     img {
       max-width: 130px !important;
@@ -18105,13 +18107,13 @@ class NexusApp {
 
       if (isVenta) {
         return `
-          <div style="margin-bottom:6px; padding-bottom:3px; border-bottom:1px dotted #eaeaea; font-weight:700;">
-            <div style="display:flex; justify-content:space-between; align-items:flex-start; font-size:12px; font-weight:700;">
-              <div style="font-weight:700; color:#000; flex:2.2; padding-right:8px; line-height:1.3;">
+          <div style="margin-bottom:6px; padding-bottom:3px; border-bottom:1px dotted #ccc; font-weight:800;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; font-size:13px; font-weight:800;">
+              <div style="font-weight:800; color:#000; flex:2.2; padding-right:8px; line-height:1.35;">
                 ${codePrefix}${name}
-                ${qtyNum > 1 ? `<div style="font-size:11px; font-weight:600; color:#444; margin-top:1px;">${qtyNum} u. x ${this.formatCurrency(unitPriceVal)}</div>` : ''}
+                ${qtyNum > 1 ? `<div style="font-size:12px; font-weight:800; color:#000; margin-top:1px;">${qtyNum} u. x ${this.formatCurrency(unitPriceVal)}</div>` : ''}
               </div>
-              <div style="flex:1.1; text-align:right; font-weight:700; color:#000; white-space:nowrap;">
+              <div style="flex:1.1; text-align:right; font-weight:900; color:#000; font-size:13.5px; white-space:nowrap;">
                 ${totalStr}
               </div>
             </div>
@@ -18120,144 +18122,144 @@ class NexusApp {
       }
 
       return `
-        <div style="margin-bottom:6px; font-weight:700;">
-          <div style="font-weight:700; font-size:12px; color:#000;">${codePrefix}${name}</div>
-          <div style="display:flex; justify-content:space-between; font-size:11.5px; color:#111; margin-top:1px; font-weight:700;">
-            <span style="flex:1.2; text-align:left; font-weight:700;">${cleanQtyStr}</span>
-            <span style="flex:1.5; text-align:center; font-weight:700;">${cleanPriceStr}</span>
-            <span style="flex:1.3; text-align:right; font-weight:700;">${totalStr}</span>
+        <div style="margin-bottom:6px; font-weight:800;">
+          <div style="font-weight:800; font-size:13px; color:#000;">${codePrefix}${name}</div>
+          <div style="display:flex; justify-content:space-between; font-size:12.5px; color:#000; margin-top:1px; font-weight:800;">
+            <span style="flex:1.2; text-align:left; font-weight:800;">${cleanQtyStr}</span>
+            <span style="flex:1.5; text-align:center; font-weight:800;">${cleanPriceStr}</span>
+            <span style="flex:1.3; text-align:right; font-weight:900; font-size:13.5px;">${totalStr}</span>
           </div>
         </div>
       `;
     }).join('');
 
     return `
-      <div class="thermal-ticket-card" style="max-width:320px; margin:0 auto; font-family:'Courier New', Courier, monospace; font-size:12px; line-height:1.35; color:#000; background:#fff; padding:14px 10px; border-radius:3px; font-weight:700 !important;">
+      <div class="thermal-ticket-card" style="max-width:320px; margin:0 auto; font-family:'Courier New', Courier, monospace; font-size:13.5px; line-height:1.45; color:#000; background:#fff; padding:14px 10px; border-radius:3px; font-weight:800 !important;">
         <!-- CABECERA: MARCA + LEY DE METAL DINÁMICA -->
-        <div style="text-align:center; margin-bottom:4px; font-weight:700;">
+        <div style="text-align:center; margin-bottom:5px; font-weight:800;">
           ${logoHtml ? `<div style="margin-bottom:4px;">${logoHtml}</div>` : ''}
-          <div style="font-size:21px; font-weight:800; font-family:Georgia, serif; letter-spacing:0.4px; color:#000; line-height:1.2;">${storeName}</div>
-          ${metalLey ? `<div style="font-size:13px; font-style:italic; font-family:Georgia, serif; color:#222; margin-top:2px; font-weight:700;">${metalLey}</div>` : ''}
-          <div style="border-bottom:1px dotted #333; margin:6px 0;"></div>
+          <div style="font-size:23px; font-weight:900; font-family:Georgia, serif; letter-spacing:0.4px; color:#000; line-height:1.2;">${storeName}</div>
+          ${metalLey ? `<div style="font-size:14px; font-style:italic; font-family:Georgia, serif; color:#000; margin-top:2px; font-weight:800;">${metalLey}</div>` : ''}
+          <div style="border-bottom:1.5px dotted #111; margin:6px 0;"></div>
         </div>
 
         <!-- DATOS DEL COMERCIO Y UBICACIÓN -->
-        <div style="text-align:center; font-size:11.5px; line-height:1.35; margin-bottom:6px; font-weight:700;">
-          ${legalName ? `<div style="font-weight:700;">${legalName}</div>` : ''}
-          ${address ? `<div style="font-weight:700;">${address}</div>` : ''}
-          ${addressExtra ? `<div style="font-weight:700;">${addressExtra}</div>` : ''}
-          ${phone ? `<div style="font-weight:700;">CEL ${phone}</div>` : ''}
-          ${taxId ? `<div style="font-weight:700;">NIT ${taxId}</div>` : ''}
-          <div style="margin-top:5px; font-weight:700;">${txTitle} #${this.escapeHtml(txId)} - ${dateStr} ${timeStr}</div>
+        <div style="text-align:center; font-size:12.5px; line-height:1.4; margin-bottom:6px; font-weight:800;">
+          ${legalName ? `<div style="font-weight:800;">${legalName}</div>` : ''}
+          ${address ? `<div style="font-weight:800;">${address}</div>` : ''}
+          ${addressExtra ? `<div style="font-weight:800;">${addressExtra}</div>` : ''}
+          ${phone ? `<div style="font-weight:800;">CEL ${phone}</div>` : ''}
+          ${taxId ? `<div style="font-weight:800;">NIT ${taxId}</div>` : ''}
+          <div style="margin-top:5px; font-weight:900;">${txTitle} #${this.escapeHtml(txId)} - ${dateStr} ${timeStr}</div>
         </div>
 
-        <div style="border-bottom:1px solid #111; margin:6px 0;"></div>
+        <div style="border-bottom:1.5px solid #111; margin:6px 0;"></div>
 
         <!-- DATOS TERCERO Y OPERADOR -->
-        <div style="font-size:11.5px; line-height:1.4; margin-bottom:6px; font-weight:700;">
-          <div><b style="font-weight:800;">${partyLabel}:</b> ${this.escapeHtml(partyName || (type === 'compra' ? 'Proveedor' : 'Cliente Mostrador'))}</div>
-          ${partyDocument ? `<div><b style="font-weight:800;">${this.escapeHtml(partyDocType || 'Doc')}:</b> ${this.escapeHtml(partyDocument)}</div>` : ''}
-          ${partyAddress ? `<div><b style="font-weight:800;">Dir:</b> ${this.escapeHtml(partyAddress)}</div>` : ''}
-          ${partyPhone ? `<div><b style="font-weight:800;">Tel:</b> ${this.escapeHtml(partyPhone)}</div>` : ''}
-          <div><b style="font-weight:800;">${agentLabel}:</b> ${this.escapeHtml(agentName || 'Operador')}</div>
+        <div style="font-size:12.5px; line-height:1.45; margin-bottom:6px; font-weight:800;">
+          <div><b style="font-weight:900;">${partyLabel}:</b> ${this.escapeHtml(partyName || (type === 'compra' ? 'Proveedor' : 'Cliente Mostrador'))}</div>
+          ${partyDocument ? `<div><b style="font-weight:900;">${this.escapeHtml(partyDocType || 'Doc')}:</b> ${this.escapeHtml(partyDocument)}</div>` : ''}
+          ${partyAddress ? `<div><b style="font-weight:900;">Dir:</b> ${this.escapeHtml(partyAddress)}</div>` : ''}
+          ${partyPhone ? `<div><b style="font-weight:900;">Tel:</b> ${this.escapeHtml(partyPhone)}</div>` : ''}
+          <div><b style="font-weight:900;">${agentLabel}:</b> ${this.escapeHtml(agentName || 'Operador')}</div>
         </div>
 
-        <div style="border-bottom:1px solid #111; margin:6px 0;"></div>
+        <div style="border-bottom:1.5px solid #111; margin:6px 0;"></div>
 
         <!-- ENCABEZADO DE COLUMNAS -->
         ${isVenta ? `
-        <div style="display:flex; justify-content:space-between; font-weight:800; font-size:11.5px; padding:2px 0;">
-          <span style="flex:2.2; text-align:left; font-weight:800;">Descripción</span>
-          <span style="flex:1.1; text-align:right; font-weight:800;">Valor</span>
+        <div style="display:flex; justify-content:space-between; font-weight:900; font-size:13px; padding:2px 0;">
+          <span style="flex:2.2; text-align:left; font-weight:900;">Descripción</span>
+          <span style="flex:1.1; text-align:right; font-weight:900;">Valor</span>
         </div>
         ` : `
-        <div style="display:flex; justify-content:space-between; font-weight:800; font-size:11.5px; padding:2px 0;">
-          <span style="flex:1.2; text-align:left; font-weight:800;">Cant</span>
-          <span style="flex:1.5; text-align:center; font-weight:800;">$/Unid</span>
-          <span style="flex:1.3; text-align:right; font-weight:800;">Total</span>
+        <div style="display:flex; justify-content:space-between; font-weight:900; font-size:13px; padding:2px 0;">
+          <span style="flex:1.2; text-align:left; font-weight:900;">Cant</span>
+          <span style="flex:1.5; text-align:center; font-weight:900;">$/Unid</span>
+          <span style="flex:1.3; text-align:right; font-weight:900;">Total</span>
         </div>
         `}
 
-        <div style="border-bottom:1px solid #111; margin:3px 0 6px 0;"></div>
+        <div style="border-bottom:1.5px solid #111; margin:3px 0 6px 0;"></div>
 
         <!-- LISTA DE PRODUCTOS -->
-        <div style="margin-bottom:6px; font-weight:700;">
+        <div style="margin-bottom:6px; font-weight:800;">
           ${itemsRowsHtml}
         </div>
 
-        <div style="border-bottom:1px solid #111; margin:6px 0;"></div>
+        <div style="border-bottom:1.5px solid #111; margin:6px 0;"></div>
 
         <!-- TOTALES Y LIQUIDACIÓN -->
-        <div style="font-size:12px; line-height:1.45; font-weight:700;">
+        <div style="font-size:13px; line-height:1.5; font-weight:800;">
           ${tax > 0 ? `
-          <div style="display:flex; justify-content:space-between; font-weight:700;">
-            <span style="font-weight:700;">Subtotal:</span>
-            <span style="font-weight:700;">${this.formatCurrency(subtotal)}</span>
+          <div style="display:flex; justify-content:space-between; font-weight:800;">
+            <span style="font-weight:800;">Subtotal:</span>
+            <span style="font-weight:800;">${this.formatCurrency(subtotal)}</span>
           </div>
-          <div style="display:flex; justify-content:space-between; font-weight:700;">
-            <span style="font-weight:700;">IVA (${store.taxRate || 0}%):</span>
-            <span style="font-weight:700;">${this.formatCurrency(tax)}</span>
+          <div style="display:flex; justify-content:space-between; font-weight:800;">
+            <span style="font-weight:800;">IVA (${store.taxRate || 0}%):</span>
+            <span style="font-weight:800;">${this.formatCurrency(tax)}</span>
           </div>` : ''}
-          <div style="display:flex; justify-content:space-between; font-weight:800; font-size:13.5px; margin:2px 0;">
-            <span style="font-weight:800;">TOTAL:</span>
-            <span style="font-weight:800;">${this.formatCurrency(total)}</span>
+          <div style="display:flex; justify-content:space-between; font-weight:900; font-size:16px; margin:3px 0;">
+            <span style="font-weight:900;">TOTAL:</span>
+            <span style="font-weight:900;">${this.formatCurrency(total)}</span>
           </div>
-          <div style="display:flex; justify-content:space-between; font-weight:700;">
-            <span style="font-weight:700;">Pagado:</span>
-            <span style="font-weight:700;">${this.formatCurrency(paidAmount)}</span>
+          <div style="display:flex; justify-content:space-between; font-weight:800;">
+            <span style="font-weight:800;">Pagado:</span>
+            <span style="font-weight:800;">${this.formatCurrency(paidAmount)}</span>
           </div>
           ${type === 'compra' && paidAmount < total ? `
-          <div style="display:flex; justify-content:space-between; font-weight:800; color:#b91c1c;">
-            <span style="font-weight:800;">Saldo Pendiente:</span>
-            <span style="font-weight:800;">${this.formatCurrency(total - paidAmount)}</span>
+          <div style="display:flex; justify-content:space-between; font-weight:900; color:#b91c1c;">
+            <span style="font-weight:900;">Saldo Pendiente:</span>
+            <span style="font-weight:900;">${this.formatCurrency(total - paidAmount)}</span>
           </div>` : ''}
           ${changeAmount > 0 ? `
-          <div style="display:flex; justify-content:space-between; font-weight:700;">
-            <span style="font-weight:700;">Cambio:</span>
-            <span style="font-weight:700;">${this.formatCurrency(changeAmount)}</span>
+          <div style="display:flex; justify-content:space-between; font-weight:800;">
+            <span style="font-weight:800;">Cambio:</span>
+            <span style="font-weight:800;">${this.formatCurrency(changeAmount)}</span>
           </div>` : ''}
-          <div style="display:flex; justify-content:space-between; font-weight:700;">
-            <span style="font-weight:700;">Forma pago:</span>
-            <span style="font-weight:700;">${this.escapeHtml((paymentMethod || '').toLowerCase().includes('mixto') ? 'Pago Mixto' : ((paymentMethod || '').toLowerCase().includes('tarjeta') ? 'Tarjeta' : paymentMethod))}</span>
+          <div style="display:flex; justify-content:space-between; font-weight:800;">
+            <span style="font-weight:800;">Forma pago:</span>
+            <span style="font-weight:800;">${this.escapeHtml((paymentMethod || '').toLowerCase().includes('mixto') ? 'Pago Mixto' : ((paymentMethod || '').toLowerCase().includes('tarjeta') ? 'Tarjeta' : paymentMethod))}</span>
           </div>
           ${options.paymentBreakdown ? `
-          <div style="margin:4px 0; padding:4px 0; border-top:1px dashed #999; border-bottom:1px dashed #999; font-size:11px;">
-            <div style="font-weight:800; margin-bottom:2px;">Detalle de Pago Mixto:</div>
+          <div style="margin:4px 0; padding:4px 0; border-top:1px dashed #777; border-bottom:1px dashed #777; font-size:12.5px; font-weight:800;">
+            <div style="font-weight:900; margin-bottom:2px;">Detalle de Pago Mixto:</div>
             ${options.paymentBreakdown.cash > 0 ? `<div style="display:flex; justify-content:space-between;"><span>💵 Efectivo:</span><span>${this.formatCurrency(options.paymentBreakdown.cash)}</span></div>` : ''}
-            ${options.paymentBreakdown.card > 0 ? `<div style="display:flex; justify-content:space-between;"><span>💳 Tarjeta:</span><span>${this.formatCurrency(options.paymentBreakdown.card)}</span></div>${options.paymentBreakdown.cardAccount ? `<div style="font-size:10px; color:#444; padding-left:12px;">Cta: ${this.escapeHtml(options.paymentBreakdown.cardAccount)}</div>` : ''}${options.paymentBreakdown.cardVoucher ? `<div style="font-size:10px; color:#444; padding-left:12px;">Voucher: #${this.escapeHtml(options.paymentBreakdown.cardVoucher)}</div>` : ''}` : ''}
-            ${options.paymentBreakdown.transfer > 0 ? `<div style="display:flex; justify-content:space-between;"><span>🏦 Transferencia:</span><span>${this.formatCurrency(options.paymentBreakdown.transfer)}</span></div>${options.paymentBreakdown.transferAccount ? `<div style="font-size:10px; color:#444; padding-left:12px;">Cta: ${this.escapeHtml(options.paymentBreakdown.transferAccount)}</div>` : ''}${options.paymentBreakdown.transferVoucher ? `<div style="font-size:10px; color:#444; padding-left:12px;">Comp: #${this.escapeHtml(options.paymentBreakdown.transferVoucher)}</div>` : ''}` : ''}
+            ${options.paymentBreakdown.card > 0 ? `<div style="display:flex; justify-content:space-between;"><span>💳 Tarjeta:</span><span>${this.formatCurrency(options.paymentBreakdown.card)}</span></div>${options.paymentBreakdown.cardAccount ? `<div style="font-size:11px; color:#000; padding-left:12px; font-weight:800;">Cta: ${this.escapeHtml(options.paymentBreakdown.cardAccount)}</div>` : ''}${options.paymentBreakdown.cardVoucher ? `<div style="font-size:11px; color:#000; padding-left:12px; font-weight:800;">Voucher: #${this.escapeHtml(options.paymentBreakdown.cardVoucher)}</div>` : ''}` : ''}
+            ${options.paymentBreakdown.transfer > 0 ? `<div style="display:flex; justify-content:space-between;"><span>🏦 Transferencia:</span><span>${this.formatCurrency(options.paymentBreakdown.transfer)}</span></div>${options.paymentBreakdown.transferAccount ? `<div style="font-size:11px; color:#000; padding-left:12px; font-weight:800;">Cta: ${this.escapeHtml(options.paymentBreakdown.transferAccount)}</div>` : ''}${options.paymentBreakdown.transferVoucher ? `<div style="font-size:11px; color:#000; padding-left:12px; font-weight:800;">Comp: #${this.escapeHtml(options.paymentBreakdown.transferVoucher)}</div>` : ''}` : ''}
           </div>
           ` : ''}
           ${options.voucher && !options.paymentBreakdown ? `
-          <div style="display:flex; justify-content:space-between; font-weight:700;">
-            <span style="font-weight:700;">Voucher / Aut.:</span>
-            <span style="font-weight:700;">#${this.escapeHtml(options.voucher)}</span>
+          <div style="display:flex; justify-content:space-between; font-weight:800;">
+            <span style="font-weight:800;">Voucher / Aut.:</span>
+            <span style="font-weight:800;">#${this.escapeHtml(options.voucher)}</span>
           </div>` : ''}
           ${type === 'compra' ? `
-          <div style="display:flex; justify-content:space-between; font-weight:800; margin-top:2px;">
-            <span style="font-weight:800;">Estado orden:</span>
-            <span style="color:${paidAmount >= total ? '#065f46' : '#b91c1c'}; font-weight:800;">${paidAmount >= total ? 'PAGADO TOTAL' : 'PENDIENTE DE PAGO'}</span>
+          <div style="display:flex; justify-content:space-between; font-weight:900; margin-top:2px;">
+            <span style="font-weight:900;">Estado orden:</span>
+            <span style="color:${paidAmount >= total ? '#065f46' : '#b91c1c'}; font-weight:900;">${paidAmount >= total ? 'PAGADO TOTAL' : 'PENDIENTE DE PAGO'}</span>
           </div>` : ''}
           ${separeAbono > 0 ? `
-          <div style="display:flex; justify-content:space-between; margin-top:2px; font-weight:700;">
-            <span style="font-weight:700;">Abono Separe:</span>
-            <span style="font-weight:700;">${this.formatCurrency(separeAbono)}</span>
+          <div style="display:flex; justify-content:space-between; margin-top:2px; font-weight:800;">
+            <span style="font-weight:800;">Abono Separe:</span>
+            <span style="font-weight:800;">${this.formatCurrency(separeAbono)}</span>
           </div>
-          <div style="display:flex; justify-content:space-between; font-weight:800; color:#5b21b6;">
-            <span style="font-weight:800;">Saldo Separe:</span>
-            <span style="font-weight:800;">${this.formatCurrency(separePending)}</span>
+          <div style="display:flex; justify-content:space-between; font-weight:900; color:#5b21b6;">
+            <span style="font-weight:900;">Saldo Separe:</span>
+            <span style="font-weight:900;">${this.formatCurrency(separePending)}</span>
           </div>` : ''}
           ${customerCreditBalance !== null && customerCreditBalance !== undefined && paymentMethod === 'Crédito' ? `
-          <div style="display:flex; justify-content:space-between; font-weight:800; color:#92400e; margin-top:2px;">
-            <span style="font-weight:800;">Saldo Deuda Cliente:</span>
-            <span style="font-weight:800;">${this.formatCurrency(customerCreditBalance)}</span>
+          <div style="display:flex; justify-content:space-between; font-weight:900; color:#92400e; margin-top:2px;">
+            <span style="font-weight:900;">Saldo Deuda Cliente:</span>
+            <span style="font-weight:900;">${this.formatCurrency(customerCreditBalance)}</span>
           </div>` : ''}
         </div>
 
-        <div style="border-bottom:1px solid #111; margin:8px 0 6px 0;"></div>
+        <div style="border-bottom:1.5px solid #111; margin:8px 0 6px 0;"></div>
 
         <!-- PIE DE RECIBO -->
-        <div style="text-align:center; font-weight:800; font-size:11.5px; margin-top:4px; letter-spacing:0.3px;">
+        <div style="text-align:center; font-weight:900; font-size:13px; margin-top:4px; letter-spacing:0.3px;">
           ${footerLabel}
         </div>
       </div>
