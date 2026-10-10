@@ -150,7 +150,9 @@ class NexusApp {
   }
 
   setupThousandMask(input, allowDecimals = false, onUpdate = null) {
-    if (!input || input.dataset.hasThousandMask) return;
+    if (!input) return;
+    if (onUpdate) input._onThousandMaskUpdate = onUpdate;
+    if (input.dataset.hasThousandMask) return;
     input.dataset.hasThousandMask = 'true';
 
     if (input.value) {
@@ -183,7 +185,9 @@ class NexusApp {
         input.setSelectionRange(newCursorPos, newCursorPos);
       } catch (_) {}
 
-      if (typeof onUpdate === 'function') {
+      if (typeof input._onThousandMaskUpdate === 'function') {
+        input._onThousandMaskUpdate(this.parseCleanNumber(input.value));
+      } else if (typeof onUpdate === 'function') {
         onUpdate(this.parseCleanNumber(input.value));
       }
     };
@@ -238,12 +242,25 @@ class NexusApp {
       'edit-ast-val',
       'input-rate-oro18k',
       'input-rate-oro14k',
-      'input-rate-plata925'
+      'input-rate-plata925',
+      'mixed-cash-amount',
+      'mixed-card-amount',
+      'mixed-transfer-amount',
+      'abono-mixed-cash',
+      'abono-mixed-electronic'
     ];
 
     integerInputs.forEach(id => {
       const el = document.getElementById(id);
-      if (el) this.setupThousandMask(el, false);
+      if (el) {
+        let callback = null;
+        if (id.startsWith('mixed-')) {
+          callback = () => this.updateMixedPaymentCalc();
+        } else if (id.startsWith('abono-mixed-')) {
+          callback = () => this.updateAbonoMixedCalc();
+        }
+        this.setupThousandMask(el, false, callback);
+      }
     });
 
     const decimalInputs = [
@@ -5611,8 +5628,11 @@ class NexusApp {
     if (methodSelect) {
       methodSelect.onchange = () => this.updateAbonoCashPreview();
     }
-
     this.updateAbonoCashPreview();
+    ['abono-mixed-cash', 'abono-mixed-electronic'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) this.setupThousandMask(el, false, () => this.updateAbonoMixedCalc());
+    });
     this.openModal('abono-modal');
   }
 
@@ -8999,12 +9019,41 @@ class NexusApp {
       const tot = Number(tx.total) || 0;
       totalFacturado += Math.abs(tot);
 
-      const method = tx.paymentMethod || 'Efectivo';
-      if (!methodsMap[method]) {
-        methodsMap[method] = { count: 0, total: 0 };
+      const rawMethod = tx.paymentMethod || 'Efectivo';
+      let methodDisplay = rawMethod;
+      if (tx.paymentBreakdown || rawMethod.toLowerCase().includes('mixto')) {
+        const bd = tx.paymentBreakdown || {};
+        const parts = [];
+        if (bd.cash > 0) parts.push(`Efectivo: ${this.formatCurrency(bd.cash)}`);
+        if (bd.card > 0) parts.push(`Tarjeta: ${this.formatCurrency(bd.card)}${bd.cardAccount ? ` (${bd.cardAccount})` : ''}`);
+        if (bd.transfer > 0) parts.push(`Transferencia: ${this.formatCurrency(bd.transfer)}${bd.transferAccount ? ` (${bd.transferAccount})` : ''}`);
+        methodDisplay = `Pago Mixto [${parts.join(' | ')}]`;
+
+        if (bd.cash > 0) {
+          const k = 'Efectivo (Gaveta)';
+          if (!methodsMap[k]) methodsMap[k] = { count: 0, total: 0 };
+          methodsMap[k].count++;
+          methodsMap[k].total += bd.cash;
+        }
+        if (bd.card > 0) {
+          const k = bd.cardAccount ? `Tarjeta (${bd.cardAccount})` : 'Tarjeta';
+          if (!methodsMap[k]) methodsMap[k] = { count: 0, total: 0 };
+          methodsMap[k].count++;
+          methodsMap[k].total += bd.card;
+        }
+        if (bd.transfer > 0) {
+          const k = bd.transferAccount ? `Transferencia (${bd.transferAccount})` : 'Transferencia';
+          if (!methodsMap[k]) methodsMap[k] = { count: 0, total: 0 };
+          methodsMap[k].count++;
+          methodsMap[k].total += bd.transfer;
+        }
+      } else {
+        if (!methodsMap[rawMethod]) {
+          methodsMap[rawMethod] = { count: 0, total: 0 };
+        }
+        methodsMap[rawMethod].count++;
+        methodsMap[rawMethod].total += Math.abs(tot);
       }
-      methodsMap[method].count++;
-      methodsMap[method].total += Math.abs(tot);
 
       const qtyInfo = this.formatTransactionQty(tx);
 
@@ -9019,7 +9068,7 @@ class NexusApp {
         <Cell ss:StyleID="CellCenter"><Data ss:Type="String">${escapeXml(tx.customerDoc || 'N/A')}</Data></Cell>
         <Cell ss:StyleID="CellLeft"><Data ss:Type="String">${escapeXml(tx.type || 'Venta POS')}</Data></Cell>
         <Cell ss:StyleID="CellLeft"><Data ss:Type="String">${escapeXml(qtyInfo.main || '')}</Data></Cell>
-        <Cell ss:StyleID="CellCenterBold"><Data ss:Type="String">${escapeXml(method)}</Data></Cell>
+        <Cell ss:StyleID="CellCenterBold"><Data ss:Type="String">${escapeXml(methodDisplay)}</Data></Cell>
         <Cell ss:StyleID="CellCenter"><Data ss:Type="String">${escapeXml(tx.voucher || '—')}</Data></Cell>
         <Cell ss:StyleID="CellCurrency"><Data ss:Type="Number">${Math.abs(tot)}</Data></Cell>
         <Cell ss:StyleID="CellCenter"><Data ss:Type="String">${escapeXml(tx.status || 'Completado')}</Data></Cell>
@@ -16696,21 +16745,59 @@ class NexusApp {
     const pmMap = new Map();
     validSalesTx.forEach(t => {
       const rawMethod = (t.paymentMethod || 'Efectivo').trim();
-      let normMethod = rawMethod;
       const lower = rawMethod.toLowerCase();
-      if (lower.includes('efectivo')) normMethod = 'Efectivo (Caja Gaveta)';
-      else if (lower.includes('transferencia') || lower.includes('bancolombia') || lower.includes('nequi') || lower.includes('daviplata')) normMethod = 'Transferencia Bancaria (Bancos)';
-      else if (lower.includes('tarjeta') || lower.includes('debito') || lower.includes('credito') || lower.includes('datafono')) normMethod = 'Tarjetas Débito / Crédito (Datáfono)';
-      else if (lower.includes('separe') || lower.includes('plan separe')) normMethod = 'Plan Separe';
-      else if (lower.includes('credito cliente') || lower.includes('crédito')) normMethod = 'Crédito Directo (Cartera)';
-
       const amt = Number(t.total) || 0;
-      if (!pmMap.has(normMethod)) {
-        pmMap.set(normMethod, { name: normMethod, count: 0, total: 0 });
+
+      if (t.paymentBreakdown || lower.includes('mixto')) {
+        const bd = t.paymentBreakdown || {};
+        const cCash = Math.round(Number(bd.cash) || 0);
+        const cCard = Math.round(Number(bd.card) || 0);
+        const cTrans = Math.round(Number(bd.transfer) || 0);
+
+        if (cCash > 0) {
+          const key = 'Efectivo (Caja Gaveta)';
+          if (!pmMap.has(key)) pmMap.set(key, { name: key, count: 0, total: 0 });
+          const entry = pmMap.get(key);
+          entry.count += 1;
+          entry.total += cCash;
+        }
+        if (cCard > 0) {
+          const key = 'Tarjetas Débito / Crédito (Datáfono)';
+          if (!pmMap.has(key)) pmMap.set(key, { name: key, count: 0, total: 0 });
+          const entry = pmMap.get(key);
+          entry.count += 1;
+          entry.total += cCard;
+        }
+        if (cTrans > 0) {
+          const key = 'Transferencia Bancaria (Bancos)';
+          if (!pmMap.has(key)) pmMap.set(key, { name: key, count: 0, total: 0 });
+          const entry = pmMap.get(key);
+          entry.count += 1;
+          entry.total += cTrans;
+        }
+        const rem = Math.max(0, amt - (cCash + cCard + cTrans));
+        if (rem > 0) {
+          const key = 'Otros Canales';
+          if (!pmMap.has(key)) pmMap.set(key, { name: key, count: 0, total: 0 });
+          const entry = pmMap.get(key);
+          entry.count += 1;
+          entry.total += rem;
+        }
+      } else {
+        let normMethod = rawMethod;
+        if (lower.includes('efectivo')) normMethod = 'Efectivo (Caja Gaveta)';
+        else if (lower.includes('transferencia') || lower.includes('bancolombia') || lower.includes('nequi') || lower.includes('daviplata')) normMethod = 'Transferencia Bancaria (Bancos)';
+        else if (lower.includes('tarjeta') || lower.includes('debito') || lower.includes('credito') || lower.includes('datafono')) normMethod = 'Tarjetas Débito / Crédito (Datáfono)';
+        else if (lower.includes('separe') || lower.includes('plan separe')) normMethod = 'Plan Separe';
+        else if (lower.includes('credito cliente') || lower.includes('crédito')) normMethod = 'Crédito Directo (Cartera)';
+
+        if (!pmMap.has(normMethod)) {
+          pmMap.set(normMethod, { name: normMethod, count: 0, total: 0 });
+        }
+        const entry = pmMap.get(normMethod);
+        entry.count += 1;
+        entry.total += amt;
       }
-      const entry = pmMap.get(normMethod);
-      entry.count += 1;
-      entry.total += amt;
     });
 
     const paymentMethodsSummary = Array.from(pmMap.values()).sort((a, b) => b.total - a.total);
@@ -24579,6 +24666,10 @@ class NexusApp {
       if (this.selectedPayMethod === 'mixed') {
         this.populateMixedCardAccountSelect();
         this.populateMixedTransferAccountSelect();
+        ['mixed-cash-amount', 'mixed-card-amount', 'mixed-transfer-amount'].forEach(id => {
+          const el = document.getElementById(id);
+          if (el) this.setupThousandMask(el, false, () => this.updateMixedPaymentCalc());
+        });
         this.updateMixedPaymentCalc();
       }
     }
