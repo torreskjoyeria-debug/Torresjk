@@ -376,7 +376,7 @@ app.post('/api/data', async (req, res) => {
 });
 
 if (!process.env.VERCEL && require.main === module) {
-  app.listen(PORT, () => {
+  app.listen(PORT, '0.0.0.0', () => {
     console.log(`[Nexus Server - Torres Joyería] Servidor corriendo en http://localhost:${PORT}`);
     console.log(`[Nexus Server - Torres Joyería] Base de datos asignada: torreskjoyeria_pos`);
   });

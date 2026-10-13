@@ -155,6 +155,8 @@ body {
   -webkit-font-smoothing: antialiased;
   display: flex;
   height: 100vh;
+  height: 100dvh;
+  min-height: -webkit-fill-available;
   overflow: hidden;
 }
 
@@ -2150,8 +2152,14 @@ select.form-control, select.form-select {
   position: fixed;
   top: 0;
   left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
   width: 100vw;
+  height: 100%;
   height: 100vh;
+  height: 100dvh;
+  min-height: -webkit-fill-available;
   z-index: 99999;
   background: radial-gradient(circle at 15% 20%, rgba(99, 102, 241, 0.18) 0%, transparent 45%),
               radial-gradient(circle at 85% 80%, rgba(16, 185, 129, 0.15) 0%, transparent 45%),
@@ -2161,9 +2169,14 @@ select.form-control, select.form-select {
   align-items: center;
   justify-content: center;
   padding: 1.5rem;
+  padding-top: max(1.5rem, env(safe-area-inset-top));
+  padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
+  padding-left: max(1rem, env(safe-area-inset-left));
+  padding-right: max(1rem, env(safe-area-inset-right));
   opacity: 0;
   transition: opacity 0.35s cubic-bezier(0.4, 0, 0.2, 1);
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .login-screen.active {
@@ -2200,14 +2213,34 @@ body.not-authenticated #app {
 }
 
 @media (max-width: 860px) {
+  .login-screen {
+    align-items: flex-start !important;
+    padding: 1rem 0.75rem !important;
+    padding-top: max(1.25rem, env(safe-area-inset-top)) !important;
+    padding-bottom: max(1.5rem, env(safe-area-inset-bottom)) !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
   .login-container {
     grid-template-columns: 1fr !important;
-    max-width: 460px !important;
+    max-width: 440px !important;
+    width: 100% !important;
     border-radius: 20px !important;
-    max-height: 98vh !important;
+    max-height: none !important;
+    margin: auto 0 !important;
   }
   .login-hero {
     display: none !important;
+  }
+  .login-form-pane {
+    padding: 1.75rem 1.25rem !important;
+    overflow-y: visible !important;
+  }
+  .login-input {
+    font-size: 16px !important; /* Prevents auto-zoom in iOS Safari */
+  }
+  .btn-login-submit {
+    min-height: 48px !important;
+    font-size: 16px !important;
   }
 }
 

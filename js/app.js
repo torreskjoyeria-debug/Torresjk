@@ -1,4 +1,62 @@
 // Nexus POS SaaS Application Engine (Complete Interactive & Persistent Engine)
+// Bulletproof Storage System for Apple Devices (iOS Safari, iPadOS, macOS, Private Browsing, WebViews)
+const SafeStorage = (function() {
+  let storageWorks = false;
+  try {
+    const test = '__nexus_test_key__';
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.SafeStorage.setItem(test, '1');
+      window.SafeStorage.removeItem(test);
+      storageWorks = true;
+    }
+  } catch (e) {
+    storageWorks = false;
+  }
+
+  const memoryStore = new Map();
+
+  return {
+    getItem(key) {
+      if (storageWorks) {
+        try {
+          return window.SafeStorage.getItem(key);
+        } catch (_) {}
+      }
+      return memoryStore.has(key) ? memoryStore.get(key) : null;
+    },
+    setItem(key, value) {
+      const valStr = String(value);
+      if (storageWorks) {
+        try {
+          window.SafeStorage.setItem(key, valStr);
+          return;
+        } catch (_) {}
+      }
+      memoryStore.set(key, valStr);
+    },
+    removeItem(key) {
+      if (storageWorks) {
+        try {
+          window.SafeStorage.removeItem(key);
+          return;
+        } catch (_) {}
+      }
+      memoryStore.delete(key);
+    },
+    clear() {
+      if (storageWorks) {
+        try {
+          window.SafeStorage.clear();
+          return;
+        } catch (_) {}
+      }
+      memoryStore.clear();
+    }
+  };
+})();
+if (typeof window !== 'undefined') {
+  window.SafeStorage = SafeStorage;
+}
 
 class NexusApp {
   constructor() {
@@ -13,7 +71,7 @@ class NexusApp {
     this.currentTheme = 'light';
     this.currentRadarFilter = 'todos';
     this.radarSearchTerm = '';
-    this.currentStoreId = localStorage.getItem('nexus_pos_active_store') || 'store_1';
+    this.currentStoreId = SafeStorage.getItem('nexus_pos_active_store') || 'store_1';
     this.storesList = [
       { id: 'store_1', name: 'Sede Principal', code: 'SP', address: 'Avenida Principal # 10 - 20, Local 101', phone: '300 123 4567', email: 'principal@nexuspos.io', color: '#0284c7' },
       { id: 'store_2', name: 'Sede Centro', code: 'SC', address: 'Calle 48 # 50 - 15, Local 102 (C.C. Centro Joyero)', phone: '310 987 6543', email: 'centro@nexuspos.io', color: '#0d9488' }
@@ -351,10 +409,10 @@ class NexusApp {
         this.checkTheme();
         await this.loadStoresList();
         try {
-          const authUser = JSON.parse(localStorage.getItem('nexus_pos_user') || 'null');
+          const authUser = JSON.parse(SafeStorage.getItem('nexus_pos_user') || 'null');
           if (authUser && authUser.storeId && authUser.storeId !== '*' && authUser.role !== 'Super Admin') {
             this.currentStoreId = authUser.storeId;
-            localStorage.setItem('nexus_pos_active_store', authUser.storeId);
+            SafeStorage.setItem('nexus_pos_active_store', authUser.storeId);
           }
         } catch (_) {}
         await this.loadPersistence();
@@ -453,7 +511,7 @@ class NexusApp {
       const me = this.data.users.find(u => u.email?.toLowerCase() === this.currentUser.email?.toLowerCase());
       if (me && this.currentUser.id !== me.id) {
         this.currentUser.id = me.id;
-        try { localStorage.setItem('nexus_pos_user', JSON.stringify(this.currentUser)); } catch (e) {}
+        try { SafeStorage.setItem('nexus_pos_user', JSON.stringify(this.currentUser)); } catch (e) {}
       }
     }
   }
@@ -662,9 +720,9 @@ class NexusApp {
     let localData = null;
     const storeKey = 'nexus_pos_data_' + this.currentStoreId;
     try {
-      let local = localStorage.getItem(storeKey);
+      let local = SafeStorage.getItem(storeKey);
       if (!local && this.currentStoreId === 'store_1') {
-        local = localStorage.getItem('nexus_pos_data');
+        local = SafeStorage.getItem('nexus_pos_data');
       }
       if (local) {
         localData = JSON.parse(local);
@@ -695,7 +753,7 @@ class NexusApp {
             this.data.balanceSheet = Object.assign({}, INITIAL_DATA.balanceSheet, localData.balanceSheet || {});
             this.data.stockRadarData = Object.assign({}, INITIAL_DATA.stockRadarData, localData.stockRadarData || {});
             this.sanitizeLoadedData();
-            try { localStorage.setItem(storeKey, JSON.stringify(this.data)); } catch(_) {}
+            try { SafeStorage.setItem(storeKey, JSON.stringify(this.data)); } catch(_) {}
             this.savePersistence();
             return;
           }
@@ -707,7 +765,7 @@ class NexusApp {
           this.data.balanceSheet = Object.assign({}, INITIAL_DATA.balanceSheet, dbData.balanceSheet || {});
           this.data.stockRadarData = Object.assign({}, INITIAL_DATA.stockRadarData, dbData.stockRadarData || {});
           this.sanitizeLoadedData();
-          try { localStorage.setItem(storeKey, JSON.stringify(this.data)); } catch(_) {}
+          try { SafeStorage.setItem(storeKey, JSON.stringify(this.data)); } catch(_) {}
           console.log(`[NexusApp] Persistencia cargada exitosamente para ${this.currentStoreId} desde Backend/MongoDB.`);
           return;
         }
@@ -967,9 +1025,9 @@ class NexusApp {
 
     const storeKey = 'nexus_pos_data_' + this.currentStoreId;
     try {
-      localStorage.setItem(storeKey, JSON.stringify(this.data));
+      SafeStorage.setItem(storeKey, JSON.stringify(this.data));
       if (this.currentStoreId === 'store_1') {
-        localStorage.setItem('nexus_pos_data', JSON.stringify(this.data));
+        SafeStorage.setItem('nexus_pos_data', JSON.stringify(this.data));
       }
     } catch(e) {
       console.warn('[NexusApp] Error en LocalStorage save:', e);
@@ -1104,7 +1162,7 @@ class NexusApp {
             this.data = Object.assign({}, INITIAL_DATA, remote);
             this.sanitizeLoadedData();
             try {
-              localStorage.setItem('nexus_pos_data', JSON.stringify(this.data));
+              SafeStorage.setItem('nexus_pos_data', JSON.stringify(this.data));
             } catch (_) {}
 
             // Immediate logout if user account was deactivated by Admin on another terminal
@@ -1118,7 +1176,7 @@ class NexusApp {
               // Refresh user role in current session if updated
               if (myAccount && myAccount.role !== this.currentUser.role) {
                 this.currentUser.role = myAccount.role;
-                localStorage.setItem('nexus_pos_user', JSON.stringify(this.currentUser));
+                SafeStorage.setItem('nexus_pos_user', JSON.stringify(this.currentUser));
                 this.updateUIForRole();
               }
             }
@@ -1136,7 +1194,7 @@ class NexusApp {
      THEME MANAGEMENT ENGINE (LIGHT & DARK MODES)
      -------------------------------------------------------------------------- */
   checkTheme() {
-    const savedTheme = localStorage.getItem('nexus_pos_theme');
+    const savedTheme = SafeStorage.getItem('nexus_pos_theme');
     let theme = savedTheme;
     if (!theme) {
       theme = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
@@ -1147,7 +1205,7 @@ class NexusApp {
   setTheme(theme) {
     this.currentTheme = theme;
     document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('nexus_pos_theme', theme);
+    SafeStorage.setItem('nexus_pos_theme', theme);
 
     const sunIcon = document.getElementById('theme-sun-icon');
     const moonIcon = document.getElementById('theme-moon-icon');
@@ -1315,7 +1373,7 @@ class NexusApp {
   }
 
   checkAuth() {
-    const stored = localStorage.getItem('nexus_pos_user');
+    const stored = SafeStorage.getItem('nexus_pos_user');
     const loginOverlay = document.getElementById('login-screen');
     if (stored) {
       try {
@@ -1336,7 +1394,7 @@ class NexusApp {
         const user = this.data.users.find(u => u.email?.toLowerCase() === parsed.email?.toLowerCase() || u.id === parsed.id);
         if (user) {
           if (user.status !== 'Active') {
-            localStorage.removeItem('nexus_pos_user');
+            SafeStorage.removeItem('nexus_pos_user');
             this.currentUser = null;
             document.body.classList.add('not-authenticated');
             if (loginOverlay) {
@@ -1498,13 +1556,13 @@ class NexusApp {
 
   async loginUser(user) {
     this.currentUser = user;
-    localStorage.setItem('nexus_pos_user', JSON.stringify(user));
+    SafeStorage.setItem('nexus_pos_user', JSON.stringify(user));
     document.body.classList.remove('not-authenticated');
 
     if (user.storeId && user.storeId !== '*' && user.role !== 'Super Admin') {
       if (this.currentStoreId !== user.storeId) {
         this.currentStoreId = user.storeId;
-        localStorage.setItem('nexus_pos_active_store', user.storeId);
+        SafeStorage.setItem('nexus_pos_active_store', user.storeId);
         await this.loadPersistence();
       }
     }
@@ -1545,7 +1603,7 @@ class NexusApp {
 
   logout() {
     this.currentUser = null;
-    localStorage.removeItem('nexus_pos_user');
+    SafeStorage.removeItem('nexus_pos_user');
     document.body.classList.add('not-authenticated');
     const loginOverlay = document.getElementById('login-screen');
     if (loginOverlay) {
@@ -2215,7 +2273,7 @@ class NexusApp {
 
           if (this.currentUser && this.currentUser.id === u.id) {
             this.currentUser = u;
-            localStorage.setItem('nexus_pos_user', JSON.stringify(u));
+            SafeStorage.setItem('nexus_pos_user', JSON.stringify(u));
             this.updateUIForRole();
           }
 
@@ -3842,7 +3900,7 @@ class NexusApp {
 
     this.cart = [];
     this.currentStoreId = storeId;
-    localStorage.setItem('nexus_pos_active_store', storeId);
+    SafeStorage.setItem('nexus_pos_active_store', storeId);
 
     const sel = document.getElementById('active-store-select');
     if (sel) sel.value = storeId;
@@ -5117,7 +5175,7 @@ class NexusApp {
       u.password = newPwd;
     }
     this.currentUser.password = newPwd;
-    localStorage.setItem('nexus_pos_user', JSON.stringify(this.currentUser));
+    SafeStorage.setItem('nexus_pos_user', JSON.stringify(this.currentUser));
 
     await this.savePersistence();
 
@@ -5167,7 +5225,7 @@ class NexusApp {
       u.password = newPwd;
     }
     this.currentUser.password = newPwd;
-    localStorage.setItem('nexus_pos_user', JSON.stringify(this.currentUser));
+    SafeStorage.setItem('nexus_pos_user', JSON.stringify(this.currentUser));
 
     await this.savePersistence();
 
@@ -5298,7 +5356,7 @@ class NexusApp {
     // If super admin edited their own password, keep session in sync
     if (this.currentUser && (this.currentUser.id === u.id || (this.currentUser.email && this.currentUser.email.toLowerCase() === u.email?.toLowerCase()))) {
       this.currentUser.password = newPwd;
-      localStorage.setItem('nexus_pos_user', JSON.stringify(this.currentUser));
+      SafeStorage.setItem('nexus_pos_user', JSON.stringify(this.currentUser));
     }
 
     await this.savePersistence();
@@ -25464,3 +25522,21 @@ const app = new NexusApp();
 window.app = app;
 window.switchSubView = (a, b) => app.switchSubView(a, b);
 window.switchView = (a) => app.switchView(a);
+
+// Global Mobile Safari / iOS Error Shield
+if (typeof window !== 'undefined') {
+  window.addEventListener('error', function(e) {
+    console.warn('[Nexus POS Mobile Shield] Error interceptado:', e.message || e);
+    try {
+      const loginOverlay = document.getElementById('login-screen');
+      const isAuth = document.body && !document.body.classList.contains('not-authenticated');
+      if (!isAuth && loginOverlay && loginOverlay.style.display === 'none') {
+        loginOverlay.style.display = 'flex';
+        loginOverlay.classList.add('active');
+      }
+    } catch (_) {}
+  });
+  window.addEventListener('unhandledrejection', function(e) {
+    console.warn('[Nexus POS Mobile Shield] Unhandled rejection:', e.reason);
+  });
+}
