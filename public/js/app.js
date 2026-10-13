@@ -598,6 +598,9 @@ class NexusApp {
       this.data.customerCredits = [];
     }
     if (!this.data.store) this.data.store = {};
+    if (this.data.store.cardFeePercentage === undefined || this.data.store.cardFeePercentage === null) {
+      this.data.store.cardFeePercentage = 0;
+    }
     if (!this.data.store.metalRates) {
       this.data.store.metalRates = {
         oro18k: 580000,
@@ -2719,6 +2722,10 @@ class NexusApp {
           pm.name = document.getElementById('edit-pm-name').value;
           const feeVal = document.getElementById('edit-pm-fee').value;
           pm.fee = feeVal.includes('%') ? feeVal : `${feeVal}%`;
+          if ((pm.name || '').toLowerCase().includes('tarjeta')) {
+            const parsedRate = parseFloat(feeVal) || 0;
+            this.data.store.cardFeePercentage = parsedRate;
+          }
 
           await this.savePersistence();
           this.renderPaymentMethodsTable();
@@ -3680,6 +3687,7 @@ class NexusApp {
       if (document.getElementById('config-legal-input')) document.getElementById('config-legal-input').value = this.data.store.legalName || this.data.store.name || '';
       if (document.getElementById('config-nif-input')) document.getElementById('config-nif-input').value = this.data.store.taxId || '';
       if (document.getElementById('config-tax-input')) document.getElementById('config-tax-input').value = this.data.store.taxRate !== undefined ? this.data.store.taxRate : 0;
+      if (document.getElementById('config-card-fee-input')) document.getElementById('config-card-fee-input').value = this.data.store.cardFeePercentage !== undefined ? this.data.store.cardFeePercentage : 0;
       if (document.getElementById('config-currency-input')) document.getElementById('config-currency-input').value = this.data.store.currency || '$';
       if (document.getElementById('config-phone-input')) document.getElementById('config-phone-input').value = this.data.store.phone || '';
       if (document.getElementById('config-address-input')) document.getElementById('config-address-input').value = this.data.store.address || '';
@@ -3696,6 +3704,9 @@ class NexusApp {
         this.data.store.legalName = document.getElementById('config-legal-input')?.value.trim() || this.data.store.name;
         this.data.store.taxId = document.getElementById('config-nif-input')?.value.trim() || this.data.store.taxId;
         this.data.store.taxRate = parseFloat(document.getElementById('config-tax-input')?.value || 0);
+        this.data.store.cardFeePercentage = parseFloat(document.getElementById('config-card-fee-input')?.value || 0) || 0;
+        const cardPm = (this.data.paymentMethods || []).find(pm => (pm.name || '').toLowerCase().includes('tarjeta'));
+        if (cardPm) cardPm.fee = `${this.data.store.cardFeePercentage}%`;
         this.data.store.currency = document.getElementById('config-currency-input')?.value.trim() || '$';
         this.data.store.phone = document.getElementById('config-phone-input')?.value.trim() || this.data.store.phone;
         this.data.store.address = document.getElementById('config-address-input')?.value.trim() || this.data.store.address;
@@ -3857,6 +3868,8 @@ class NexusApp {
       document.getElementById('config-phone-input').value = this.data.store?.phone || '';
       document.getElementById('config-legal-input').value = this.data.store?.legalName || '';
       document.getElementById('config-nif-input').value = this.data.store?.taxId || '';
+      if (document.getElementById('config-tax-input')) document.getElementById('config-tax-input').value = this.data.store?.taxRate !== undefined ? this.data.store.taxRate : 0;
+      if (document.getElementById('config-card-fee-input')) document.getElementById('config-card-fee-input').value = this.data.store?.cardFeePercentage !== undefined ? this.data.store.cardFeePercentage : 0;
     }
 
     this.showToast(`🏬 Sede activa cambiada a: ${targetStore.name}`, 'info');
@@ -8489,11 +8502,16 @@ class NexusApp {
       const actions = `${editBtn}${deleteBtn}`;
       const actionHtml = actions ? `<div class="action-btn-group">${actions}</div>` : `<span class="badge badge-inactive" style="font-size:0.75rem;">Solo Lectura</span>`;
 
+      let feeDisplay = pm.fee;
+      if ((pm.name || '').toLowerCase().includes('tarjeta') && this.data.store?.cardFeePercentage !== undefined) {
+        feeDisplay = `${this.data.store.cardFeePercentage}%`;
+      }
+
       return `
         <tr>
           <td><b>${this.escapeHtml(pm.id)}</b></td>
           <td><span class="font-bold">${this.escapeHtml(pm.name)}</span></td>
-          <td>${this.escapeHtml(pm.fee)}</td>
+          <td>${this.escapeHtml(feeDisplay)}</td>
           <td><span class="badge badge-active"><span class="badge-dot"></span>Habilitado</span></td>
           <td>${actionHtml}</td>
         </tr>
@@ -18048,6 +18066,8 @@ class NexusApp {
       items = [],
       subtotal = 0,
       tax = 0,
+      cardFeeRate = 0,
+      cardFeeAmount = 0,
       total = 0,
       paidAmount = 0,
       changeAmount = 0,
@@ -18200,6 +18220,11 @@ class NexusApp {
             <span style="font-weight:800;">IVA (${store.taxRate || 0}%):</span>
             <span style="font-weight:800;">${this.formatCurrency(tax)}</span>
           </div>` : ''}
+          ${cardFeeAmount > 0 ? `
+          <div style="display:flex; justify-content:space-between; font-weight:800; color:#000;">
+            <span style="font-weight:800;">Recargo Tarjeta (${cardFeeRate || store.cardFeePercentage || 0}%):</span>
+            <span style="font-weight:800;">+${this.formatCurrency(cardFeeAmount)}</span>
+          </div>` : ''}
           <div style="display:flex; justify-content:space-between; font-weight:900; font-size:16px; margin:3px 0;">
             <span style="font-weight:900;">TOTAL:</span>
             <span style="font-weight:900;">${this.formatCurrency(total)}</span>
@@ -18348,6 +18373,8 @@ class NexusApp {
       items: ticketItems,
       subtotal: tx.subtotal || Math.abs(tx.total),
       tax: tx.tax || 0,
+      cardFeeRate: tx.cardFeeRate || 0,
+      cardFeeAmount: tx.cardFeeAmount || 0,
       total: Math.abs(tx.total),
       paidAmount: Math.abs(tx.total),
       changeAmount: 0,
@@ -24348,6 +24375,91 @@ class NexusApp {
     }
   }
 
+  getCheckoutTotals(payMethod = this.selectedPayMethod) {
+    const subtotal = Math.round(this.getCartSubtotal());
+    const taxRate = Number(this.data.store?.taxRate) || 0;
+    const tax = Math.round(subtotal * (taxRate / 100));
+    const baseTotal = subtotal + tax;
+
+    const cardFeeRate = Number(this.data.store?.cardFeePercentage) || 0;
+    let cardFeeAmount = 0;
+
+    if (payMethod === 'card' && cardFeeRate > 0) {
+      cardFeeAmount = Math.round(baseTotal * (cardFeeRate / 100));
+    } else if (payMethod === 'mixed' && cardFeeRate > 0) {
+      const cardVal = this.parseCleanNumber(document.getElementById('mixed-card-amount')?.value) || 0;
+      if (cardVal > 0) {
+        cardFeeAmount = Math.round(cardVal * (cardFeeRate / 100));
+      }
+    }
+
+    const grandTotal = baseTotal + cardFeeAmount;
+
+    return {
+      subtotal,
+      taxRate,
+      tax,
+      baseTotal,
+      cardFeeRate,
+      cardFeeAmount,
+      grandTotal
+    };
+  }
+
+  updateCheckoutTotalDisplay() {
+    const totals = this.getCheckoutTotals();
+    const totalEl = document.getElementById('modal-checkout-total');
+    const feeBreakdownEl = document.getElementById('checkout-card-fee-breakdown');
+    const cardBadge = document.getElementById('card-fee-badge');
+    const cardNoticeBanner = document.getElementById('card-fee-notice-banner');
+
+    if (totalEl) totalEl.innerText = this.formatCurrency(totals.grandTotal);
+
+    if (feeBreakdownEl) {
+      if (totals.cardFeeAmount > 0) {
+        feeBreakdownEl.style.display = 'block';
+        feeBreakdownEl.innerHTML = `
+          <div style="display:flex; justify-content:center; align-items:center; gap:8px; font-size:0.82rem; color:var(--text-muted); margin-top:6px; background:rgba(147,51,234,0.08); padding:4px 10px; border-radius:6px; border:1px dashed rgba(147,51,234,0.3);">
+            <span>Base: <b>${this.formatCurrency(totals.baseTotal)}</b></span>
+            <span>+</span>
+            <span style="color:#7E22CE; font-weight:800;">💳 Recargo Tarjeta (${totals.cardFeeRate}%): +${this.formatCurrency(totals.cardFeeAmount)}</span>
+          </div>
+        `;
+      } else {
+        feeBreakdownEl.style.display = 'none';
+        feeBreakdownEl.innerHTML = '';
+      }
+    }
+
+    if (cardBadge) {
+      if (totals.cardFeeRate > 0) {
+        cardBadge.style.display = 'inline-block';
+        cardBadge.textContent = `+${totals.cardFeeRate}% de recargo`;
+      } else {
+        cardBadge.style.display = 'none';
+      }
+    }
+
+    if (cardNoticeBanner) {
+      if (this.selectedPayMethod === 'card' && totals.cardFeeRate > 0) {
+        cardNoticeBanner.style.display = 'flex';
+        cardNoticeBanner.style.justifyContent = 'space-between';
+        cardNoticeBanner.style.alignItems = 'center';
+        cardNoticeBanner.innerHTML = `
+          <span>💳 Recargo por uso de datáfono (${totals.cardFeeRate}%):</span>
+          <span style="font-size:0.95rem; color:#6B21A8;">+${this.formatCurrency(totals.cardFeeAmount)}</span>
+        `;
+      } else {
+        cardNoticeBanner.style.display = 'none';
+        cardNoticeBanner.innerHTML = '';
+      }
+    }
+
+    if (this.selectedPayMethod === 'cash') {
+      this.updateCashChange();
+    }
+  }
+
   setupCheckout() {
     const openBtn = document.getElementById('open-checkout-btn');
     const closeBtn = document.getElementById('close-checkout-btn');
@@ -24363,10 +24475,9 @@ class NexusApp {
         this.populateCardAccountSelect();
         this.populateTransferAccountSelect();
         this.renderCheckoutSummary();
-        let subtotal = this.getCartSubtotal();
-        let grandTotal = subtotal * (1 + this.data.store.taxRate / 100);
-        document.getElementById('modal-checkout-total').innerText = this.formatCurrency(grandTotal);
-        if (cashInput) cashInput.value = this.formatNumberWithCommas(Math.ceil(grandTotal));
+        this.updateCheckoutTotalDisplay();
+        const totals = this.getCheckoutTotals();
+        if (cashInput) cashInput.value = this.formatNumberWithCommas(Math.ceil(totals.grandTotal));
         this.updateCashChange();
         this.syncCheckoutCustomerPaymentMethods();
         modal.classList.add('open');
@@ -24389,6 +24500,7 @@ class NexusApp {
         btn.classList.add('active');
         this.selectedPayMethod = btn.getAttribute('data-pay-type') || 'cash';
         this.updateCheckoutPaymentPanels();
+        this.updateCheckoutTotalDisplay();
       });
     });
 
@@ -24397,8 +24509,8 @@ class NexusApp {
     const separeInput = document.getElementById('separe-abono-input');
     if (separeInput) {
       separeInput.addEventListener('input', () => {
-        const subtotal = this.getCartSubtotal();
-        const grandTotal = subtotal * (1 + this.data.store.taxRate / 100);
+        const totals = this.getCheckoutTotals('separe');
+        const grandTotal = totals.grandTotal;
         const abono = this.parseCleanNumber(separeInput.value);
         const pending = Math.max(0, grandTotal - abono);
         const pendingEl = document.getElementById('separe-pending-balance');
@@ -24570,8 +24682,9 @@ class NexusApp {
   }
 
   autoFillMixed(type) {
-    const subtotal = this.getCartSubtotal();
-    const grandTotal = Math.round(subtotal * (1 + this.data.store.taxRate / 100));
+    const totals = this.getCheckoutTotals('mixed');
+    const baseTotal = totals.baseTotal;
+    const cardFeeRate = totals.cardFeeRate;
     const cashInp = document.getElementById('mixed-cash-amount');
     const cardInp = document.getElementById('mixed-card-amount');
     const transInp = document.getElementById('mixed-transfer-amount');
@@ -24580,19 +24693,21 @@ class NexusApp {
     const cardVal = type === 'card' ? 0 : (this.parseCleanNumber(cardInp?.value) || 0);
     const transVal = type === 'transfer' ? 0 : (this.parseCleanNumber(transInp?.value) || 0);
 
-    const otherSum = cashVal + cardVal + transVal;
-    const remainder = Math.max(0, grandTotal - otherSum);
+    const remainderBase = Math.max(0, baseTotal - (cashVal + transVal + (cardFeeRate > 0 && type !== 'card' ? Math.round(cardVal / (1 + cardFeeRate / 100)) : cardVal)));
 
-    if (type === 'cash' && cashInp) cashInp.value = this.formatNumberWithCommas(remainder);
-    if (type === 'card' && cardInp) cardInp.value = this.formatNumberWithCommas(remainder);
-    if (type === 'transfer' && transInp) transInp.value = this.formatNumberWithCommas(remainder);
+    if (type === 'cash' && cashInp) cashInp.value = this.formatNumberWithCommas(remainderBase);
+    if (type === 'transfer' && transInp) transInp.value = this.formatNumberWithCommas(remainderBase);
+    if (type === 'card' && cardInp) {
+      const cardWithFee = cardFeeRate > 0 ? Math.round(remainderBase * (1 + cardFeeRate / 100)) : remainderBase;
+      cardInp.value = this.formatNumberWithCommas(cardWithFee);
+    }
 
     this.updateMixedPaymentCalc();
   }
 
   updateMixedPaymentCalc() {
-    const subtotal = this.getCartSubtotal();
-    const grandTotal = Math.round(subtotal * (1 + this.data.store.taxRate / 100));
+    const totals = this.getCheckoutTotals('mixed');
+    const grandTotal = totals.grandTotal;
     const cashVal = this.parseCleanNumber(document.getElementById('mixed-cash-amount')?.value) || 0;
     const cardVal = this.parseCleanNumber(document.getElementById('mixed-card-amount')?.value) || 0;
     const transVal = this.parseCleanNumber(document.getElementById('mixed-transfer-amount')?.value) || 0;
@@ -24603,8 +24718,33 @@ class NexusApp {
     const statusLabel = document.getElementById('mixed-status-label');
     const statusBadge = document.getElementById('mixed-status-badge');
 
-    if (toPayEl) toPayEl.textContent = `Total: ${this.formatCurrency(grandTotal)}`;
+    if (toPayEl) {
+      if (totals.cardFeeAmount > 0) {
+        toPayEl.innerHTML = `<span>Total: ${this.formatCurrency(grandTotal)} <small style="color:#7E22CE; font-weight:700;">(+${this.formatCurrency(totals.cardFeeAmount)} recargo tarjeta)</small></span>`;
+      } else {
+        toPayEl.textContent = `Total: ${this.formatCurrency(grandTotal)}`;
+      }
+    }
     if (coveredEl) coveredEl.textContent = this.formatCurrency(totalCovered);
+
+    const totalEl = document.getElementById('modal-checkout-total');
+    if (totalEl) totalEl.innerText = this.formatCurrency(grandTotal);
+    const feeBreakdownEl = document.getElementById('checkout-card-fee-breakdown');
+    if (feeBreakdownEl) {
+      if (totals.cardFeeAmount > 0) {
+        feeBreakdownEl.style.display = 'block';
+        feeBreakdownEl.innerHTML = `
+          <div style="display:flex; justify-content:center; align-items:center; gap:8px; font-size:0.82rem; color:var(--text-muted); margin-top:6px; background:rgba(147,51,234,0.08); padding:4px 10px; border-radius:6px; border:1px dashed rgba(147,51,234,0.3);">
+            <span>Base: <b>${this.formatCurrency(totals.baseTotal)}</b></span>
+            <span>+</span>
+            <span style="color:#7E22CE; font-weight:800;">💳 Recargo Tarjeta (${totals.cardFeeRate}% sobre tarjeta): +${this.formatCurrency(totals.cardFeeAmount)}</span>
+          </div>
+        `;
+      } else {
+        feeBreakdownEl.style.display = 'none';
+        feeBreakdownEl.innerHTML = '';
+      }
+    }
 
     if (totalCovered < grandTotal) {
       const diff = grandTotal - totalCovered;
@@ -24642,8 +24782,8 @@ class NexusApp {
   }
 
   updateCheckoutPaymentPanels() {
-    const subtotal = this.getCartSubtotal();
-    const grandTotal = subtotal * (1 + this.data.store.taxRate / 100);
+    const totals = this.getCheckoutTotals();
+    const grandTotal = totals.grandTotal;
     const selectedCustomerName = document.getElementById('checkout-customer-select')?.value || 'Cliente Mostrador';
     const cust = this.data.customers.find(c => c.name === selectedCustomerName);
 
@@ -24704,11 +24844,13 @@ class NexusApp {
       const pending = Math.max(0, grandTotal - abono);
       if (pendingEl) pendingEl.innerText = this.formatCurrency(pending);
     }
+
+    this.updateCheckoutTotalDisplay();
   }
 
   updateCashChange() {
-    const subtotal = this.getCartSubtotal();
-    const grandTotal = subtotal * (1 + this.data.store.taxRate / 100);
+    const totals = this.getCheckoutTotals('cash');
+    const grandTotal = totals.grandTotal;
     const cashVal = this.parseCleanNumber(document.getElementById('cash-received-input')?.value);
     const changeDue = Math.max(0, cashVal - grandTotal);
     const changeEl = document.getElementById('cash-change-due');
@@ -24727,9 +24869,12 @@ class NexusApp {
     }
 
     const modal = document.getElementById('checkout-modal');
-    const subtotal = Math.round(this.getCartSubtotal());
-    const tax = Math.round(subtotal * (this.data.store.taxRate / 100));
-    const grandTotal = Math.round(subtotal + tax);
+    const totals = this.getCheckoutTotals();
+    const subtotal = totals.subtotal;
+    const tax = totals.tax;
+    const grandTotal = totals.grandTotal;
+    const cardFeeAmount = totals.cardFeeAmount;
+    const cardFeeRate = totals.cardFeeRate;
 
     const selectedCustomer = document.getElementById('checkout-customer-select')?.value || "Cliente Mostrador";
     const isMostrador = selectedCustomer === 'Cliente Mostrador';
@@ -24980,6 +25125,8 @@ class NexusApp {
       }),
       subtotal: subtotal,
       tax: tax,
+      cardFeeRate: cardFeeAmount > 0 ? cardFeeRate : 0,
+      cardFeeAmount: cardFeeAmount,
       total: grandTotal,
       paymentMethod: txPaymentMethod,
       targetAccount: targetAccount || undefined,
@@ -25044,6 +25191,8 @@ class NexusApp {
       items: ticketItems,
       subtotal: subtotal,
       tax: tax,
+      cardFeeRate: cardFeeAmount > 0 ? cardFeeRate : 0,
+      cardFeeAmount: cardFeeAmount,
       total: grandTotal,
       paidAmount: cashReceived,
       changeAmount: changeVal,

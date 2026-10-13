@@ -2422,9 +2422,13 @@
                         <input type="number" step="0.1" id="config-tax-input" class="table-search-input" style="width:100%; padding:0.5rem;" required>
                       </div>
                       <div>
-                        <label class="text-xs font-bold">Símbolo de Moneda</label>
-                        <input type="text" id="config-currency-input" class="table-search-input" style="width:100%; padding:0.5rem;" required>
+                        <label class="text-xs font-bold">💳 Recargo por Uso de Tarjeta %</label>
+                        <input type="number" step="0.1" min="0" max="100" id="config-card-fee-input" class="table-search-input" style="width:100%; padding:0.5rem;" placeholder="ej. 5 (0% si no aplica)">
                       </div>
+                    </div>
+                    <div>
+                      <label class="text-xs font-bold">Símbolo de Moneda</label>
+                      <input type="text" id="config-currency-input" class="table-search-input" style="width:100%; padding:0.5rem;" required>
                     </div>
                     <button type="submit" class="btn btn-primary" style="margin-top:0.5rem;">✓ Guardar Datos del Comercio</button>
                   </div>
@@ -2992,6 +2996,7 @@
         <div style="text-align:center; margin-bottom:1.25rem;">
           <div style="font-size:0.875rem; color:var(--text-muted);">Total Cobro Recibo</div>
           <div style="font-family:var(--font-heading); font-size:2.5rem; font-weight:800; color:var(--primary-indigo);" id="modal-checkout-total">$0.00</div>
+          <div id="checkout-card-fee-breakdown" style="display:none;"></div>
         </div>
 
         <!-- RESUMEN DETALLADO DE MERCANCÍA A VENDER (GRAMOS & PRECIO DE VENTA) -->
@@ -3049,7 +3054,11 @@
         </div>
 
         <div id="card-info-box" style="display:none; flex-direction:column; gap:0.75rem; margin-bottom:1.5rem; background:rgba(147,51,234,0.08); border:1px solid rgba(147,51,234,0.25); padding:1rem; border-radius:var(--radius-md);">
-          <div style="font-weight:700; font-size:0.9rem; color:#9333EA; display:flex; align-items:center; gap:6px;">💳 Pago con Tarjeta / Datáfono</div>
+          <div style="font-weight:700; font-size:0.9rem; color:#9333EA; display:flex; align-items:center; justify-content:space-between;">
+            <span style="display:flex; align-items:center; gap:6px;">💳 Pago con Tarjeta / Datáfono</span>
+            <span id="card-fee-badge" style="display:none; font-size:0.75rem; font-weight:800; background:#9333EA; color:#fff; padding:2px 8px; border-radius:12px;"></span>
+          </div>
+          <div id="card-fee-notice-banner" style="display:none; background:rgba(147,51,234,0.14); border:1px solid rgba(147,51,234,0.35); border-radius:6px; padding:8px 12px; font-size:0.83rem; color:#6B21A8; font-weight:700;"></div>
           <div style="font-size:0.8rem; color:var(--text-muted);">El cobro se procesa por datáfono y el dinero ingresa a la cuenta bancaria seleccionada:</div>
           <div>
             <label style="font-size:0.78rem; font-weight:600; color:var(--text-muted); display:block; margin-bottom:0.35rem;">¿A qué cuenta bancaria ingresa? *</label>
@@ -3677,8 +3686,8 @@
                 <input type="text" id="supp-phone-input" class="form-input" placeholder="Teléfono" required>
               </div>
               <div class="form-group" style="margin-bottom: 0.85rem;">
-                <label class="form-label" style="font-size: 0.8rem; font-weight: 700; color: var(--text-main); margin-bottom: 0.3rem;">Email</label>
-                <input type="email" id="supp-email-input" class="form-input" placeholder="Email" required>
+                <label class="form-label" style="font-size: 0.8rem; font-weight: 700; color: var(--text-main); margin-bottom: 0.3rem;">Email <span style="font-weight: 400; color: var(--text-muted);">(Opcional)</span></label>
+                <input type="email" id="supp-email-input" class="form-input" placeholder="Email (opcional)">
               </div>
             </div>
 
@@ -4614,8 +4623,8 @@
                 <input type="text" id="edit-supp-phone" class="form-input" placeholder="Teléfono" required>
               </div>
               <div class="form-group" style="margin-bottom: 0.85rem;">
-                <label class="form-label" style="font-size: 0.8rem; font-weight: 700; color: var(--text-main); margin-bottom: 0.3rem;">Email</label>
-                <input type="email" id="edit-supp-email" class="form-input" placeholder="Email" required>
+                <label class="form-label" style="font-size: 0.8rem; font-weight: 700; color: var(--text-main); margin-bottom: 0.3rem;">Email <span style="font-weight: 400; color: var(--text-muted);">(Opcional)</span></label>
+                <input type="email" id="edit-supp-email" class="form-input" placeholder="Email (opcional)">
               </div>
             </div>
 

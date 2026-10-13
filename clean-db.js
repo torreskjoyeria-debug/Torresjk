@@ -39,6 +39,7 @@ const baseStoreData = {
     shiftStartTime: "08:00 AM",
     cashInBox: 0,
     taxRate: 0,
+    cardFeePercentage: 0,
     branding: {
       appName: "JOYERÍA POS",
       appBadge: "SEDE 1",
