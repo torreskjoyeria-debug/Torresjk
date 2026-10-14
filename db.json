@@ -35,7 +35,7 @@
         "cashier": "Nexus Owner",
         "shiftStatus": "Cerrado",
         "shiftStartTime": "08:00 AM",
-        "cashInBox": 11564000,
+        "cashInBox": 18160000,
         "taxRate": 0,
         "cardFeePercentage": 0,
         "branding": {
@@ -620,8 +620,8 @@
         "cashSales": 18160000,
         "cardSales": 12880600,
         "qrSales": 0,
-        "cashExpenses": 6596000,
-        "expectedCashInDrawer": 11564000,
+        "cashExpenses": 0,
+        "expectedCashInDrawer": 18160000,
         "actualCashInDrawer": 0,
         "discrepancy": 0,
         "status": "Abierto",
@@ -629,9 +629,9 @@
         "openedDate": "2026-10-08",
         "openedTimestamp": 1791476938103,
         "openedIso": "2026-10-08T16:28:58.103Z",
-        "transferSales": 5600000,
-        "tarjetaSales": 0,
-        "creditSales": 2822500
+        "transferSales": 6072000,
+        "tarjetaSales": 6808600,
+        "creditSales": 3322500
       },
       "cashShiftsHistory": [],
       "abonosVentas": [
@@ -1650,5 +1650,5 @@
       "updatedAt": "2026-10-10T20:17:47.939Z"
     }
   },
-  "updatedAt": "2026-10-13T20:02:59.630Z"
+  "updatedAt": "2026-10-14T01:00:49.025Z"
 }

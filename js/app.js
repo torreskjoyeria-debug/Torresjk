@@ -5629,11 +5629,171 @@ class NexusApp {
       this.showToast('Acceso Denegado: No tienes permisos para eliminar órdenes de compra.', 'danger');
       return;
     }
-    if (!confirm(`¿Estás seguro de eliminar la orden de compra #${id}?`)) return;
-    this.data.purchases = this.data.purchases.filter(p => p.id !== id);
+    const po = (this.data.purchases || []).find(p => p.id === id);
+    if (!po) {
+      this.showToast(`Orden de compra #${id} no encontrada.`, 'warning');
+      return;
+    }
+
+    if (!confirm(`¿Estás seguro de eliminar la orden de compra #${id}? Si se pagó en efectivo o tuvo abonos en efectivo, el dinero se reintegrará automáticamente a la caja, se revertirá el stock y se cancelarán deudas vinculadas.`)) return;
+
+    // 1. REVERSIÓN AUTOMÁTICA DE EFECTIVO A LA CAJA
+    let cashToRefund = 0;
+    const relatedAbonos = (this.data.abonosCompras || []).filter(ab => ab.poId === po.id);
+    let cashFromAbonos = 0;
+    relatedAbonos.forEach(ab => {
+      const meth = (ab.method || '').toLowerCase();
+      if (meth.includes('efectivo') || meth.includes('caja')) {
+        cashFromAbonos += Number(ab.amount) || 0;
+      }
+    });
+
+    if (relatedAbonos.length > 0) {
+      cashToRefund = cashFromAbonos;
+      // Eliminar abonos vinculados a esta orden de compra
+      this.data.abonosCompras = (this.data.abonosCompras || []).filter(ab => ab.poId !== po.id);
+    } else {
+      const poMethod = (po.paymentMethod || '').toLowerCase();
+      const isCash = poMethod.includes('efectivo') || poMethod.includes('caja');
+      const wasPaid = po.paymentStatus === 'Pagado Total' || (Number(po.paidAmount) > 0);
+      if (isCash && wasPaid) {
+        cashToRefund = Number(po.paidAmount || po.total) || 0;
+      }
+    }
+
+    if (cashToRefund > 0) {
+      if (!this.data.cashShiftLog) {
+        this.data.cashShiftLog = { openingCash: 0, cashSales: 0, cashExpenses: 0, expectedCashInDrawer: 0, status: 'Abierto' };
+      }
+      this.data.cashShiftLog.cashExpenses = Math.round(Math.max(0, (Number(this.data.cashShiftLog.cashExpenses) || 0) - cashToRefund) * 100) / 100;
+      this.data.cashShiftLog.expectedCashInDrawer = Math.round(((Number(this.data.cashShiftLog.openingCash) || 0) + (Number(this.data.cashShiftLog.cashSales) || 0) - (Number(this.data.cashShiftLog.cashExpenses) || 0)) * 100) / 100;
+      if (this.data.store) {
+        this.data.store.cashInBox = this.data.cashShiftLog.expectedCashInDrawer;
+      }
+
+      if (Array.isArray(this.data.cashShiftsHistory)) {
+        const histShift = this.data.cashShiftsHistory.find(s => s.shiftId === this.data.cashShiftLog.shiftId || s.id === this.data.cashShiftLog.id);
+        if (histShift) {
+          histShift.cashExpenses = this.data.cashShiftLog.cashExpenses;
+          histShift.expectedCashInDrawer = this.data.cashShiftLog.expectedCashInDrawer;
+          if (histShift.closingCash !== undefined) {
+            histShift.difference = Math.round((Number(histShift.closingCash) - Number(histShift.expectedCashInDrawer)) * 100) / 100;
+          }
+        }
+      }
+    }
+
+    // 2. REVERTIR STOCK DEL PRODUCTO
+    const targetProd = (this.data.products || []).find(p => p.id === po.productId || (po.productSku && p.sku === po.productSku));
+    const qtyToRevert = Number(po.quantity !== undefined ? po.quantity : (po.itemsCount || 1)) || 0;
+    if (targetProd && qtyToRevert > 0) {
+      const currentStock = this.parseCleanNumber(targetProd.stock) || 0;
+      targetProd.stock = Math.round(Math.max(0, currentStock - qtyToRevert) * 100) / 100;
+      const minStock = targetProd.minStock !== undefined ? targetProd.minStock : 1;
+      targetProd.status = targetProd.stock > minStock ? 'active' : (targetProd.stock > 0 ? 'low_stock' : 'out_of_stock');
+    }
+    this.syncAllCategoryGrams();
+
+    // 3. REVERTIR CRÉDITOS Y DEUDAS DE PROVEEDORES
+    if (Array.isArray(this.data.supplierCredits)) {
+      const relatedCredits = this.data.supplierCredits.filter(c => c.poId === po.id || c.id === po.id);
+      relatedCredits.forEach(cred => {
+        const suppObj = (this.data.suppliers || []).find(s => s.name?.toLowerCase().trim() === cred.supplier?.toLowerCase().trim());
+        if (suppObj) {
+          const pendingToDeduct = Number(cred.pendingAmount) || 0;
+          suppObj.creditBalance = Math.round(Math.max(0, (Number(suppObj.creditBalance) || 0) - pendingToDeduct) * 100) / 100;
+        }
+      });
+      this.data.supplierCredits = this.data.supplierCredits.filter(c => c.poId !== po.id && c.id !== po.id);
+    }
+
+    // 4. ELIMINAR LA ORDEN DE COMPRA
+    this.data.purchases = (this.data.purchases || []).filter(p => p.id !== id);
+
     await this.savePersistence();
     this.syncAllModules();
-    this.showToast(`Orden de compra ${id} eliminada`, 'warning');
+    this.renderFinComprasTable();
+    this.renderRepCompras();
+    this.renderAbonosComprasTable();
+    this.renderInventoryTable();
+    this.renderInvCategoriasTable();
+    this.renderCategoryPills();
+    this.renderCuadreCajaCard();
+    this.renderCashStatusIndicator();
+
+    const refundMsg = cashToRefund > 0 ? ` y ${this.formatCurrency(cashToRefund)} reintegrados automáticamente a caja` : '';
+    this.showToast(`Orden #${id} eliminada, stock revertido${refundMsg}`, 'success');
+  }
+
+  async deleteAbonoCompra(id) {
+    if (!this.canPerformAction('delete', 'purchase') && !this.canPerformAction('delete', 'expense')) {
+      this.showToast('Acceso Denegado: No tienes permisos para anular abonos.', 'danger');
+      return;
+    }
+    const ab = (this.data.abonosCompras || []).find(a => a.id === id);
+    if (!ab) {
+      this.showToast(`Abono #${id} no encontrado.`, 'warning');
+      return;
+    }
+    if (!confirm(`¿Estás seguro de anular el abono #${id} de ${this.formatCurrency(ab.amount)} a ${ab.supplier}? Si fue en efectivo, el dinero se reintegrará automáticamente a la caja.`)) return;
+
+    const amt = Number(ab.amount) || 0;
+    const isCash = (ab.method || '').toLowerCase().includes('efectivo') || (ab.method || '').toLowerCase().includes('caja');
+
+    if (isCash && amt > 0 && this.data.cashShiftLog) {
+      this.data.cashShiftLog.cashExpenses = Math.round(Math.max(0, (Number(this.data.cashShiftLog.cashExpenses) || 0) - amt) * 100) / 100;
+      this.data.cashShiftLog.expectedCashInDrawer = Math.round(((Number(this.data.cashShiftLog.openingCash) || 0) + (Number(this.data.cashShiftLog.cashSales) || 0) - (Number(this.data.cashShiftLog.cashExpenses) || 0)) * 100) / 100;
+      if (this.data.store) {
+        this.data.store.cashInBox = this.data.cashShiftLog.expectedCashInDrawer;
+      }
+      if (Array.isArray(this.data.cashShiftsHistory)) {
+        const histShift = this.data.cashShiftsHistory.find(s => s.shiftId === this.data.cashShiftLog.shiftId || s.id === this.data.cashShiftLog.id);
+        if (histShift) {
+          histShift.cashExpenses = this.data.cashShiftLog.cashExpenses;
+          histShift.expectedCashInDrawer = this.data.cashShiftLog.expectedCashInDrawer;
+          if (histShift.closingCash !== undefined) {
+            histShift.difference = Math.round((Number(histShift.closingCash) - Number(histShift.expectedCashInDrawer)) * 100) / 100;
+          }
+        }
+      }
+    }
+
+    // Revertir deuda en supplierCredits si existe el crédito
+    if (ab.poId && Array.isArray(this.data.supplierCredits)) {
+      const cred = this.data.supplierCredits.find(c => c.id === ab.poId || c.poId === ab.poId);
+      if (cred) {
+        cred.pendingAmount = Math.round(((Number(cred.pendingAmount) || 0) + amt) * 100) / 100;
+        cred.paidAmount = Math.round(Math.max(0, (Number(cred.paidAmount) || 0) - amt) * 100) / 100;
+        if (cred.pendingAmount > 0) {
+          cred.status = 'Pendiente';
+        }
+      }
+    }
+
+    // Revertir saldo del proveedor
+    const suppObj = (this.data.suppliers || []).find(s => s.name?.toLowerCase().trim() === ab.supplier?.toLowerCase().trim());
+    if (suppObj) {
+      suppObj.creditBalance = Math.round(((Number(suppObj.creditBalance) || 0) + amt) * 100) / 100;
+    }
+
+    // Revertir pago en la orden de compra si existe
+    if (ab.poId && Array.isArray(this.data.purchases)) {
+      const po = this.data.purchases.find(p => p.id === ab.poId);
+      if (po) {
+        po.paidAmount = Math.round(Math.max(0, (Number(po.paidAmount) || 0) - amt) * 100) / 100;
+        if (po.paidAmount < Number(po.total) - 0.01) {
+          po.paymentStatus = 'Pendiente';
+        }
+      }
+    }
+
+    this.data.abonosCompras = (this.data.abonosCompras || []).filter(a => a.id !== id);
+    await this.savePersistence();
+    this.syncAllModules();
+    this.renderAbonosComprasTable();
+    this.renderCuadreCajaCard();
+    this.renderCashStatusIndicator();
+    this.showToast(`Abono #${id} anulado y dinero reintegrado a caja`, 'warning');
   }
 
   openAbonoModal(type, id) {
@@ -5924,10 +6084,15 @@ class NexusApp {
         this.data.cashShiftLog.cardSales = Math.round(((Number(this.data.cashShiftLog.cardSales) || 0) + actualPay) * 100) / 100;
       }
 
+      const activeShift = this.data.cashShiftLog && this.data.cashShiftLog.status === 'Abierto' ? this.data.cashShiftLog : null;
+      const now = new Date();
       if (!this.data.abonosVentas) this.data.abonosVentas = [];
       this.data.abonosVentas.unshift({
         id: `AB-V${Date.now().toString().slice(-6)}`,
-        date: new Date().toISOString().slice(0, 16).replace('T', ' '),
+        date: now.toISOString().slice(0, 16).replace('T', ' '),
+        time: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        timestamp: now.getTime(),
+        shiftId: activeShift ? activeShift.shiftId : null,
         customer: cred.customer,
         invoiceId: `TX-${Date.now().toString().slice(-5)}`,
         amount: actualPay,
@@ -6011,11 +6176,10 @@ class NexusApp {
         supp.creditBalance = Math.round(Math.max(0, (Number(supp.creditBalance) || 0) - actualPay) * 100) / 100;
       }
 
-      // Sync with cashier cash drawer: descontar del dinero en caja si es Efectivo, Pago Mixto (porción efectivo), o si el checkbox está activo
-      const deductCheck = document.getElementById('abono-deduct-cash-check');
+      // Solo descontar de caja FÍSICA si fue pagado en Efectivo o porción efectivo de Pago Mixto
       const isCash = method.toLowerCase().includes('efectivo');
       const isMixed = method === 'Pago Mixto';
-      const shouldDeductFromCash = isCash || (isMixed && mixedCash > 0) || (deductCheck ? deductCheck.checked : false);
+      const shouldDeductFromCash = isCash || (isMixed && mixedCash > 0);
       const cashDeductAmount = isMixed ? mixedCash : actualPay;
 
       if (shouldDeductFromCash && cashDeductAmount > 0) {
@@ -6044,11 +6208,16 @@ class NexusApp {
       }
 
       const activeCashier = this.data.store?.cashier || (this.currentUser ? this.currentUser.name : "Cajero");
+      const activeShift = this.data.cashShiftLog && this.data.cashShiftLog.status === 'Abierto' ? this.data.cashShiftLog : null;
+      const now = new Date();
 
       if (!this.data.abonosCompras) this.data.abonosCompras = [];
       this.data.abonosCompras.unshift({
         id: `AB-C${Date.now().toString().slice(-6)}`,
-        date: new Date().toISOString().slice(0, 10),
+        date: now.toISOString().slice(0, 10),
+        time: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        timestamp: now.getTime(),
+        shiftId: activeShift ? activeShift.shiftId : null,
         supplier: cp.supplier,
         poId: cp.id || `OC-${Date.now().toString().slice(-5)}`,
         amount: actualPay,
@@ -9466,12 +9635,13 @@ class NexusApp {
 
     po.paymentStatus = 'Pagado Total';
     if (!po.paymentMethod || po.paymentMethod === 'Crédito Proveedor') {
-      po.paymentMethod = 'Efectivo';
+      po.paymentMethod = 'Transferencia';
     }
     po.paidAmount = po.total;
 
     // Si se paga en efectivo de caja, reflejar en el arqueo y registrar abono
-    if (po.paymentMethod && po.paymentMethod.toLowerCase().includes('efectivo')) {
+    const isCash = (po.paymentMethod || '').toLowerCase().includes('efectivo');
+    if (isCash) {
       if (!this.data.cashShiftLog) {
         this.data.cashShiftLog = { openingCash: 0, cashSales: 0, cashExpenses: 0, expectedCashInDrawer: 0, status: 'Abierto' };
       }
@@ -9484,14 +9654,19 @@ class NexusApp {
       // Los pagos a proveedores no son gastos operativos: son egresos de caja y van en abonosCompras
     }
 
+    const activeShift = this.data.cashShiftLog && this.data.cashShiftLog.status === 'Abierto' ? this.data.cashShiftLog : null;
+    const now = new Date();
     if (!this.data.abonosCompras) this.data.abonosCompras = [];
     this.data.abonosCompras.unshift({
       id: `AB-C${Date.now().toString().slice(-6)}`,
-      date: new Date().toISOString().slice(0, 10),
+      date: now.toISOString().slice(0, 10),
+      time: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      timestamp: now.getTime(),
+      shiftId: activeShift ? activeShift.shiftId : null,
       supplier: po.supplier,
       poId: po.id,
       amount: po.total,
-      method: `${po.paymentMethod || 'Efectivo'} (Caja)`,
+      method: isCash ? `${po.paymentMethod || 'Efectivo'} (Caja)` : po.paymentMethod,
       cashier: this.data.store?.cashier || (this.currentUser ? this.currentUser.name : "Cajero"),
       status: "Confirmado"
     });
@@ -10761,17 +10936,22 @@ class NexusApp {
       openTimestamp = this.parseDateAndTimeToTimestamp(shift.openedDate, shift.openedAt);
     }
 
+    const closedShiftIds = new Set((this.data.cashShiftsHistory || []).map(s => s.id || s.shiftId));
+
     return (this.data.abonosVentas || []).filter(a => {
       if (!a.date) return false;
+      // 1. Coincidencia explícita con el turno activo
       if (a.shiftId) return a.shiftId === shift.shiftId;
+      // 2. Si ya pertenece a un turno cerrado, descartar estrictamente
+      if (a.closedShiftId || (a.shiftId && closedShiftIds.has(a.shiftId))) return false;
+      // 3. Validación temporal si no tiene turno explícito
       if (openTimestamp > 0) {
         const pDate = a.date.includes(' ') ? a.date.split(' ')[0] : a.date;
         const pTime = a.date.includes(' ') ? a.date.split(' ')[1] : '';
-        const aTimestamp = this.parseDateAndTimeToTimestamp(pDate, pTime);
+        const aTimestamp = a.timestamp || this.parseDateAndTimeToTimestamp(pDate, pTime);
         if (aTimestamp > 0) return aTimestamp >= (openTimestamp - 60000);
       }
-      const openedDate = shift.openedDate || new Date().toISOString().slice(0, 10);
-      return a.date.includes(openedDate);
+      return false;
     });
   }
 
@@ -10791,7 +10971,24 @@ class NexusApp {
       const amt = Math.round(Math.abs(t.total || 0));
       totalSales += amt;
       const m = (t.paymentMethod || '').toLowerCase();
-      if (t.paymentBreakdown || m.includes('mixto')) {
+
+      if (t.mixedPayments && Array.isArray(t.mixedPayments) && t.mixedPayments.length > 0) {
+        t.mixedPayments.forEach(mp => {
+          const mpAmt = Math.round(Number(mp.amount) || 0);
+          const mpMethod = (mp.method || '').toLowerCase();
+          if (mpMethod.includes('efectivo') || mpMethod.includes('cash')) {
+            salesEfectivo += mpAmt;
+          } else if (mpMethod.includes('tarjeta') || mpMethod.includes('card') || mpMethod.includes('débito') || mpMethod.includes('debito') || mpMethod.includes('datafono') || mpMethod.includes('datáfono')) {
+            salesTarjeta += mpAmt;
+          } else if (mpMethod.includes('transfer') || mpMethod.includes('banco') || mpMethod.includes('cta')) {
+            salesTransferencia += mpAmt;
+          } else if (mpMethod.includes('crédito') || mpMethod.includes('credito')) {
+            salesCredito += mpAmt;
+          } else {
+            salesOtros += mpAmt;
+          }
+        });
+      } else if (t.paymentBreakdown || m.includes('mixto')) {
         const bd = t.paymentBreakdown || {};
         const cashAmt = Math.round(Number(bd.cash) || 0);
         const cardAmt = Math.round(Number(bd.card) || 0);
@@ -10861,10 +11058,22 @@ class NexusApp {
     const totalRecaudado = totalEfectivo + totalTransferencia + totalTarjeta + totalOtros;
 
     const openingCash = Math.round(Number(shift.openingCash) || 0);
-    const cashExpenses = Math.round(Number(shift.cashExpenses) || 0);
 
-    // Saldo Teórico en gaveta física: Base de apertura + Todo el Efectivo recibido (ventas + abonos) - Salidas de efectivo
+    // Obtener egresos reales y auditados del turno (Gastos Operativos + Abonos Proveedor en efectivo + Compras en efectivo)
+    const shiftExpensesList = this.getCashShiftExpenses ? this.getCashShiftExpenses() : [];
+    const cashExpenses = shiftExpensesList.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+
+    // Saldo Teórico en gaveta física: Base de apertura + Todo el Efectivo recibido (ventas + abonos) - Salidas de efectivo reales
     const calculatedExpected = openingCash + totalEfectivo - cashExpenses;
+
+    // Sincronizar en tiempo real el registro activo de caja para garantizar exactitud al 100%
+    if (shift && shift.status === 'Abierto') {
+      shift.cashExpenses = cashExpenses;
+      shift.expectedCashInDrawer = calculatedExpected;
+      if (this.data.store) {
+        this.data.store.cashInBox = calculatedExpected;
+      }
+    }
 
     return {
       salesEfectivo,
@@ -11187,86 +11396,263 @@ class NexusApp {
     if (countEl) countEl.innerText = visible;
   }
 
-  renderCashShiftExpensesSummary() {
+  getCashShiftExpenses() {
     const shift = this.data.cashShiftLog;
-    if (!shift) return '';
+    if (!shift) return [];
+    const shiftDate = shift.openedDate || new Date().toISOString().slice(0, 10);
+    const shiftId = shift.shiftId;
     let openTimestamp = shift.openedTimestamp || 0;
     if (!openTimestamp && shift.openedDate) {
       openTimestamp = this.parseDateAndTimeToTimestamp(shift.openedDate, shift.openedAt);
     }
 
-    const expensesToday = (this.data.expenses || []).filter(e => {
-      if (!e.date) return false;
-      const isCash = (e.method || '').toLowerCase().includes('efectivo');
-      if (!isCash) return false;
-      if (e.shiftId) return e.shiftId === shift.shiftId;
-      if (openTimestamp > 0) {
-        const pDate = e.date.includes(' ') ? e.date.split(' ')[0] : e.date;
-        const pTime = e.date.includes(' ') ? e.date.split(' ')[1] : '';
-        const eTimestamp = this.parseDateAndTimeToTimestamp(pDate, pTime);
-        if (eTimestamp > 0) return eTimestamp >= (openTimestamp - 60000);
+    const items = [];
+
+    // Helper: normalizar fecha a formato estándar YYYY-MM-DD
+    const normalizeDateStr = (str) => {
+      if (!str) return '';
+      const s = String(str).trim();
+      if (s.includes('T')) return s.split('T')[0];
+      if (s.includes(' ')) return s.split(' ')[0];
+      if (s.includes('/')) {
+        const p = s.split('/');
+        if (p.length === 3) {
+          const day = p[0].padStart(2, '0');
+          const mon = p[1].padStart(2, '0');
+          const yr = p[2].length === 2 ? '20' + p[2] : p[2];
+          return `${yr}-${mon}-${day}`;
+        }
       }
-      return e.date.includes(shift.openedDate);
+      return s;
+    };
+
+    const normShiftDate = normalizeDateStr(shiftDate);
+    const closedShiftIds = new Set((this.data.cashShiftsHistory || []).map(s => s.id || s.shiftId));
+
+    // Helper: coincidencia estricta y segura con el turno activo
+    const matchesShift = (dateStr, timeStr, itemShiftId, itemTimestamp = 0, closedShiftId = null) => {
+      // 1. Si el egreso tiene un shiftId explícito asignado:
+      if (itemShiftId) {
+        return !!(shiftId && itemShiftId === shiftId);
+      }
+      // 2. Si ya pertenece a un turno cerrado o está marcado como cerrado en otro turno:
+      if (closedShiftId || (itemShiftId && closedShiftIds.has(itemShiftId))) {
+        return false;
+      }
+      // 3. Validación de fecha
+      if (!dateStr) return false;
+      const normItemDate = normalizeDateStr(dateStr);
+      if (normItemDate !== normShiftDate) return false;
+
+      // 4. Validación temporal estricta con el momento de apertura del turno
+      if (openTimestamp > 0) {
+        if (itemTimestamp && itemTimestamp > 0) {
+          return itemTimestamp >= (openTimestamp - 60000);
+        }
+        if (timeStr) {
+          const t = this.parseDateAndTimeToTimestamp(normItemDate, timeStr);
+          if (t > 0) return t >= (openTimestamp - 60000);
+        }
+        // Si no tiene hora ni timestamp comprobable, un egreso previo NO puede cargarse a un turno nuevo recién abierto
+        return false;
+      }
+
+      return false;
+    };
+
+    // 1. Gastos Operativos en Efectivo
+    (this.data.expenses || []).forEach(e => {
+      const isCash = !e.method || e.method.toLowerCase().includes('efectivo') || e.method.toLowerCase().includes('caja');
+      if (isCash && matchesShift(e.date, e.time, e.shiftId, e.timestamp, e.closedShiftId)) {
+        items.push({
+          id: e.id,
+          date: e.date,
+          time: e.time || shift.openedAt || '',
+          concept: e.description || e.category || 'Gasto Operativo',
+          category: e.category || 'Gasto Operativo',
+          type: 'Gasto Operativo',
+          typeKey: 'gastos',
+          badgeBg: '#FEF3C7',
+          badgeColor: '#D97706',
+          icon: '🧾',
+          cashier: e.cashier || e.user || 'Administración',
+          amount: Math.round(Number(e.amount) || 0)
+        });
+      }
     });
 
-    const abonosToday = (this.data.abonosCompras || []).filter(a => {
-      if (!a.date) return false;
-      const isCash = (a.method || '').toLowerCase().includes('efectivo');
-      if (!isCash) return false;
-      if (a.shiftId) return a.shiftId === shift.shiftId;
-      if (openTimestamp > 0) {
-        const pDate = a.date.includes(' ') ? a.date.split(' ')[0] : a.date;
-        const pTime = a.date.includes(' ') ? a.date.split(' ')[1] : '';
-        const aTimestamp = this.parseDateAndTimeToTimestamp(pDate, pTime);
-        if (aTimestamp > 0) return aTimestamp >= (openTimestamp - 60000);
+    // 2. Abonos / Pagos a Proveedores en Efectivo
+    (this.data.abonosCompras || []).forEach(a => {
+      const isCash = (a.method || '').toLowerCase().includes('efectivo') || (a.method || '').toLowerCase().includes('caja');
+      if (isCash && matchesShift(a.date, a.time, a.shiftId, a.timestamp, a.closedShiftId)) {
+        items.push({
+          id: a.id,
+          date: a.date,
+          time: a.time || shift.openedAt || '',
+          concept: `Pago a Proveedor: ${a.supplier}${a.poId ? ` (${a.poId})` : ''}`,
+          category: 'Abono Proveedor',
+          type: 'Abono Proveedor',
+          typeKey: 'abonos',
+          badgeBg: '#EEF2FF',
+          badgeColor: '#4F46E5',
+          icon: '💳',
+          cashier: a.cashier || 'Cajero',
+          amount: Math.round(Number(a.amount) || 0)
+        });
       }
-      return a.date.includes(shift.openedDate);
     });
 
-    if (expensesToday.length === 0 && abonosToday.length === 0) {
-      return `<div style="font-size:0.8rem; color:var(--text-muted); text-align:center; padding:0.75rem 0.5rem;">No se han registrado retiros ni egresos en efectivo en este turno.</div>`;
+    // 3. Compras de Mercancía en Efectivo
+    (this.data.purchases || []).forEach(po => {
+      const isCash = (po.paymentMethod || '').toLowerCase().includes('efectivo') || (po.paymentMethod || '').toLowerCase().includes('caja');
+      if (isCash && matchesShift(po.date, po.time, po.shiftId, po.timestamp, po.closedShiftId)) {
+        items.push({
+          id: po.id,
+          date: po.date,
+          time: po.time || '',
+          concept: `Compra Mercancía: ${po.supplier} (${po.productName || po.productSku || 'Joyería'})`,
+          category: 'Compra Mercancía',
+          type: 'Compra Contado',
+          typeKey: 'compras',
+          badgeBg: '#F3E8FF',
+          badgeColor: '#7E22CE',
+          icon: '💎',
+          cashier: po.cashier || 'Cajero',
+          amount: Math.round(Number(po.total) || 0)
+        });
+      }
+    });
+
+    return items;
+  }
+
+  renderCashShiftExpensesSummary() {
+    const shift = this.data.cashShiftLog;
+    if (!shift) return '';
+
+    const expensesList = this.getCashShiftExpenses();
+
+    if (expensesList.length === 0) {
+      return `
+        <div style="font-size:0.85rem; color:var(--text-muted); text-align:center; padding:1.25rem 0.5rem;">
+          <div style="font-size:1.6rem; margin-bottom:0.35rem; color:var(--emerald-text);">✓</div>
+          <div style="font-weight:700; color:var(--text-main);">Sin salidas registradas en este turno</div>
+          <div style="font-size:0.76rem; color:var(--text-muted); margin-top:3px;">No se han efectuado retiros ni egresos en efectivo de la caja.</div>
+        </div>
+      `;
     }
 
-    let rows = '';
-    expensesToday.forEach(e => {
-      rows += `
-        <tr style="border-bottom:1px solid var(--border-color);">
-          <td style="padding:6px 8px; font-size:0.8rem;"><b>${this.escapeHtml(e.id)}</b></td>
-          <td style="padding:6px 8px; font-size:0.8rem;">Gasto: ${this.escapeHtml(e.description || e.category || 'Gasto Operativo')}</td>
-          <td style="padding:6px 8px; font-size:0.8rem;"><span class="badge" style="background:#FEF3C7; color:#D97706; font-size:0.7rem; font-weight:700;">Gasto Operativo</span></td>
-          <td style="padding:6px 8px; font-size:0.8rem; font-weight:700; color:var(--rose-text); text-align:right;">-${this.formatCurrency(e.amount)}</td>
-        </tr>
-      `;
-    });
+    const totalGastosOperativos = expensesList.filter(e => e.typeKey === 'gastos').reduce((sum, e) => sum + e.amount, 0);
+    const totalAbonosProveedores = expensesList.filter(e => e.typeKey === 'abonos').reduce((sum, e) => sum + e.amount, 0);
+    const totalComprasMercancia = expensesList.filter(e => e.typeKey === 'compras').reduce((sum, e) => sum + e.amount, 0);
+    const totalTotal = expensesList.reduce((sum, e) => sum + e.amount, 0);
 
-    abonosToday.forEach(a => {
-      rows += `
-        <tr style="border-bottom:1px solid var(--border-color);">
-          <td style="padding:6px 8px; font-size:0.8rem;"><b>${this.escapeHtml(a.id)}</b></td>
-          <td style="padding:6px 8px; font-size:0.8rem;">Pago a Proveedor: <b>${this.escapeHtml(a.supplier)}</b> (${this.escapeHtml(a.poId || '')})</td>
-          <td style="padding:6px 8px; font-size:0.8rem;"><span class="badge" style="background:#EEF2FF; color:#4F46E5; font-size:0.7rem; font-weight:700;">Abono Proveedor</span></td>
-          <td style="padding:6px 8px; font-size:0.8rem; font-weight:700; color:var(--rose-text); text-align:right;">-${this.formatCurrency(a.amount)}</td>
-        </tr>
-      `;
-    });
+    const countGastos = expensesList.filter(e => e.typeKey === 'gastos').length;
+    const countAbonos = expensesList.filter(e => e.typeKey === 'abonos').length;
+    const countCompras = expensesList.filter(e => e.typeKey === 'compras').length;
+
+    let rowsHtml = expensesList.map(e => `
+      <tr class="cash-expense-row cash-expense-${e.typeKey}" style="border-bottom:1px solid var(--border-color); transition:background 0.15s ease;">
+        <td style="padding:8px 10px; font-size:0.82rem; font-family:monospace; font-weight:700; color:var(--text-main);">
+          ${this.escapeHtml(e.id)}
+        </td>
+        <td style="padding:8px 10px; font-size:0.8rem; color:var(--text-muted); white-space:nowrap;">
+          ${this.escapeHtml(e.date)}${e.time ? ` · ${this.escapeHtml(e.time)}` : ''}
+        </td>
+        <td style="padding:8px 10px; font-size:0.84rem; color:var(--text-main); font-weight:600;">
+          ${this.escapeHtml(e.concept)}
+        </td>
+        <td style="padding:8px 10px; font-size:0.8rem;">
+          <span class="badge" style="background:${e.badgeBg}; color:${e.badgeColor}; font-size:0.72rem; font-weight:700; display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:12px;">
+            <span>${e.icon}</span> ${this.escapeHtml(e.type)}
+          </span>
+        </td>
+        <td style="padding:8px 10px; font-size:0.8rem; color:var(--text-muted);">
+          ${this.escapeHtml(e.cashier)}
+        </td>
+        <td style="padding:8px 10px; font-size:0.9rem; font-weight:800; color:var(--rose-text); text-align:right; white-space:nowrap;">
+          -${this.formatCurrency(e.amount)}
+        </td>
+      </tr>
+    `).join('');
 
     return `
-      <div style="max-height:220px; overflow-y:auto;">
-        <table style="width:100%; border-collapse:collapse;">
-          <thead>
-            <tr style="border-bottom:1px solid var(--border-color); color:var(--text-muted); font-size:0.75rem; text-align:left;">
-              <th style="padding:4px 8px;">Código</th>
-              <th style="padding:4px 8px;">Concepto / Beneficiario</th>
-              <th style="padding:4px 8px;">Tipo</th>
-              <th style="padding:4px 8px; text-align:right;">Monto Descontado</th>
+      <!-- MINI-TARJETAS DE RESUMEN POR CATEGORÍA DE SALIDA -->
+      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:0.6rem; margin-bottom:1rem;">
+        <div style="background:var(--card-bg); border:1px solid var(--border-color); border-radius:var(--radius-sm); padding:0.6rem 0.85rem;">
+          <div style="font-size:0.72rem; font-weight:600; color:var(--text-muted);">🧾 Gastos Operativos (${countGastos})</div>
+          <div style="font-size:1.05rem; font-weight:800; color:#D97706; margin-top:2px;">-${this.formatCurrency(totalGastosOperativos)}</div>
+        </div>
+        <div style="background:var(--card-bg); border:1px solid var(--border-color); border-radius:var(--radius-sm); padding:0.6rem 0.85rem;">
+          <div style="font-size:0.72rem; font-weight:600; color:var(--text-muted);">💳 Pagos a Proveedores (${countAbonos})</div>
+          <div style="font-size:1.05rem; font-weight:800; color:#4F46E5; margin-top:2px;">-${this.formatCurrency(totalAbonosProveedores)}</div>
+        </div>
+        ${totalComprasMercancia > 0 ? `
+        <div style="background:var(--card-bg); border:1px solid var(--border-color); border-radius:var(--radius-sm); padding:0.6rem 0.85rem;">
+          <div style="font-size:0.72rem; font-weight:600; color:var(--text-muted);">💎 Compras / Mercancía (${countCompras})</div>
+          <div style="font-size:1.05rem; font-weight:800; color:#7E22CE; margin-top:2px;">-${this.formatCurrency(totalComprasMercancia)}</div>
+        </div>` : ''}
+        <div style="background:rgba(244,63,94,0.06); border:1px solid rgba(244,63,94,0.25); border-radius:var(--radius-sm); padding:0.6rem 0.85rem;">
+          <div style="font-size:0.72rem; font-weight:700; color:var(--rose-text);">📤 Total Egresos Turno</div>
+          <div style="font-size:1.15rem; font-weight:900; color:var(--rose-text); margin-top:2px;">-${this.formatCurrency(totalTotal)}</div>
+        </div>
+      </div>
+
+      <!-- BARRA DE FILTRO Y CONTADOR -->
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem; flex-wrap:wrap; gap:0.5rem;">
+        <div class="finanzas-period-group" id="cash-shift-expenses-filter" style="margin:0;">
+          <button type="button" class="finanzas-period-pill active" onclick="app.filterCashShiftExpensesTable('all', this)">Todas las Salidas (${expensesList.length})</button>
+          <button type="button" class="finanzas-period-pill" onclick="app.filterCashShiftExpensesTable('gastos', this)">🧾 Gastos (${countGastos})</button>
+          <button type="button" class="finanzas-period-pill" onclick="app.filterCashShiftExpensesTable('abonos', this)">💳 Proveedores (${countAbonos})</button>
+          ${countCompras > 0 ? `<button type="button" class="finanzas-period-pill" onclick="app.filterCashShiftExpensesTable('compras', this)">💎 Compras (${countCompras})</button>` : ''}
+        </div>
+        <div style="display:flex; align-items:center; gap:0.6rem;">
+          <span style="font-size:0.76rem; color:var(--text-muted);">
+            Listando <b id="cash-expenses-visible-count">${expensesList.length}</b> egreso(s)
+          </span>
+        </div>
+      </div>
+
+      <!-- TABLA DETALLADA DE SALIDAS -->
+      <div class="table-container" style="max-height:280px; overflow-y:auto; border:1px solid var(--border-color); border-radius:var(--radius-sm);">
+        <table class="data-table" style="width:100%; border-collapse:collapse;">
+          <thead style="position:sticky; top:0; background:var(--table-header-bg, var(--hover-bg)); z-index:2;">
+            <tr style="text-align:left; border-bottom:1px solid var(--border-color);">
+              <th style="padding:7px 10px; font-size:0.75rem;">ID Referencia</th>
+              <th style="padding:7px 10px; font-size:0.75rem;">Fecha / Hora</th>
+              <th style="padding:7px 10px; font-size:0.75rem;">Concepto / Detalle</th>
+              <th style="padding:7px 10px; font-size:0.75rem;">Tipo de Egreso</th>
+              <th style="padding:7px 10px; font-size:0.75rem;">Responsable</th>
+              <th style="padding:7px 10px; font-size:0.75rem; text-align:right;">Monto Físico</th>
             </tr>
           </thead>
-          <tbody>
-            ${rows}
+          <tbody id="cash-shift-expenses-tbody">
+            ${rowsHtml}
           </tbody>
         </table>
       </div>
     `;
+  }
+
+  filterCashShiftExpensesTable(type, btnEl) {
+    const pills = document.querySelectorAll('#cash-shift-expenses-filter .finanzas-period-pill');
+    pills.forEach(p => p.classList.remove('active'));
+    if (btnEl) btnEl.classList.add('active');
+
+    const rows = document.querySelectorAll('.cash-expense-row');
+    let visible = 0;
+    rows.forEach(r => {
+      if (type === 'all') {
+        r.style.display = '';
+        visible++;
+      } else {
+        const matches = r.classList.contains(`cash-expense-${type}`);
+        r.style.display = matches ? '' : 'none';
+        if (matches) visible++;
+      }
+    });
+    const countEl = document.getElementById('cash-expenses-visible-count');
+    if (countEl) countEl.innerText = visible;
   }
 
   renderCuadreCajaCard() {
@@ -11569,6 +11955,27 @@ class NexusApp {
       closedTimestamp: now.getTime()
     };
     this.data.cashShiftsHistory.unshift(closedRecord);
+
+    const closingShiftId = this.data.cashShiftLog?.shiftId;
+    if (closingShiftId) {
+      (this.getCashShiftExpenses() || []).forEach(it => {
+        if (!it.id) return;
+        const e = (this.data.expenses || []).find(x => x.id === it.id);
+        if (e) { e.closedShiftId = closingShiftId; if (!e.shiftId) e.shiftId = closingShiftId; }
+        const a = (this.data.abonosCompras || []).find(x => x.id === it.id);
+        if (a) { a.closedShiftId = closingShiftId; if (!a.shiftId) a.shiftId = closingShiftId; }
+        const p = (this.data.purchases || []).find(x => x.id === it.id);
+        if (p) { p.closedShiftId = closingShiftId; if (!p.shiftId) p.shiftId = closingShiftId; }
+      });
+      (this.getCashShiftTransactions() || []).forEach(t => {
+        t.closedShiftId = closingShiftId;
+        if (!t.shiftId) t.shiftId = closingShiftId;
+      });
+      (this.getCashShiftCustomerPayments() || []).forEach(a => {
+        a.closedShiftId = closingShiftId;
+        if (!a.shiftId) a.shiftId = closingShiftId;
+      });
+    }
 
     this.data.cashShiftLog.status = "Cerrado";
     this.data.cashShiftLog.closingCash = counted;
@@ -12623,9 +13030,10 @@ class NexusApp {
     if (!tbody) return;
     const list = this.data.abonosCompras || [];
     if (list.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:2.5rem 1rem; color:var(--text-muted);"><div style="font-size:1.6rem; margin-bottom:0.5rem;">🧾</div><div style="font-weight:700; color:var(--text-main);">No hay abonos a compras registrados</div><div style="font-size:0.85rem; margin-top:0.25rem;">Los pagos realizados a proveedores desde Órdenes de Compra o Créditos aparecerán aquí.</div></td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:2.5rem 1rem; color:var(--text-muted);"><div style="font-size:1.6rem; margin-bottom:0.5rem;">🧾</div><div style="font-weight:700; color:var(--text-main);">No hay abonos a compras registrados</div><div style="font-size:0.85rem; margin-top:0.25rem;">Los pagos realizados a proveedores desde Órdenes de Compra o Créditos aparecerán aquí.</div></td></tr>`;
       return;
     }
+    const canDelete = this.canPerformAction('delete', 'purchase') || this.canPerformAction('delete', 'expense');
     tbody.innerHTML = list.map(ab => `
       <tr>
         <td><b>${this.escapeHtml(ab.id)}</b></td>
@@ -12635,6 +13043,9 @@ class NexusApp {
         <td><span class="font-bold" style="color:var(--rose-text);">${this.formatCurrency(ab.amount)}</span></td>
         <td>${this.escapeHtml(ab.method)}</td>
         <td><span class="badge badge-active">${this.escapeHtml(ab.status || 'Confirmado')}</span></td>
+        <td style="text-align:center;">
+          ${canDelete ? `<button class="btn-action-delete" onclick="app.deleteAbonoCompra('${ab.id}')" title="Anular abono y devolver a caja" style="padding:2px 8px; font-size:0.75rem;">Anular</button>` : '<span style="color:var(--text-muted); font-size:0.75rem;">—</span>'}
+        </td>
       </tr>
     `).join('');
   }
