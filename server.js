@@ -128,8 +128,8 @@ app.use(async (req, res, next) => {
 });
 
 const DEFAULT_STORES_LIST = [
-  { id: 'store_1', name: 'Sede Principal', code: 'SP', address: 'Avenida Principal # 10 - 20, Local 101', phone: '300 123 4567', email: 'principal@nexuspos.io', color: '#0284c7' },
-  { id: 'store_2', name: 'Sede Centro', code: 'SC', address: 'Calle 48 # 50 - 15, Local 102 (C.C. Centro Joyero)', phone: '310 987 6543', email: 'centro@nexuspos.io', color: '#0d9488' }
+  { id: 'store_1', name: 'Sede Principal', code: 'SP', address: 'Avenida Principal # 10 - 20, Local 101', phone: '300 123 4567', email: 'torreskjoyeria@gmail.com', color: '#0284c7' },
+  { id: 'store_2', name: 'Sede Centro', code: 'SC', address: 'Calle 48 # 50 - 15, Local 102 (C.C. Centro Joyero)', phone: '310 987 6543', email: 'torreskjoyeria@gmail.com', color: '#0d9488' }
 ];
 
 // Helper: load local db file (supporting both single-store legacy and multi-store schema)

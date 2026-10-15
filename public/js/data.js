@@ -3,23 +3,23 @@
 const INITIAL_DATA = {
   store: {
     name: "Sede Principal",
-    slogan: "Oro 18k",
-    legalName: "Joyería Demo S.A.S - Sede Principal",
-    taxId: "901838998-0",
+    slogan: "Oro 18k & Plata 925",
+    legalName: "Torres Joyería S.A.S - Sede Principal",
+    taxId: "900123456-1",
     currency: "$",
-    phone: "323 491 3454",
-    email: "contacto@nexuspos.io",
-    address: "Carrera 53 # 47 - 21, Local 109",
-    addressExtra: "C.C Luz del Dia",
-    cashier: "Carlos Mendoza",
+    phone: "300 123 4567",
+    email: "torreskjoyeria@gmail.com",
+    address: "Avenida Principal # 10 - 20",
+    addressExtra: "Local 101",
+    cashier: "Administrador Torres Joyería",
     shiftStatus: "Cerrado",
     shiftStartTime: "08:00 AM",
     cashInBox: 0,
     taxRate: 0,
     cardFeePercentage: 0,
     branding: {
-      appName: "JOYERÍA POS",
-      appBadge: "SAS",
+      appName: "TORRES JOYERÍA",
+      appBadge: "SEDE 1",
       logoUrl: "",
       primaryColor: "#0284c7",
       secondaryColor: "#0d9488",
@@ -29,7 +29,8 @@ const INITIAL_DATA = {
     metalRates: {
       oro18k: 580000,
       oro14k: 510000,
-      plata925: 38000
+      balineria: 400000,
+      plata925: 400000
     }
   },
 
@@ -58,7 +59,7 @@ const INITIAL_DATA = {
       name: "Jojan Torres", 
       email: "jojan@nexuspos.io", 
       password: "admin123",
-      role: "Administrador", 
+      role: "Super Admin", 
       status: "Active", 
       storeId: "*",
       lastLogin: "Hoy 08:00 AM",
@@ -66,6 +67,17 @@ const INITIAL_DATA = {
     },
     {
       id: "USR-002",
+      name: "Administrador Torres Joyería",
+      email: "torreskjoyeria@gmail.com",
+      password: "1013458529jt",
+      role: "Administrador",
+      status: "Active",
+      storeId: "*",
+      lastLogin: "Hoy 08:00 AM",
+      avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=120&auto=format&fit=crop&q=80"
+    },
+    {
+      id: "USR-003",
       name: "Cajero Sede Principal",
       email: "cajeroprincipal@nexuspos.io",
       password: "123456",
@@ -76,7 +88,7 @@ const INITIAL_DATA = {
       avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80"
     },
     {
-      id: "USR-003",
+      id: "USR-004",
       name: "Cajero Sede Centro",
       email: "cajerocentro@nexuspos.io",
       password: "123456",
@@ -136,12 +148,12 @@ const INITIAL_DATA = {
   expenses: [],
 
   paymentMethods: [
-    { id: "PM-15", name: "plan separe", icon: "calendar", fee: "0%", active: true },
     { id: "PM-01", name: "Efectivo", icon: "cash", fee: "0%", active: true },
     { id: "PM-02", name: "Tarjeta Débito/Crédito", icon: "card", fee: "0.8%", active: true },
-    { id: "PM-03", name: "Bizum / Pago QR", icon: "qr", fee: "0%", active: true },
+    { id: "PM-03", name: "Transferencia Bancaria", icon: "bank", fee: "0%", active: true },
     { id: "PM-04", name: "Crédito Cliente", icon: "credit", fee: "0%", active: true },
-    { id: "PM-05", name: "Transferencia Bancaria", icon: "bank", fee: "0%", active: true },
+    { id: "PM-15", name: "Plan Separe", icon: "calendar", fee: "0%", active: true },
+    { id: "PM-30", name: "ADDI", icon: "credit", fee: "0%", active: true },
     { id: "PM-06", name: "Pago Mixto", icon: "shuffle", fee: "0%", active: true }
   ],
 
