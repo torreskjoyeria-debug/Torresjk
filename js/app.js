@@ -8922,12 +8922,14 @@ class NexusApp {
               <div style="font-size:0.68rem; color:var(--text-subtle); margin-top:2px; line-height:1.2;">
                 ${tx.paymentBreakdown.cash > 0 ? `<span>💵 ${this.formatCurrency(tx.paymentBreakdown.cash)}</span> ` : ''}
                 ${tx.paymentBreakdown.card > 0 ? `<span>💳 ${this.formatCurrency(tx.paymentBreakdown.card)}</span> ` : ''}
-                ${tx.paymentBreakdown.transfer > 0 ? `<span>🏦 ${this.formatCurrency(tx.paymentBreakdown.transfer)}</span>` : ''}
+                ${tx.paymentBreakdown.transfer > 0 ? `<span>🏦 ${this.formatCurrency(tx.paymentBreakdown.transfer)}</span> ` : ''}
+                ${tx.paymentBreakdown.credit > 0 ? `<span style="color:#D97706; font-weight:700;">🏷️ Crédito: ${this.formatCurrency(tx.paymentBreakdown.credit)}</span> ` : ''}
+                ${tx.paymentBreakdown.addi > 0 ? `<span style="color:#0891B2; font-weight:700;">⚡ ADDI: ${this.formatCurrency(tx.paymentBreakdown.addi)}</span>` : ''}
               </div>
             ` : ''}
           ` : `
-            <span class="badge" style="background:${(tx.paymentMethod || '').toLowerCase().includes('tarjeta') ? 'rgba(168, 85, 247, 0.14)' : ((tx.paymentMethod || '').toLowerCase().includes('transfer') ? 'rgba(59, 130, 246, 0.14)' : 'rgba(100, 116, 139, 0.08)')}; color:${(tx.paymentMethod || '').toLowerCase().includes('tarjeta') ? '#7E22CE' : ((tx.paymentMethod || '').toLowerCase().includes('transfer') ? '#1D4ED8' : 'var(--text-main)')}; font-weight:700; padding:2px 8px; border-radius:12px;">
-              ${(tx.paymentMethod || '').toLowerCase().includes('tarjeta') ? '💳 ' : ((tx.paymentMethod || '').toLowerCase().includes('transfer') ? '🏦 ' : '')}${this.escapeHtml(tx.paymentMethod || 'Efectivo')}
+            <span class="badge" style="background:${(tx.paymentMethod || '').toLowerCase().includes('tarjeta') ? 'rgba(168, 85, 247, 0.14)' : ((tx.paymentMethod || '').toLowerCase().includes('transfer') ? 'rgba(59, 130, 246, 0.14)' : ((tx.paymentMethod || '').toLowerCase().includes('addi') ? 'rgba(6, 182, 212, 0.14)' : ((tx.paymentMethod || '').toLowerCase().includes('crédito') ? 'rgba(245, 158, 11, 0.14)' : 'rgba(100, 116, 139, 0.08)')))}; color:${(tx.paymentMethod || '').toLowerCase().includes('tarjeta') ? '#7E22CE' : ((tx.paymentMethod || '').toLowerCase().includes('transfer') ? '#1D4ED8' : ((tx.paymentMethod || '').toLowerCase().includes('addi') ? '#0E7490' : ((tx.paymentMethod || '').toLowerCase().includes('crédito') ? '#B45309' : 'var(--text-main)')))}; font-weight:700; padding:2px 8px; border-radius:12px;">
+              ${(tx.paymentMethod || '').toLowerCase().includes('tarjeta') ? '💳 ' : ((tx.paymentMethod || '').toLowerCase().includes('transfer') ? '🏦 ' : ((tx.paymentMethod || '').toLowerCase().includes('addi') ? '⚡ ' : ((tx.paymentMethod || '').toLowerCase().includes('crédito') ? '🏷️ ' : '')))}${this.escapeHtml(tx.paymentMethod || 'Efectivo')}
             </span>
           `}
         </td>
@@ -9343,13 +9345,25 @@ class NexusApp {
                 ${tx.paymentBreakdown.cash > 0 ? `<div>💵 <b>${this.formatCurrency(tx.paymentBreakdown.cash)}</b></div>` : ''}
                 ${tx.paymentBreakdown.card > 0 ? `<div>💳 <b>${this.formatCurrency(tx.paymentBreakdown.card)}</b> ${tx.paymentBreakdown.cardAccount ? `<span style="font-size:0.65rem;">(${this.escapeHtml(tx.paymentBreakdown.cardAccount)})</span>` : ''}</div>` : ''}
                 ${tx.paymentBreakdown.transfer > 0 ? `<div>🏦 <b>${this.formatCurrency(tx.paymentBreakdown.transfer)}</b> ${tx.paymentBreakdown.transferAccount ? `<span style="font-size:0.65rem;">(${this.escapeHtml(tx.paymentBreakdown.transferAccount)})</span>` : ''}</div>` : ''}
+                ${tx.paymentBreakdown.credit > 0 ? `<div>🏷️ <b style="color:#B45309;">Crédito:</b> <b>${this.formatCurrency(tx.paymentBreakdown.credit)}</b></div>` : ''}
+                ${tx.paymentBreakdown.addi > 0 ? `<div>⚡ <b style="color:#0E7490;">ADDI:</b> <b>${this.formatCurrency(tx.paymentBreakdown.addi)}</b> ${tx.paymentBreakdown.addiAccount ? `<span style="font-size:0.65rem;">(${this.escapeHtml(tx.paymentBreakdown.addiAccount)})</span>` : ''}</div>` : ''}
               </div>
             ` : ''}
           ` : `
-            <span class="badge" style="background:${(tx.paymentMethod || '').toLowerCase().includes('tarjeta') ? 'rgba(168, 85, 247, 0.14)' : ((tx.paymentMethod || '').toLowerCase().includes('transfer') ? 'rgba(59, 130, 246, 0.14)' : 'rgba(100, 116, 139, 0.08)')}; color:${(tx.paymentMethod || '').toLowerCase().includes('tarjeta') ? '#7E22CE' : ((tx.paymentMethod || '').toLowerCase().includes('transfer') ? '#1D4ED8' : 'var(--text-main)')}; font-weight:700; padding:2px 8px; border-radius:12px;">
-              ${(tx.paymentMethod || '').toLowerCase().includes('tarjeta') ? '💳 ' : ((tx.paymentMethod || '').toLowerCase().includes('transfer') ? '🏦 ' : '')}${this.escapeHtml(tx.paymentMethod || 'Efectivo')}
+            <span class="badge" style="background:${
+              (tx.paymentMethod || '').toLowerCase().includes('tarjeta') ? 'rgba(168, 85, 247, 0.14)' :
+              ((tx.paymentMethod || '').toLowerCase().includes('transfer') ? 'rgba(59, 130, 246, 0.14)' :
+              ((tx.paymentMethod || '').toLowerCase().includes('addi') ? 'rgba(6, 182, 212, 0.14)' :
+              ((tx.paymentMethod || '').toLowerCase().includes('crédito') || (tx.paymentMethod || '').toLowerCase().includes('credito') ? 'rgba(245, 158, 11, 0.14)' : 'rgba(100, 116, 139, 0.08)'))
+            )}; color:${
+              (tx.paymentMethod || '').toLowerCase().includes('tarjeta') ? '#7E22CE' :
+              ((tx.paymentMethod || '').toLowerCase().includes('transfer') ? '#1D4ED8' :
+              ((tx.paymentMethod || '').toLowerCase().includes('addi') ? '#0E7490' :
+              ((tx.paymentMethod || '').toLowerCase().includes('crédito') || (tx.paymentMethod || '').toLowerCase().includes('credito') ? '#B45309' : 'var(--text-main)')))
+            }; font-weight:700; padding:2px 8px; border-radius:12px;">
+              ${(tx.paymentMethod || '').toLowerCase().includes('tarjeta') ? '💳 ' : ((tx.paymentMethod || '').toLowerCase().includes('transfer') ? '🏦 ' : ((tx.paymentMethod || '').toLowerCase().includes('addi') ? '⚡ ' : ((tx.paymentMethod || '').toLowerCase().includes('crédito') || (tx.paymentMethod || '').toLowerCase().includes('credito') ? '🏷️ ' : '')))}${this.escapeHtml(tx.paymentMethod || 'Efectivo')}
             </span>
-            ${tx.voucher ? `<div style="font-size:0.7rem; color:var(--text-subtle); margin-top:2px;">${(tx.paymentMethod || '').toLowerCase().includes('tarjeta') ? 'Voucher' : 'Comprobante'}: <b>#${this.escapeHtml(tx.voucher)}</b></div>` : ''}
+            ${tx.voucher ? `<div style="font-size:0.7rem; color:var(--text-subtle); margin-top:2px;">${(tx.paymentMethod || '').toLowerCase().includes('tarjeta') ? 'Voucher' : ((tx.paymentMethod || '').toLowerCase().includes('addi') ? 'Ref ADDI' : 'Comprobante')}: <b>#${this.escapeHtml(tx.voucher)}</b></div>` : ''}
           `}
         </td>
         <td><span class="font-bold">${this.formatCurrency(Math.abs(tx.total))}</span></td>
@@ -9416,6 +9430,8 @@ class NexusApp {
         if (bd.cash > 0) parts.push(`Efectivo: ${this.formatCurrency(bd.cash)}`);
         if (bd.card > 0) parts.push(`Tarjeta: ${this.formatCurrency(bd.card)}${bd.cardAccount ? ` (${bd.cardAccount})` : ''}`);
         if (bd.transfer > 0) parts.push(`Transferencia: ${this.formatCurrency(bd.transfer)}${bd.transferAccount ? ` (${bd.transferAccount})` : ''}`);
+        if (bd.credit > 0) parts.push(`Crédito Cartera: ${this.formatCurrency(bd.credit)}`);
+        if (bd.addi > 0) parts.push(`ADDI: ${this.formatCurrency(bd.addi)}${bd.addiAccount ? ` (${bd.addiAccount})` : ''}`);
         methodDisplay = `Pago Mixto [${parts.join(' | ')}]`;
 
         if (bd.cash > 0) {
@@ -9435,6 +9451,18 @@ class NexusApp {
           if (!methodsMap[k]) methodsMap[k] = { count: 0, total: 0 };
           methodsMap[k].count++;
           methodsMap[k].total += bd.transfer;
+        }
+        if (bd.credit > 0) {
+          const k = 'Crédito Directo (Cartera)';
+          if (!methodsMap[k]) methodsMap[k] = { count: 0, total: 0 };
+          methodsMap[k].count++;
+          methodsMap[k].total += bd.credit;
+        }
+        if (bd.addi > 0) {
+          const k = bd.addiAccount ? `ADDI (${bd.addiAccount})` : 'Financiamiento ADDI';
+          if (!methodsMap[k]) methodsMap[k] = { count: 0, total: 0 };
+          methodsMap[k].count++;
+          methodsMap[k].total += bd.addi;
         }
       } else {
         if (!methodsMap[rawMethod]) {
@@ -11412,10 +11440,14 @@ class NexusApp {
         const cashAmt = Math.round(Number(bd.cash) || 0);
         const cardAmt = Math.round(Number(bd.card) || 0);
         const transferAmt = Math.round(Number(bd.transfer) || 0);
+        const creditAmt = Math.round(Number(bd.credit) || 0);
+        const addiAmt = Math.round(Number(bd.addi) || 0);
         salesEfectivo += cashAmt;
         salesTarjeta += cardAmt;
         salesTransferencia += transferAmt;
-        const rem = Math.max(0, amt - (cashAmt + cardAmt + transferAmt));
+        salesCredito += creditAmt;
+        if (addiAmt > 0) salesTarjeta += addiAmt; // ADDI ingresa por liquidación bancaria
+        const rem = Math.max(0, amt - (cashAmt + cardAmt + transferAmt + creditAmt + addiAmt));
         if (rem > 0) salesOtros += rem;
       } else if (m.includes('efectivo') || m.includes('cash')) {
         salesEfectivo += amt;
@@ -11423,6 +11455,8 @@ class NexusApp {
         salesTarjeta += amt;
       } else if (m.includes('transfer') || m.includes('banco') || m.includes('cta')) {
         salesTransferencia += amt;
+      } else if (m.includes('addi')) {
+        salesTarjeta += amt;
       } else if (m.includes('crédito') || m.includes('credito')) {
         salesCredito += amt;
       } else {
@@ -11549,6 +11583,7 @@ class NexusApp {
     const getMethodKey = (m) => {
       const lower = (m || '').toLowerCase();
       if (lower.includes('efectivo') || lower.includes('cash')) return 'Efectivo';
+      if (lower.includes('addi')) return 'ADDI';
       if (lower.includes('tarjeta') || lower.includes('card') || lower.includes('débito') || lower.includes('debito') || lower.includes('datafono') || lower.includes('datáfono')) return 'Tarjeta';
       if (lower.includes('transfer') || lower.includes('banco') || lower.includes('cta')) return 'Transferencia';
       if ((lower.includes('crédito') || lower.includes('credito'))) return 'Crédito';
@@ -11560,6 +11595,7 @@ class NexusApp {
       'Efectivo': { icon: '💵', color: 'var(--emerald-text, #059669)', badgeBg: 'rgba(16, 185, 129, 0.14)', badgeText: '#047857' },
       'Transferencia': { icon: '🏦', color: '#4F46E5', badgeBg: 'rgba(99, 102, 241, 0.14)', badgeText: '#4338CA' },
       'Tarjeta': { icon: '💳', color: '#9333EA', badgeBg: 'rgba(168, 85, 247, 0.14)', badgeText: '#7E22CE' },
+      'ADDI': { icon: '⚡', color: '#0891B2', badgeBg: 'rgba(6, 182, 212, 0.14)', badgeText: '#0E7490' },
       'Crédito': { icon: '🏷️', color: '#D97706', badgeBg: 'rgba(245, 158, 11, 0.14)', badgeText: '#B45309' },
       'Crédito Cliente': { icon: '🏷️', color: '#D97706', badgeBg: 'rgba(245, 158, 11, 0.14)', badgeText: '#B45309' },
       'Plan Separe': { icon: '📦', color: '#0284C7', badgeBg: 'rgba(14, 165, 233, 0.14)', badgeText: '#0369A1' },
@@ -11574,6 +11610,8 @@ class NexusApp {
         const cashAmt = Math.round(Number(bd.cash) || 0);
         const cardAmt = Math.round(Number(bd.card) || 0);
         const transferAmt = Math.round(Number(bd.transfer) || 0);
+        const creditAmt = Math.round(Number(bd.credit) || 0);
+        const addiAmt = Math.round(Number(bd.addi) || 0);
 
         if (cashAmt > 0) {
           if (!methodMap['Efectivo']) methodMap['Efectivo'] = { total: 0, count: 0, salesTotal: 0, salesCount: 0, abonosTotal: 0, abonosCount: 0, accounts: {} };
@@ -11600,6 +11638,22 @@ class NexusApp {
           const acct = bd.transferAccount || t.targetAccount || 'General';
           methodMap['Transferencia'].accounts[acct] = (methodMap['Transferencia'].accounts[acct] || 0) + transferAmt;
         }
+        if (creditAmt > 0) {
+          if (!methodMap['Crédito']) methodMap['Crédito'] = { total: 0, count: 0, salesTotal: 0, salesCount: 0, abonosTotal: 0, abonosCount: 0, accounts: {} };
+          methodMap['Crédito'].total += creditAmt;
+          methodMap['Crédito'].count++;
+          methodMap['Crédito'].salesTotal += creditAmt;
+          methodMap['Crédito'].salesCount++;
+        }
+        if (addiAmt > 0) {
+          if (!methodMap['ADDI']) methodMap['ADDI'] = { total: 0, count: 0, salesTotal: 0, salesCount: 0, abonosTotal: 0, abonosCount: 0, accounts: {} };
+          methodMap['ADDI'].total += addiAmt;
+          methodMap['ADDI'].count++;
+          methodMap['ADDI'].salesTotal += addiAmt;
+          methodMap['ADDI'].salesCount++;
+          const acct = bd.addiAccount || 'ADDI';
+          methodMap['ADDI'].accounts[acct] = (methodMap['ADDI'].accounts[acct] || 0) + addiAmt;
+        }
       } else {
         const key = getMethodKey(t.paymentMethod);
         if (!methodMap[key]) {
@@ -11610,8 +11664,8 @@ class NexusApp {
         methodMap[key].count++;
         methodMap[key].salesTotal += amt;
         methodMap[key].salesCount++;
-        if (key === 'Tarjeta' || key === 'Transferencia') {
-          const acct = t.targetAccount || (t.paymentMethod && t.paymentMethod.includes('(') ? t.paymentMethod.replace(/^[^(]+\(([^)]+)\).*$/, '$1') : 'General');
+        if (key === 'Tarjeta' || key === 'Transferencia' || key === 'ADDI') {
+          const acct = t.targetAccount || (t.paymentMethod && t.paymentMethod.includes('(') ? t.paymentMethod.replace(/^[^(]+\(([^)]+)\).*$/, '$1') : (key === 'ADDI' ? 'ADDI' : 'General'));
           methodMap[key].accounts[acct] = (methodMap[key].accounts[acct] || 0) + amt;
         }
       }
@@ -17797,6 +17851,8 @@ class NexusApp {
         const cCash = Math.round(Number(bd.cash) || 0);
         const cCard = Math.round(Number(bd.card) || 0);
         const cTrans = Math.round(Number(bd.transfer) || 0);
+        const cCredit = Math.round(Number(bd.credit) || 0);
+        const cAddi = Math.round(Number(bd.addi) || 0);
 
         if (cCash > 0) {
           const key = 'Efectivo (Caja Gaveta)';
@@ -17819,7 +17875,21 @@ class NexusApp {
           entry.count += 1;
           entry.total += cTrans;
         }
-        const rem = Math.max(0, amt - (cCash + cCard + cTrans));
+        if (cCredit > 0) {
+          const key = 'Crédito Directo (Cartera)';
+          if (!pmMap.has(key)) pmMap.set(key, { name: key, count: 0, total: 0 });
+          const entry = pmMap.get(key);
+          entry.count += 1;
+          entry.total += cCredit;
+        }
+        if (cAddi > 0) {
+          const key = 'Financiamiento ADDI';
+          if (!pmMap.has(key)) pmMap.set(key, { name: key, count: 0, total: 0 });
+          const entry = pmMap.get(key);
+          entry.count += 1;
+          entry.total += cAddi;
+        }
+        const rem = Math.max(0, amt - (cCash + cCard + cTrans + cCredit + cAddi));
         if (rem > 0) {
           const key = 'Otros Canales';
           if (!pmMap.has(key)) pmMap.set(key, { name: key, count: 0, total: 0 });
@@ -17830,10 +17900,11 @@ class NexusApp {
       } else {
         let normMethod = rawMethod;
         if (lower.includes('efectivo')) normMethod = 'Efectivo (Caja Gaveta)';
+        else if (lower.includes('addi')) normMethod = 'Financiamiento ADDI';
         else if (lower.includes('transferencia') || lower.includes('bancolombia') || lower.includes('nequi') || lower.includes('daviplata')) normMethod = 'Transferencia Bancaria (Bancos)';
-        else if (lower.includes('tarjeta') || lower.includes('debito') || lower.includes('credito') || lower.includes('datafono')) normMethod = 'Tarjetas Débito / Crédito (Datáfono)';
+        else if (lower.includes('tarjeta') || lower.includes('debito') || lower.includes('datafono')) normMethod = 'Tarjetas Débito / Crédito (Datáfono)';
         else if (lower.includes('separe') || lower.includes('plan separe')) normMethod = 'Plan Separe';
-        else if (lower.includes('credito cliente') || lower.includes('crédito')) normMethod = 'Crédito Directo (Cartera)';
+        else if (lower.includes('credito') || lower.includes('crédito') || lower.includes('cartera')) normMethod = 'Crédito Directo (Cartera)';
 
         if (!pmMap.has(normMethod)) {
           pmMap.set(normMethod, { name: normMethod, count: 0, total: 0 });
@@ -19269,7 +19340,7 @@ class NexusApp {
           </div>` : ''}
           <div style="display:flex; justify-content:space-between; font-weight:800;">
             <span style="font-weight:800;">Forma pago:</span>
-            <span style="font-weight:800;">${this.escapeHtml((paymentMethod || '').toLowerCase().includes('mixto') ? 'Pago Mixto' : ((paymentMethod || '').toLowerCase().includes('tarjeta') ? 'Tarjeta' : paymentMethod))}</span>
+            <span style="font-weight:800;">${this.escapeHtml((paymentMethod || '').toLowerCase().includes('mixto') ? 'Pago Mixto' : ((paymentMethod || '').toLowerCase().includes('tarjeta') ? 'Tarjeta' : ((paymentMethod || '').toLowerCase().includes('addi') ? 'ADDI' : paymentMethod)))}</span>
           </div>
           ${options.paymentBreakdown ? `
           <div style="margin:4px 0; padding:4px 0; border-top:1px dashed #777; border-bottom:1px dashed #777; font-size:12.5px; font-weight:800;">
@@ -19277,6 +19348,8 @@ class NexusApp {
             ${options.paymentBreakdown.cash > 0 ? `<div style="display:flex; justify-content:space-between;"><span>💵 Efectivo:</span><span>${this.formatCurrency(options.paymentBreakdown.cash)}</span></div>` : ''}
             ${options.paymentBreakdown.card > 0 ? `<div style="display:flex; justify-content:space-between;"><span>💳 Tarjeta:</span><span>${this.formatCurrency(options.paymentBreakdown.card)}</span></div>${options.paymentBreakdown.cardAccount ? `<div style="font-size:11px; color:#000; padding-left:12px; font-weight:800;">Cta: ${this.escapeHtml(options.paymentBreakdown.cardAccount)}</div>` : ''}${options.paymentBreakdown.cardVoucher ? `<div style="font-size:11px; color:#000; padding-left:12px; font-weight:800;">Voucher: #${this.escapeHtml(options.paymentBreakdown.cardVoucher)}</div>` : ''}` : ''}
             ${options.paymentBreakdown.transfer > 0 ? `<div style="display:flex; justify-content:space-between;"><span>🏦 Transferencia:</span><span>${this.formatCurrency(options.paymentBreakdown.transfer)}</span></div>${options.paymentBreakdown.transferAccount ? `<div style="font-size:11px; color:#000; padding-left:12px; font-weight:800;">Cta: ${this.escapeHtml(options.paymentBreakdown.transferAccount)}</div>` : ''}${options.paymentBreakdown.transferVoucher ? `<div style="font-size:11px; color:#000; padding-left:12px; font-weight:800;">Comp: #${this.escapeHtml(options.paymentBreakdown.transferVoucher)}</div>` : ''}` : ''}
+            ${options.paymentBreakdown.credit > 0 ? `<div style="display:flex; justify-content:space-between;"><span>🏷️ Crédito (Cartera):</span><span>${this.formatCurrency(options.paymentBreakdown.credit)}</span></div>` : ''}
+            ${options.paymentBreakdown.addi > 0 ? `<div style="display:flex; justify-content:space-between;"><span>⚡ ADDI:</span><span>${this.formatCurrency(options.paymentBreakdown.addi)}</span></div>${options.paymentBreakdown.addiAccount ? `<div style="font-size:11px; color:#000; padding-left:12px; font-weight:800;">Cta: ${this.escapeHtml(options.paymentBreakdown.addiAccount)}</div>` : ''}${options.paymentBreakdown.addiVoucher ? `<div style="font-size:11px; color:#000; padding-left:12px; font-weight:800;">Ref/Aprob: #${this.escapeHtml(options.paymentBreakdown.addiVoucher)}</div>` : ''}` : ''}
           </div>
           ` : ''}
           ${options.voucher && !options.paymentBreakdown ? `
@@ -19298,7 +19371,7 @@ class NexusApp {
             <span style="font-weight:900;">Saldo Separe:</span>
             <span style="font-weight:900;">${this.formatCurrency(separePending)}</span>
           </div>` : ''}
-          ${customerCreditBalance !== null && customerCreditBalance !== undefined && paymentMethod === 'Crédito' ? `
+          ${customerCreditBalance !== null && customerCreditBalance !== undefined && (paymentMethod === 'Crédito' || (options.paymentBreakdown && options.paymentBreakdown.credit > 0)) ? `
           <div style="display:flex; justify-content:space-between; font-weight:900; color:#92400e; margin-top:2px;">
             <span style="font-weight:900;">Saldo Deuda Cliente:</span>
             <span style="font-weight:900;">${this.formatCurrency(customerCreditBalance)}</span>
@@ -25498,6 +25571,8 @@ class NexusApp {
         this.populateCheckoutCustomerSelect();
         this.populateCardAccountSelect();
         this.populateTransferAccountSelect();
+        this.populateAddiAccountSelect();
+        this.populateMixedAddiAccountSelect();
         this.renderCheckoutSummary();
         this.updateCheckoutTotalDisplay();
         const totals = this.getCheckoutTotals();
@@ -25625,7 +25700,7 @@ class NexusApp {
     const selectedCustomerName = custSelect?.value || 'Cliente Mostrador';
     const isMostrador = selectedCustomerName === 'Cliente Mostrador';
     const cust = this.data.customers.find(c => c.name === selectedCustomerName);
-    const allowed = cust ? (cust.allowedPaymentMethods || ['Efectivo', 'Tarjeta', 'Transferencia', 'Pago Mixto', 'Crédito', 'Plan Separe']) : ['Efectivo', 'Tarjeta', 'Transferencia', 'Pago Mixto', 'Crédito', 'Plan Separe'];
+    const allowed = cust ? (cust.allowedPaymentMethods || ['Efectivo', 'Tarjeta', 'Transferencia', 'Pago Mixto', 'Crédito', 'Plan Separe', 'ADDI']) : ['Efectivo', 'Tarjeta', 'Transferencia', 'Pago Mixto', 'Crédito', 'Plan Separe', 'ADDI'];
 
     const btnCash = document.getElementById('pay-btn-cash');
     const btnCard = document.getElementById('pay-btn-card');
@@ -25633,6 +25708,7 @@ class NexusApp {
     const btnMixed = document.getElementById('pay-btn-mixed');
     const btnCredit = document.getElementById('pay-btn-credit');
     const btnSepare = document.getElementById('pay-btn-separe');
+    const btnAddi = document.getElementById('pay-btn-addi');
 
     const updateBtn = (btn, methodKey, isAllowed) => {
       if (!btn) return;
@@ -25658,6 +25734,7 @@ class NexusApp {
     updateBtn(btnMixed, 'Pago Mixto', allowed.includes('Pago Mixto') || allowed.includes('Efectivo') || isMostrador);
     updateBtn(btnCredit, 'Crédito', !isMostrador && allowed.includes('Crédito'));
     updateBtn(btnSepare, 'Plan Separe', !isMostrador && allowed.includes('Plan Separe'));
+    updateBtn(btnAddi, 'ADDI', allowed.includes('ADDI') || isMostrador || true);
 
     // Notice banner
     const noticeEl = document.getElementById('checkout-customer-allowed-notice');
@@ -25674,7 +25751,7 @@ class NexusApp {
     // If currently active button is disabled or none active, pick first available
     const activeBtn = document.querySelector('.pay-method-btn.active');
     if (!activeBtn || activeBtn.disabled) {
-      const firstAvailable = [btnCash, btnCard, btnTransfer, btnMixed, btnCredit, btnSepare].find(b => b && !b.disabled);
+      const firstAvailable = [btnCash, btnCard, btnTransfer, btnMixed, btnCredit, btnSepare, btnAddi].find(b => b && !b.disabled);
       if (firstAvailable) {
         firstAvailable.click();
       }
@@ -25705,6 +25782,28 @@ class NexusApp {
     }).join('');
   }
 
+  populateMixedAddiAccountSelect() {
+    const select = document.getElementById('checkout-mixed-addi-account');
+    if (!select) return;
+    const finalAccounts = ['ADDI (Liquidación Directa)', ...this.getDestinationBankAccounts()];
+    const currentVal = select.value;
+    select.innerHTML = finalAccounts.map((acc, idx) => {
+      const isSelected = (currentVal && currentVal === acc) || (!currentVal && idx === 0) ? 'selected' : '';
+      return `<option value="${this.escapeHtml(acc)}" ${isSelected}>⚡ ${this.escapeHtml(acc)}</option>`;
+    }).join('');
+  }
+
+  populateAddiAccountSelect() {
+    const select = document.getElementById('checkout-addi-account-select');
+    if (!select) return;
+    const finalAccounts = ['ADDI (Liquidación Directa)', ...this.getDestinationBankAccounts()];
+    const currentVal = select.value;
+    select.innerHTML = finalAccounts.map((acc, idx) => {
+      const isSelected = (currentVal && currentVal === acc) || (!currentVal && idx === 0) ? 'selected' : '';
+      return `<option value="${this.escapeHtml(acc)}" ${isSelected}>⚡ ${this.escapeHtml(acc)}</option>`;
+    }).join('');
+  }
+
   autoFillMixed(type) {
     const totals = this.getCheckoutTotals('mixed');
     const baseTotal = totals.baseTotal;
@@ -25712,15 +25811,21 @@ class NexusApp {
     const cashInp = document.getElementById('mixed-cash-amount');
     const cardInp = document.getElementById('mixed-card-amount');
     const transInp = document.getElementById('mixed-transfer-amount');
+    const creditInp = document.getElementById('mixed-credit-amount');
+    const addiInp = document.getElementById('mixed-addi-amount');
 
     const cashVal = type === 'cash' ? 0 : (this.parseCleanNumber(cashInp?.value) || 0);
     const cardVal = type === 'card' ? 0 : (this.parseCleanNumber(cardInp?.value) || 0);
     const transVal = type === 'transfer' ? 0 : (this.parseCleanNumber(transInp?.value) || 0);
+    const creditVal = type === 'credit' ? 0 : (this.parseCleanNumber(creditInp?.value) || 0);
+    const addiVal = type === 'addi' ? 0 : (this.parseCleanNumber(addiInp?.value) || 0);
 
-    const remainderBase = Math.max(0, baseTotal - (cashVal + transVal + (cardFeeRate > 0 && type !== 'card' ? Math.round(cardVal / (1 + cardFeeRate / 100)) : cardVal)));
+    const remainderBase = Math.max(0, baseTotal - (cashVal + transVal + creditVal + addiVal + (cardFeeRate > 0 && type !== 'card' ? Math.round(cardVal / (1 + cardFeeRate / 100)) : cardVal)));
 
     if (type === 'cash' && cashInp) cashInp.value = this.formatNumberWithCommas(remainderBase);
     if (type === 'transfer' && transInp) transInp.value = this.formatNumberWithCommas(remainderBase);
+    if (type === 'credit' && creditInp) creditInp.value = this.formatNumberWithCommas(remainderBase);
+    if (type === 'addi' && addiInp) addiInp.value = this.formatNumberWithCommas(remainderBase);
     if (type === 'card' && cardInp) {
       const cardWithFee = cardFeeRate > 0 ? Math.round(remainderBase * (1 + cardFeeRate / 100)) : remainderBase;
       cardInp.value = this.formatNumberWithCommas(cardWithFee);
@@ -25735,7 +25840,9 @@ class NexusApp {
     const cashVal = this.parseCleanNumber(document.getElementById('mixed-cash-amount')?.value) || 0;
     const cardVal = this.parseCleanNumber(document.getElementById('mixed-card-amount')?.value) || 0;
     const transVal = this.parseCleanNumber(document.getElementById('mixed-transfer-amount')?.value) || 0;
-    const totalCovered = cashVal + cardVal + transVal;
+    const creditVal = this.parseCleanNumber(document.getElementById('mixed-credit-amount')?.value) || 0;
+    const addiVal = this.parseCleanNumber(document.getElementById('mixed-addi-amount')?.value) || 0;
+    const totalCovered = cashVal + cardVal + transVal + creditVal + addiVal;
 
     const toPayEl = document.getElementById('mixed-total-to-pay');
     const coveredEl = document.getElementById('mixed-covered-amount');
@@ -25767,6 +25874,40 @@ class NexusApp {
       } else {
         feeBreakdownEl.style.display = 'none';
         feeBreakdownEl.innerHTML = '';
+      }
+    }
+
+    // Información de cupo de crédito dinámico en tiempo real
+    const selectedCustomerName = document.getElementById('checkout-customer-select')?.value || 'Cliente Mostrador';
+    const isMostrador = selectedCustomerName === 'Cliente Mostrador';
+    const cust = this.data.customers.find(c => c.name === selectedCustomerName);
+    const creditInfoText = document.getElementById('mixed-credit-info-text');
+    const creditWarnEl = document.getElementById('mixed-credit-warning');
+
+    if (creditInfoText) {
+      if (isMostrador) {
+        creditInfoText.innerHTML = `<span style="color:#EF4444; font-weight:700;">⚠️ Seleccione un cliente registrado para usar crédito.</span>`;
+        if (creditWarnEl) {
+          if (creditVal > 0) {
+            creditWarnEl.style.display = 'block';
+            creditWarnEl.textContent = '⚠️ Para autorizar crédito en el pago mixto debe seleccionar un cliente con cédula.';
+          } else {
+            creditWarnEl.style.display = 'none';
+          }
+        }
+      } else if (cust) {
+        const limit = Number(cust.creditLimit) || 0;
+        const current = Number(cust.creditBalance) || 0;
+        const available = Math.max(0, limit - current);
+        creditInfoText.innerHTML = `Cupo disp: <b style="color:var(--emerald-text);">${this.formatCurrency(available)}</b> · Deuda: <b>${this.formatCurrency(current)}</b>`;
+        if (creditWarnEl) {
+          if (creditVal > available + 0.01) {
+            creditWarnEl.style.display = 'block';
+            creditWarnEl.textContent = `⚠️ Este monto (${this.formatCurrency(creditVal)}) excede el cupo disponible del cliente (${this.formatCurrency(available)}).`;
+          } else {
+            creditWarnEl.style.display = 'none';
+          }
+        }
       }
     }
 
@@ -25814,6 +25955,7 @@ class NexusApp {
     const cashCalcBox = document.getElementById('cash-calc-box');
     const cardBox = document.getElementById('card-info-box');
     const transferBox = document.getElementById('transfer-info-box');
+    const addiBox = document.getElementById('addi-info-box');
     const mixedBox = document.getElementById('mixed-info-box');
     const creditBox = document.getElementById('credit-info-box');
     const separeBox = document.getElementById('separe-info-box');
@@ -25827,12 +25969,17 @@ class NexusApp {
       transferBox.style.display = this.selectedPayMethod === 'transfer' ? 'flex' : 'none';
       if (this.selectedPayMethod === 'transfer') this.populateTransferAccountSelect();
     }
+    if (addiBox) {
+      addiBox.style.display = this.selectedPayMethod === 'addi' ? 'flex' : 'none';
+      if (this.selectedPayMethod === 'addi') this.populateAddiAccountSelect();
+    }
     if (mixedBox) {
       mixedBox.style.display = this.selectedPayMethod === 'mixed' ? 'flex' : 'none';
       if (this.selectedPayMethod === 'mixed') {
         this.populateMixedCardAccountSelect();
         this.populateMixedTransferAccountSelect();
-        ['mixed-cash-amount', 'mixed-card-amount', 'mixed-transfer-amount'].forEach(id => {
+        this.populateMixedAddiAccountSelect();
+        ['mixed-cash-amount', 'mixed-card-amount', 'mixed-transfer-amount', 'mixed-credit-amount', 'mixed-addi-amount'].forEach(id => {
           const el = document.getElementById(id);
           if (el) this.setupThousandMask(el, false, () => this.updateMixedPaymentCalc());
         });
@@ -25910,7 +26057,8 @@ class NexusApp {
       'transfer': 'Transferencia',
       'mixed': 'Pago Mixto',
       'credit': 'Crédito',
-      'separe': 'Plan Separe'
+      'separe': 'Plan Separe',
+      'addi': 'ADDI'
     };
     const payMethodName = payMethodNames[this.selectedPayMethod] || 'Efectivo';
 
@@ -25928,6 +26076,13 @@ class NexusApp {
       ? (document.getElementById('checkout-transfer-voucher-input')?.value?.trim() || '')
       : '';
 
+    const addiAccount = this.selectedPayMethod === 'addi'
+      ? (document.getElementById('checkout-addi-account-select')?.value?.trim() || 'ADDI (Liquidación Directa)')
+      : '';
+    const addiVoucher = this.selectedPayMethod === 'addi'
+      ? (document.getElementById('checkout-addi-voucher-input')?.value?.trim() || '')
+      : '';
+
     let txPaymentMethod = payMethodName;
     let targetAccount = '';
     let voucher = '';
@@ -25940,6 +26095,10 @@ class NexusApp {
       targetAccount = transferAccount;
       voucher = transferVoucher;
       if (transferAccount) txPaymentMethod = `Transferencia (${transferAccount})`;
+    } else if (this.selectedPayMethod === 'addi') {
+      targetAccount = addiAccount;
+      voucher = addiVoucher;
+      txPaymentMethod = addiAccount && !addiAccount.includes('ADDI') ? `ADDI (${addiAccount})` : 'ADDI';
     }
 
     // 1. Guard against unauthorized methods for unregistered clients
@@ -25969,15 +26128,36 @@ class NexusApp {
       const cashVal = this.parseCleanNumber(document.getElementById('mixed-cash-amount')?.value) || 0;
       const cardVal = this.parseCleanNumber(document.getElementById('mixed-card-amount')?.value) || 0;
       const transVal = this.parseCleanNumber(document.getElementById('mixed-transfer-amount')?.value) || 0;
+      const creditVal = this.parseCleanNumber(document.getElementById('mixed-credit-amount')?.value) || 0;
+      const addiVal = this.parseCleanNumber(document.getElementById('mixed-addi-amount')?.value) || 0;
+
       const mixedCardAccount = document.getElementById('checkout-mixed-card-account')?.value?.trim() || 'Cuenta Carlos';
       const mixedCardVoucher = document.getElementById('checkout-mixed-card-voucher')?.value?.trim() || '';
       const mixedTransferAccount = document.getElementById('checkout-mixed-transfer-account')?.value?.trim() || 'Cuenta Carlos';
       const mixedTransferVoucher = document.getElementById('checkout-mixed-transfer-voucher')?.value?.trim() || '';
+      const mixedAddiAccount = document.getElementById('checkout-mixed-addi-account')?.value?.trim() || 'ADDI (Liquidación Directa)';
+      const mixedAddiVoucher = document.getElementById('checkout-mixed-addi-voucher')?.value?.trim() || '';
 
-      const totalCovered = cashVal + cardVal + transVal;
+      const totalCovered = cashVal + cardVal + transVal + creditVal + addiVal;
       if (totalCovered < grandTotal - 0.01) {
         this.showToast(`El total cubierto (${this.formatCurrency(totalCovered)}) es insuficiente para cubrir la venta (${this.formatCurrency(grandTotal)}).`, 'warning');
         return;
+      }
+
+      if (creditVal > 0 && (!cust || isMostrador)) {
+        this.showToast('Para incluir saldo a Crédito en Pago Mixto debe seleccionar un cliente registrado en el sistema.', 'warning');
+        return;
+      }
+
+      if (creditVal > 0 && cust) {
+        const limit = Number(cust.creditLimit) || 0;
+        const current = Number(cust.creditBalance) || 0;
+        const available = Math.max(0, limit - current);
+        if (creditVal > available + 0.01) {
+          if (!confirm(`¡Advertencia de Cupo! La porción a crédito (${this.formatCurrency(creditVal)}) excede el cupo disponible del cliente (${this.formatCurrency(available)}). ¿Desea autorizar y procesar la venta?`)) {
+            return;
+          }
+        }
       }
 
       mixedPaymentBreakdown = {
@@ -25987,7 +26167,11 @@ class NexusApp {
         cardVoucher: cardVal > 0 && mixedCardVoucher ? mixedCardVoucher : undefined,
         transfer: transVal,
         transferAccount: transVal > 0 ? mixedTransferAccount : undefined,
-        transferVoucher: transVal > 0 && mixedTransferVoucher ? mixedTransferVoucher : undefined
+        transferVoucher: transVal > 0 && mixedTransferVoucher ? mixedTransferVoucher : undefined,
+        credit: creditVal,
+        addi: addiVal,
+        addiAccount: addiVal > 0 ? mixedAddiAccount : undefined,
+        addiVoucher: addiVal > 0 && mixedAddiVoucher ? mixedAddiVoucher : undefined
       };
       txPaymentMethod = 'Pago Mixto';
     }
@@ -26066,11 +26250,13 @@ class NexusApp {
       this.data.cashShiftLog.cashSales = Math.round((Number(this.data.cashShiftLog.cashSales || 0) + grandTotal) * 100) / 100;
       this.data.cashShiftLog.expectedCashInDrawer = Math.round(((Number(this.data.cashShiftLog.openingCash) || 0) + (Number(this.data.cashShiftLog.cashSales) || 0) - (Number(this.data.cashShiftLog.cashExpenses) || 0)) * 100) / 100;
       if (this.data.store) this.data.store.cashInBox = this.data.cashShiftLog.expectedCashInDrawer;
-    } else if (this.selectedPayMethod === 'card' || this.selectedPayMethod === 'transfer') {
+    } else if (this.selectedPayMethod === 'card' || this.selectedPayMethod === 'transfer' || this.selectedPayMethod === 'addi') {
       this.data.cashShiftLog.cardSales = Math.round((Number(this.data.cashShiftLog.cardSales || 0) + grandTotal) * 100) / 100;
     } else if (this.selectedPayMethod === 'mixed') {
       const mCash = mixedPaymentBreakdown?.cash || 0;
-      const mElectronic = (mixedPaymentBreakdown?.card || 0) + (mixedPaymentBreakdown?.transfer || 0);
+      const mElectronic = (mixedPaymentBreakdown?.card || 0) + (mixedPaymentBreakdown?.transfer || 0) + (mixedPaymentBreakdown?.addi || 0);
+      const mCredit = mixedPaymentBreakdown?.credit || 0;
+
       if (mCash > 0) {
         this.data.cashShiftLog.cashSales = Math.round((Number(this.data.cashShiftLog.cashSales || 0) + mCash) * 100) / 100;
         this.data.cashShiftLog.expectedCashInDrawer = Math.round(((Number(this.data.cashShiftLog.openingCash) || 0) + (Number(this.data.cashShiftLog.cashSales) || 0) - (Number(this.data.cashShiftLog.cashExpenses) || 0)) * 100) / 100;
@@ -26078,6 +26264,24 @@ class NexusApp {
       }
       if (mElectronic > 0) {
         this.data.cashShiftLog.cardSales = Math.round((Number(this.data.cashShiftLog.cardSales || 0) + mElectronic) * 100) / 100;
+      }
+      if (mCredit > 0 && cust) {
+        cust.creditBalance = Math.round(((Number(cust.creditBalance) || 0) + mCredit) * 100) / 100;
+        let existing = (this.data.customerCredits || []).find(cr => cr.customer === cust.name);
+        if (existing) {
+          existing.totalGranted = Math.round(((Number(existing.totalGranted) || 0) + mCredit) * 100) / 100;
+          existing.currentBalance = Math.round(((Number(existing.currentBalance) || 0) + mCredit) * 100) / 100;
+          existing.status = 'Al Día';
+        } else {
+          this.data.customerCredits.unshift({
+            id: `CC-${Math.floor(310 + Math.random() * 600)}`,
+            customer: cust.name,
+            totalGranted: mCredit,
+            currentBalance: mCredit,
+            dueDate: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString().split('T')[0],
+            status: 'Al Día'
+          });
+        }
       }
     } else if (this.selectedPayMethod === 'credit') {
       if (cust) {
@@ -26194,7 +26398,9 @@ class NexusApp {
     });
 
     const isMixed = this.selectedPayMethod === 'mixed';
-    const totalMixedPaid = isMixed ? ((mixedPaymentBreakdown?.cash || 0) + (mixedPaymentBreakdown?.card || 0) + (mixedPaymentBreakdown?.transfer || 0)) : 0;
+    const totalMixedPaid = isMixed
+      ? ((mixedPaymentBreakdown?.cash || 0) + (mixedPaymentBreakdown?.card || 0) + (mixedPaymentBreakdown?.transfer || 0) + (mixedPaymentBreakdown?.credit || 0) + (mixedPaymentBreakdown?.addi || 0))
+      : 0;
     const cashReceived = this.selectedPayMethod === 'cash'
       ? this.parseCleanNumber(document.getElementById('cash-received-input')?.value)
       : (isMixed ? totalMixedPaid : grandTotal);
@@ -26243,6 +26449,14 @@ class NexusApp {
     if (cardVoucherEl) cardVoucherEl.value = '';
     const transferVoucherEl = document.getElementById('checkout-transfer-voucher-input');
     if (transferVoucherEl) transferVoucherEl.value = '';
+    const addiVoucherEl = document.getElementById('checkout-addi-voucher-input');
+    if (addiVoucherEl) addiVoucherEl.value = '';
+    const mixedCreditInp = document.getElementById('mixed-credit-amount');
+    if (mixedCreditInp) mixedCreditInp.value = '';
+    const mixedAddiInp = document.getElementById('mixed-addi-amount');
+    if (mixedAddiInp) mixedAddiInp.value = '';
+    const mixedAddiVoucherEl = document.getElementById('checkout-mixed-addi-voucher');
+    if (mixedAddiVoucherEl) mixedAddiVoucherEl.value = '';
 
     if (modal) modal.classList.remove('open');
 

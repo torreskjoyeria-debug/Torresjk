@@ -3157,7 +3157,7 @@
 
         <div style="margin-bottom:1.5rem;">
           <label style="font-size:0.8rem; font-weight:600; color:var(--text-muted); display:block; margin-bottom:0.5rem;">Método de Pago</label>
-          <div style="display:grid; grid-template-columns:repeat(6, 1fr); gap:0.5rem;" id="checkout-pay-methods-grid">
+          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(95px, 1fr)); gap:0.5rem;" id="checkout-pay-methods-grid">
             <button type="button" class="btn pay-method-btn active" data-pay-type="cash" id="pay-btn-cash">
               <span style="font-size:1.15rem;">💵</span>
               <span>Efectivo</span>
@@ -3181,6 +3181,10 @@
             <button type="button" class="btn pay-method-btn" data-pay-type="separe" id="pay-btn-separe">
               <span style="font-size:1.15rem;">📑</span>
               <span>Plan Separe</span>
+            </button>
+            <button type="button" class="btn pay-method-btn" data-pay-type="addi" id="pay-btn-addi">
+              <span style="font-size:1.15rem;">⚡</span>
+              <span>ADDI</span>
             </button>
           </div>
           <div id="checkout-customer-allowed-notice" style="font-size:0.75rem; color:var(--text-subtle); margin-top:0.4rem; display:none;"></div>
@@ -3253,7 +3257,20 @@
           </div>
         </div>
 
-        <!-- PAGO MIXTO (COMBINADO EFECTIVO + TARJETA + TRANSFERENCIA) -->
+        <div id="addi-info-box" style="display:none; flex-direction:column; gap:0.75rem; margin-bottom:1.5rem; background:rgba(6,182,212,0.08); border:1px solid rgba(6,182,212,0.25); padding:1rem; border-radius:var(--radius-md);">
+          <div style="font-weight:700; font-size:0.9rem; color:#0891B2; display:flex; align-items:center; gap:6px;">⚡ Pago Financiado con ADDI</div>
+          <div style="font-size:0.8rem; color:var(--text-muted);">El cobro se procesa a través de la plataforma ADDI. Indique la cuenta de liquidación y comprobante:</div>
+          <div>
+            <label style="font-size:0.78rem; font-weight:600; color:var(--text-muted); display:block; margin-bottom:0.35rem;">¿A qué cuenta bancaria liquida ADDI? *</label>
+            <select id="checkout-addi-account-select" class="form-select" style="width:100%; font-weight:700; font-size:0.95rem;"></select>
+          </div>
+          <div>
+            <label style="font-size:0.78rem; font-weight:600; color:var(--text-muted); display:block; margin-bottom:0.35rem;">N° de Aprobación / Solicitud ADDI (Opcional)</label>
+            <input type="text" id="checkout-addi-voucher-input" class="form-input" placeholder="Ej: #ADDI-048291" style="font-size:0.85rem;">
+          </div>
+        </div>
+
+        <!-- PAGO MIXTO (COMBINADO EFECTIVO + TARJETA + TRANSFERENCIA + CRÉDITO + ADDI) -->
         <div id="mixed-info-box" style="display:none; flex-direction:column; gap:0.85rem; margin-bottom:1.5rem; background:rgba(99,102,241,0.06); border:1px solid rgba(99,102,241,0.25); padding:1.1rem; border-radius:var(--radius-md);">
           <div style="font-weight:700; font-size:0.92rem; color:var(--primary-indigo); display:flex; align-items:center; justify-content:space-between;">
             <span style="display:flex; align-items:center; gap:6px;">🔀 Pago Mixto Combinado</span>
@@ -3320,6 +3337,46 @@
             </div>
             <div>
               <input type="text" id="checkout-mixed-transfer-voucher" class="form-input" placeholder="N° Comprobante / Ref. Transferencia (Opcional)" style="font-size:0.8rem; padding:5px 8px;">
+            </div>
+          </div>
+
+          <!-- Crédito Cliente (Cartera) -->
+          <div style="background:var(--card-bg); padding:0.75rem; border-radius:var(--radius-sm); border:1px solid var(--border-color); border-left:3px solid #D97706;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.35rem;">
+              <label style="font-size:0.8rem; font-weight:700; color:#D97706; display:flex; align-items:center; gap:4px; margin:0;">
+                🏷️ <span>Crédito Cliente (Cartera)</span>
+              </label>
+              <button type="button" class="btn btn-secondary text-xs" style="padding:2px 8px; font-size:0.72rem; font-weight:700;" onclick="app.autoFillMixed('credit')">Rellenar Restante</button>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; margin-bottom:0.4rem; align-items:center;">
+              <div>
+                <input type="text" inputmode="numeric" id="mixed-credit-amount" class="form-input" placeholder="0" style="font-size:1.05rem; font-weight:700;" onfocus="this.select()" oninput="app.updateMixedPaymentCalc()">
+              </div>
+              <div id="mixed-credit-info-text" style="font-size:0.75rem; color:var(--text-muted); line-height:1.2;">
+                Genera saldo por cobrar a 30 días para el cliente seleccionado.
+              </div>
+            </div>
+            <div id="mixed-credit-warning" style="display:none; font-size:0.72rem; color:#EF4444; font-weight:700; margin-top:2px;"></div>
+          </div>
+
+          <!-- ADDI (Financiamiento BNPL) -->
+          <div style="background:var(--card-bg); padding:0.75rem; border-radius:var(--radius-sm); border:1px solid var(--border-color); border-left:3px solid #06B6D4;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.35rem;">
+              <label style="font-size:0.8rem; font-weight:700; color:#0891B2; display:flex; align-items:center; gap:4px; margin:0;">
+                ⚡ <span>ADDI (Financiamiento)</span>
+              </label>
+              <button type="button" class="btn btn-secondary text-xs" style="padding:2px 8px; font-size:0.72rem; font-weight:700;" onclick="app.autoFillMixed('addi')">Rellenar Restante</button>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; margin-bottom:0.4rem;">
+              <div>
+                <input type="text" inputmode="numeric" id="mixed-addi-amount" class="form-input" placeholder="0" style="font-size:1.05rem; font-weight:700;" onfocus="this.select()" oninput="app.updateMixedPaymentCalc()">
+              </div>
+              <div>
+                <select id="checkout-mixed-addi-account" class="form-select" style="font-size:0.82rem; height:100%; font-weight:600;"></select>
+              </div>
+            </div>
+            <div>
+              <input type="text" id="checkout-mixed-addi-voucher" class="form-input" placeholder="N° Solicitud / Aprobación ADDI (Opcional)" style="font-size:0.8rem; padding:5px 8px;">
             </div>
           </div>
 
