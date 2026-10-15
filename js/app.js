@@ -276,6 +276,7 @@ class NexusApp {
       'new-prod-cost',
       'edit-prod-cost',
       'pos-add-custom-price-input',
+      'pos-add-total-price-input',
       'po-unit-cost',
       'cat-cost-input',
       'edit-cat-cost-input',
@@ -24890,7 +24891,6 @@ class NexusApp {
     const elPill = document.getElementById('pos-add-measure-pill');
     const elWeightInfo = document.getElementById('pos-add-unit-weight-info');
     const elPieceWeightVal = document.getElementById('pos-add-piece-weight-val');
-    const elTotalWeightVal = document.getElementById('pos-add-total-piece-weight-val');
     const elQtyLabel = document.getElementById('pos-add-qty-label');
     const elBasePrice = document.getElementById('pos-add-base-price-display');
     const elBaseSub = document.getElementById('pos-add-base-price-sub');
@@ -24900,6 +24900,9 @@ class NexusApp {
     const elUnitBadge = document.getElementById('pos-add-unit-badge');
     const elMaxStockHint = document.getElementById('pos-add-max-stock-hint');
     const elPriceInput = document.getElementById('pos-add-custom-price-input');
+    const elTotalPriceInput = document.getElementById('pos-add-total-price-input');
+    const elFieldALabel = document.getElementById('pos-add-field-a-label');
+    const elFieldAUnit = document.getElementById('pos-add-field-a-unit');
 
     if (elId) elId.value = p.id;
     if (elName) elName.textContent = p.name;
@@ -24916,6 +24919,13 @@ class NexusApp {
         elPill.style.background = '#E0E7FF';
         elPill.style.color = '#4F46E5';
       }
+    }
+
+    if (elFieldALabel) {
+      elFieldALabel.textContent = (isPesaje || isUnitWithWeight) ? 'Valor por Gramo' : 'Valor por Unidad';
+    }
+    if (elFieldAUnit) {
+      elFieldAUnit.textContent = (isPesaje || isUnitWithWeight) ? '/ g' : '/ u.';
     }
 
     if (elQtyLabel) {
@@ -25000,15 +25010,21 @@ class NexusApp {
     if (existing && existing.customPrice !== undefined) {
       initialPrice = existing.customPrice;
     } else {
-      // Por defecto siempre en 0 como solicitó el usuario, sin precargar sugerencia de costo
       initialPrice = 0;
     }
 
+    this._lastAddToCartSource = 'unit';
+    this._isSyncingAddToCartFields = false;
+
     if (elPriceInput) {
-      elPriceInput.value = this.formatNumberWithCommas(initialPrice);
+      elPriceInput.value = initialPrice > 0 ? this.formatNumberWithCommas(initialPrice) : '';
+    }
+    const initialTotal = Math.round(defaultQty * initialPrice);
+    if (elTotalPriceInput) {
+      elTotalPriceInput.value = initialTotal > 0 ? this.formatNumberWithCommas(initialTotal) : '';
     }
 
-    this.updateAddToCartModalPreview();
+    this.updateAddToCartModalProfitability(defaultQty, initialPrice, initialTotal);
     this.openModal('pos-add-to-cart-modal');
 
     setTimeout(() => {
@@ -25019,18 +25035,84 @@ class NexusApp {
     }, 150);
   }
 
-  updateAddToCartModalPreview() {
+  onAddToCartFieldAChange() {
+    if (this._isSyncingAddToCartFields) return;
+    this._lastAddToCartSource = 'unit';
+    const qty = this.parseCleanNumber(document.getElementById('pos-add-qty-input')?.value) || 0;
+    const unitPrice = this.parseCleanNumber(document.getElementById('pos-add-custom-price-input')?.value) || 0;
+    const totalPrice = Math.round(qty * unitPrice);
+
+    const elTotal = document.getElementById('pos-add-total-price-input');
+    if (elTotal) {
+      this._isSyncingAddToCartFields = true;
+      elTotal.value = totalPrice > 0 ? this.formatNumberWithCommas(totalPrice) : '';
+      this._isSyncingAddToCartFields = false;
+    }
+
+    this.updateAddToCartModalProfitability(qty, unitPrice, totalPrice);
+  }
+
+  onAddToCartFieldBChange() {
+    if (this._isSyncingAddToCartFields) return;
+    this._lastAddToCartSource = 'total';
+    const qty = this.parseCleanNumber(document.getElementById('pos-add-qty-input')?.value) || 0;
+    const totalPrice = this.parseCleanNumber(document.getElementById('pos-add-total-price-input')?.value) || 0;
+    const unitPrice = qty > 0 ? Math.round(totalPrice / qty) : 0;
+
+    const elPrice = document.getElementById('pos-add-custom-price-input');
+    if (elPrice) {
+      this._isSyncingAddToCartFields = true;
+      elPrice.value = unitPrice > 0 ? this.formatNumberWithCommas(unitPrice) : '';
+      this._isSyncingAddToCartFields = false;
+    }
+
+    this.updateAddToCartModalProfitability(qty, unitPrice, totalPrice);
+  }
+
+  onAddToCartQtyChange() {
+    if (this._isSyncingAddToCartFields) return;
+    const qty = this.parseCleanNumber(document.getElementById('pos-add-qty-input')?.value) || 0;
+    const elPrice = document.getElementById('pos-add-custom-price-input');
+    const elTotal = document.getElementById('pos-add-total-price-input');
+
+    let unitPrice = this.parseCleanNumber(elPrice?.value) || 0;
+    let totalPrice = this.parseCleanNumber(elTotal?.value) || 0;
+
+    if (this._lastAddToCartSource === 'total' && totalPrice > 0) {
+      unitPrice = qty > 0 ? Math.round(totalPrice / qty) : 0;
+      if (elPrice) {
+        this._isSyncingAddToCartFields = true;
+        elPrice.value = unitPrice > 0 ? this.formatNumberWithCommas(unitPrice) : '';
+        this._isSyncingAddToCartFields = false;
+      }
+    } else {
+      totalPrice = Math.round(qty * unitPrice);
+      if (elTotal) {
+        this._isSyncingAddToCartFields = true;
+        elTotal.value = totalPrice > 0 ? this.formatNumberWithCommas(totalPrice) : '';
+        this._isSyncingAddToCartFields = false;
+      }
+    }
+
+    this.updateAddToCartModalProfitability(qty, unitPrice, totalPrice);
+  }
+
+  updateAddToCartModalPreview(source = null) {
+    if (source === 'qty') {
+      this.onAddToCartQtyChange();
+    } else if (source === 'total') {
+      this.onAddToCartFieldBChange();
+    } else {
+      this.onAddToCartFieldAChange();
+    }
+  }
+
+  updateAddToCartModalProfitability(qty, unitPrice, totalPrice) {
     const pId = document.getElementById('pos-add-product-id')?.value;
     const p = this.data.products.find(item => item.id === pId);
     if (!p) return;
 
-    const qtyVal = this.parseCleanNumber(document.getElementById('pos-add-qty-input')?.value);
-    const priceVal = this.parseCleanNumber(document.getElementById('pos-add-custom-price-input')?.value);
-
-    const subtotal = Math.max(0, qtyVal * priceVal);
-    const elSub = document.getElementById('pos-add-subtotal-val');
-    if (elSub) elSub.textContent = this.formatCurrency(subtotal);
-
+    const cat = this.data.categories?.find(c => c.id === p.category || c.name === p.categoryName);
     const isPesaje = (p.measureType || 'Pesaje') === 'Pesaje';
     const pWeight = parseFloat(String(p.pieceWeight !== undefined && p.pieceWeight !== null ? p.pieceWeight : (p.weight || 0)).replace(',', '.')) || 0;
     const isUnitWithWeight = !isPesaje && pWeight > 0;
@@ -25038,30 +25120,126 @@ class NexusApp {
 
     const elTotalWeightVal = document.getElementById('pos-add-total-piece-weight-val');
     if (elTotalWeightVal && isUnitWithWeight) {
-      elTotalWeightVal.textContent = qtyVal.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      elTotalWeightVal.textContent = qty.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
 
-    const cat = this.data.categories.find(c => c.id === p.category || c.name === p.categoryName);
     const costPerGram = Number(p.cost || cat?.cost || 0);
+    const totalCost = Math.round(qty * costPerGram);
+    const totalSale = Math.round(totalPrice);
+    const profit = totalSale - totalCost;
+    const marginPct = totalSale > 0 ? Math.round(((profit / totalSale) * 100) * 10) / 10 : 0;
 
-    const elMargin = document.getElementById('pos-add-margin-badge');
-    if (elMargin) {
-      if (priceVal > 0 && costPerGram > 0) {
-        const profitPerUnit = priceVal - costPerGram;
-        const marginPct = Math.round((profitPerUnit / priceVal) * 1000) / 10;
-        if (profitPerUnit >= 0) {
-          elMargin.textContent = `Margen: +${marginPct}% (${this.formatCurrency(profitPerUnit)}/${unit})`;
-          elMargin.style.background = '#D1FAE5';
-          elMargin.style.color = '#065F46';
-        } else {
-          elMargin.textContent = `ALERTA BAJO COSTO: ${marginPct}% (${this.formatCurrency(profitPerUnit)}/${unit})`;
-          elMargin.style.background = '#FEE2E2';
-          elMargin.style.color = '#991B1B';
-        }
+    // Actualizar compatibilidad
+    const elSub = document.getElementById('pos-add-subtotal-val');
+    if (elSub) elSub.textContent = this.formatCurrency(totalSale);
+
+    // 1. Costo Total
+    const elTotalCost = document.getElementById('pos-add-total-cost-val');
+    const elTotalCostSub = document.getElementById('pos-add-total-cost-sub');
+    if (elTotalCost) {
+      elTotalCost.textContent = `${this.formatCurrency(totalCost)} COP`;
+      if (elTotalCostSub) {
+        elTotalCostSub.textContent = costPerGram > 0 
+          ? `${this.formatCurrency(costPerGram)}/${unit} × ${this.formatNumberWithCommas(qty, isPesaje || isUnitWithWeight)} ${unit}`
+          : 'Sin costo base registrado';
+      }
+    }
+
+    // 2. Venta al Cliente
+    const elTotalSale = document.getElementById('pos-add-total-sale-val');
+    const elTotalSaleSub = document.getElementById('pos-add-total-sale-sub');
+    if (elTotalSale) {
+      elTotalSale.textContent = `${this.formatCurrency(totalSale)} COP`;
+      if (elTotalSaleSub) {
+        elTotalSaleSub.textContent = `${this.formatCurrency(unitPrice)}/${unit} × ${this.formatNumberWithCommas(qty, isPesaje || isUnitWithWeight)} ${unit}`;
+      }
+    }
+
+    // 3. Utilidad Ganada
+    const elProfit = document.getElementById('pos-add-profit-val');
+    const elProfitSub = document.getElementById('pos-add-profit-sub');
+    if (elProfit) {
+      if (totalSale <= 0) {
+        elProfit.textContent = `$ 0 COP`;
+        elProfit.style.color = 'var(--text-muted)';
+      } else if (profit >= 0) {
+        elProfit.textContent = `+${this.formatCurrency(profit)} COP`;
+        elProfit.style.color = '#059669'; // verde destacado
       } else {
-        elMargin.textContent = priceVal === 0 ? 'Fijar precio de venta' : 'Margen: N/A';
-        elMargin.style.background = 'var(--canvas-bg)';
-        elMargin.style.color = 'var(--text-muted)';
+        elProfit.textContent = `-${this.formatCurrency(Math.abs(profit))} COP`;
+        elProfit.style.color = '#DC2626'; // rojo destacado
+      }
+      if (elProfitSub) {
+        elProfitSub.textContent = profit >= 0 ? 'Venta - Costo' : 'Pérdida en la venta';
+      }
+    }
+
+    // 4. Margen Real
+    const elMarginVal = document.getElementById('pos-add-margin-val');
+    const elMarginSub = document.getElementById('pos-add-margin-sub');
+    if (elMarginVal) {
+      if (totalSale <= 0) {
+        elMarginVal.textContent = `0.0%`;
+        elMarginVal.style.color = 'var(--text-muted)';
+      } else if (profit >= 0) {
+        elMarginVal.textContent = `+${marginPct.toFixed(1)}%`;
+        elMarginVal.style.color = '#059669';
+      } else {
+        elMarginVal.textContent = `${marginPct.toFixed(1)}%`;
+        elMarginVal.style.color = '#DC2626';
+      }
+      if (elMarginSub) {
+        elMarginSub.textContent = profit >= 0 ? 'Rentabilidad real' : 'Margen negativo';
+      }
+    }
+
+    // Badge y estado visual de alerta
+    const elCard = document.getElementById('pos-add-profitability-card');
+    const elBadge = document.getElementById('pos-add-margin-badge');
+    const elLossWarning = document.getElementById('pos-add-loss-warning');
+    const elLossAmt = document.getElementById('pos-add-loss-amount');
+
+    if (totalSale > 0 && costPerGram > 0 && profit < 0) {
+      if (elCard) {
+        elCard.style.background = 'rgba(239, 68, 68, 0.08)';
+        elCard.style.borderColor = '#EF4444';
+      }
+      if (elBadge) {
+        elBadge.textContent = `⚠️ BAJO COSTO: ${marginPct.toFixed(1)}%`;
+        elBadge.style.background = '#FEE2E2';
+        elBadge.style.color = '#991B1B';
+      }
+      if (elLossWarning) {
+        elLossWarning.style.display = 'flex';
+      }
+      if (elLossAmt) {
+        elLossAmt.textContent = `${this.formatCurrency(Math.abs(profit))} COP`;
+      }
+    } else if (totalSale > 0 && profit >= 0) {
+      if (elCard) {
+        elCard.style.background = 'rgba(16, 185, 129, 0.04)';
+        elCard.style.borderColor = 'rgba(16, 185, 129, 0.28)';
+      }
+      if (elBadge) {
+        elBadge.textContent = `Margen: +${marginPct.toFixed(1)}%`;
+        elBadge.style.background = '#D1FAE5';
+        elBadge.style.color = '#065F46';
+      }
+      if (elLossWarning) {
+        elLossWarning.style.display = 'none';
+      }
+    } else {
+      if (elCard) {
+        elCard.style.background = 'var(--canvas-bg)';
+        elCard.style.borderColor = 'var(--border-color)';
+      }
+      if (elBadge) {
+        elBadge.textContent = totalSale === 0 ? 'Fijar precio de venta' : 'Margen: 0.0%';
+        elBadge.style.background = 'var(--canvas-bg)';
+        elBadge.style.color = 'var(--text-muted)';
+      }
+      if (elLossWarning) {
+        elLossWarning.style.display = 'none';
       }
     }
   }
@@ -25092,17 +25270,23 @@ class NexusApp {
     if (next < minVal) next = minVal;
     if (next > maxStock) next = maxStock;
     input.value = this.formatNumberWithCommas(next, isPesaje || isUnitWithWeight);
-    this.updateAddToCartModalPreview();
+    this.onAddToCartQtyChange();
   }
 
   adjustAddToCartPrice(deltaPercent) {
     const input = document.getElementById('pos-add-custom-price-input');
     if (!input) return;
-    const cur = this.parseCleanNumber(input.value);
+    let cur = this.parseCleanNumber(input.value);
+    if (cur <= 0) {
+      const pId = document.getElementById('pos-add-product-id')?.value;
+      const p = this.data.products.find(item => item.id === pId);
+      const cat = this.data.categories?.find(c => c.id === p?.category || c.name === p?.categoryName);
+      cur = Number(p?.price || p?.cost || cat?.cost || 0);
+    }
     if (cur <= 0) return;
     const next = Math.round(cur * (1 + deltaPercent));
     input.value = this.formatNumberWithCommas(next);
-    this.updateAddToCartModalPreview();
+    this.onAddToCartFieldAChange();
   }
 
   setAddToCartPriceToBase() {
@@ -25110,18 +25294,15 @@ class NexusApp {
     const p = this.data.products.find(item => item.id === pId);
     const input = document.getElementById('pos-add-custom-price-input');
     if (p && input) {
+      let targetPrice = 0;
       if (p.price && Number(p.price) > 0) {
-        input.value = this.formatNumberWithCommas(p.price);
+        targetPrice = Number(p.price);
       } else {
         const cat = this.data.categories?.find(c => c.id === p.category || c.name === p.categoryName);
-        const costPerGram = Number(p.cost || cat?.cost || 0);
-        const isPesaje = (p.measureType || 'Pesaje') === 'Pesaje';
-        const pWeight = parseFloat(String(p.pieceWeight !== undefined && p.pieceWeight !== null ? p.pieceWeight : (p.weight || 0)).replace(',', '.')) || 0;
-        const isUnitWithWeight = !isPesaje && pWeight > 0;
-        const suggestedPrice = isUnitWithWeight ? costPerGram : (isPesaje ? costPerGram : costPerGram);
-        input.value = suggestedPrice > 0 ? this.formatNumberWithCommas(suggestedPrice) : '';
+        targetPrice = Number(p.cost || cat?.cost || 0);
       }
-      this.updateAddToCartModalPreview();
+      input.value = targetPrice > 0 ? this.formatNumberWithCommas(targetPrice) : '';
+      this.onAddToCartFieldAChange();
     }
   }
 
@@ -25132,9 +25313,15 @@ class NexusApp {
 
     const qtyInput = document.getElementById('pos-add-qty-input');
     const priceInput = document.getElementById('pos-add-custom-price-input');
+    const totalPriceInput = document.getElementById('pos-add-total-price-input');
 
     const qty = this.parseCleanNumber(qtyInput?.value);
-    const price = this.parseCleanNumber(priceInput?.value);
+    let price = this.parseCleanNumber(priceInput?.value);
+    const totalPrice = this.parseCleanNumber(totalPriceInput?.value);
+
+    if (price <= 0 && totalPrice > 0 && qty > 0) {
+      price = Math.round(totalPrice / qty);
+    }
 
     const stockNum = parseFloat(String(p.stock || 0).replace(',', '.')) || 0;
     const isPesaje = (p.measureType || 'Pesaje') === 'Pesaje';
@@ -25156,9 +25343,18 @@ class NexusApp {
       return;
     }
 
+    const cat = this.data.categories?.find(c => c.id === p.category || c.name === p.categoryName);
+    const costPerGram = Number(p.cost || cat?.cost || 0);
+    const totalCost = Math.round(qty * costPerGram);
+    const totalSale = Math.round(qty * price);
+
+    if (totalSale < totalCost && costPerGram > 0) {
+      this.showToast(`⚠️ Venta por debajo del costo: pérdida de ${this.formatCurrency(totalCost - totalSale)} COP`, 'warning');
+    }
+
     this.addToCart(p.id, qty, price);
     this.closeModal('pos-add-to-cart-modal');
-    this.showToast(`Agregado: ${p.name} (${qty} ${unit} a ${this.formatCurrency(price)})`, 'success');
+    this.showToast(`Agregado: ${p.name} (${this.formatNumberWithCommas(qty, isPesaje || isUnitWithWeight)} ${unit} a ${this.formatCurrency(price)})`, 'success');
   }
 
   setCartItemPrice(productId, rawValue) {
