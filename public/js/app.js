@@ -5,8 +5,8 @@ const SafeStorage = (function() {
   try {
     const test = '__nexus_test_key__';
     if (typeof window !== 'undefined' && window.localStorage) {
-      window.SafeStorage.setItem(test, '1');
-      window.SafeStorage.removeItem(test);
+      window.localStorage.setItem(test, '1');
+      window.localStorage.removeItem(test);
       storageWorks = true;
     }
   } catch (e) {
@@ -19,7 +19,7 @@ const SafeStorage = (function() {
     getItem(key) {
       if (storageWorks) {
         try {
-          return window.SafeStorage.getItem(key);
+          return window.localStorage.getItem(key);
         } catch (_) {}
       }
       return memoryStore.has(key) ? memoryStore.get(key) : null;
@@ -28,7 +28,7 @@ const SafeStorage = (function() {
       const valStr = String(value);
       if (storageWorks) {
         try {
-          window.SafeStorage.setItem(key, valStr);
+          window.localStorage.setItem(key, valStr);
           return;
         } catch (_) {}
       }
@@ -37,7 +37,7 @@ const SafeStorage = (function() {
     removeItem(key) {
       if (storageWorks) {
         try {
-          window.SafeStorage.removeItem(key);
+          window.localStorage.removeItem(key);
           return;
         } catch (_) {}
       }
@@ -46,7 +46,7 @@ const SafeStorage = (function() {
     clear() {
       if (storageWorks) {
         try {
-          window.SafeStorage.clear();
+          window.localStorage.clear();
           return;
         } catch (_) {}
       }
@@ -158,15 +158,30 @@ class NexusApp {
 
   formatNumberWithCommas(val, allowDecimals = false) {
     if (val === null || val === undefined || val === '') return '';
-    const str = String(val).replace(/,/g, '').trim();
+    let str = String(val).trim();
     if (str === '') return '';
-    
+
     if (allowDecimals) {
       const isNegative = str.startsWith('-');
-      const cleanStr = isNegative ? str.slice(1) : str;
-      const parts = cleanStr.split('.');
-      let intPart = parts[0] ? parts[0].replace(/\D/g, '') : '0';
-      if (intPart === '') intPart = '0';
+      if (isNegative) str = str.slice(1);
+
+      if (str.includes(',') && str.includes('.')) {
+        if (str.lastIndexOf('.') > str.lastIndexOf(',')) {
+          str = str.replace(/,/g, '');
+        } else {
+          str = str.replace(/\./g, '').replace(',', '.');
+        }
+      } else if (str.includes(',')) {
+        const parts = str.split(',');
+        if (parts.length === 2 && parts[1].length <= 3) {
+          str = parts[0] + '.' + parts[1];
+        } else {
+          str = str.replace(/,/g, '');
+        }
+      }
+
+      const parts = str.split('.');
+      let intPart = parts[0].replace(/\D/g, '') || '0';
       if (intPart.length > 1 && intPart.startsWith('0')) {
         intPart = intPart.replace(/^0+/, '') || '0';
       }
@@ -181,10 +196,12 @@ class NexusApp {
       return formattedInt;
     } else {
       const isNegative = str.startsWith('-');
-      const cleanNum = parseFloat(str.replace(/,/g, ''));
+      const digits = str.replace(/\D/g, '');
+      if (!digits) return '';
+      const cleanNum = parseInt(digits, 10);
       if (isNaN(cleanNum)) return '';
-      let digits = String(Math.abs(Math.round(cleanNum)));
-      return (isNegative ? '-' : '') + digits.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+      let numStr = String(cleanNum);
+      return (isNegative ? '-' : '') + numStr.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
     }
   }
 
@@ -194,6 +211,12 @@ class NexusApp {
     let str = String(val).trim();
     if (!str) return 0;
 
+    str = str.replace(/[^0-9.,-]/g, '');
+    if (!str || str === '-') return 0;
+
+    const isNegative = str.startsWith('-');
+    if (isNegative) str = str.slice(1);
+
     if (str.includes(',') && str.includes('.')) {
       if (str.lastIndexOf('.') > str.lastIndexOf(',')) {
         str = str.replace(/,/g, '');
@@ -201,10 +224,22 @@ class NexusApp {
         str = str.replace(/\./g, '').replace(',', '.');
       }
     } else if (str.includes(',')) {
-      str = str.replace(/,/g, '');
+      const parts = str.split(',');
+      if (parts.length === 2 && parts[1].length <= 2) {
+        str = parts[0] + '.' + parts[1];
+      } else {
+        str = str.replace(/,/g, '');
+      }
+    } else if (str.includes('.')) {
+      const parts = str.split('.');
+      if (parts.length > 2) {
+        str = str.replace(/\./g, '');
+      } else if (parts.length === 2 && parts[1].length === 3 && parts[0].length >= 1) {
+        str = str.replace(/\./g, '');
+      }
     }
     const n = parseFloat(str);
-    return isNaN(n) ? 0 : n;
+    return isNaN(n) ? 0 : (isNegative ? -n : n);
   }
 
   setupThousandMask(input, allowDecimals = false, onUpdate = null) {
@@ -274,7 +309,9 @@ class NexusApp {
   attachGlobalNumberMasks() {
     const integerInputs = [
       'new-prod-cost',
+      'new-prod-price',
       'edit-prod-cost',
+      'edit-prod-price',
       'pos-add-custom-price-input',
       'pos-add-total-price-input',
       'po-unit-cost',
@@ -570,7 +607,7 @@ class NexusApp {
       this.data.store.branding = Object.assign({}, INITIAL_DATA.store.branding, this.data.store.branding);
     }
 
-    if (!this.data.categories || !this.data.categories.some(c => c.id === 'oro18k')) {
+    if (!this.data.categories || !Array.isArray(this.data.categories) || this.data.categories.length === 0) {
       this.data.categories = Array.from(INITIAL_DATA.categories);
     }
     if (this.data.categories && Array.isArray(this.data.categories)) {
@@ -591,9 +628,29 @@ class NexusApp {
         if (!p.supplier) p.supplier = 'Joyeros Italianos S.A.S.';
         if (!p.sku) p.sku = '001';
 
-        if (!this.data.categories.some(c => c.id === p.category)) {
-          p.category = 'oro18k';
-          p.categoryName = 'Oro 18K Italiano & Ley';
+        // 1. Match by category ID first (exact ID match)
+        let catMatch = (this.data.categories || []).find(c => 
+          String(c.id).toLowerCase().trim() === String(p.category || '').toLowerCase().trim()
+        );
+        // 2. Fallback: match by category name in p.category
+        if (!catMatch) {
+          catMatch = (this.data.categories || []).find(c => 
+            String(c.name).toLowerCase().trim() === String(p.category || '').toLowerCase().trim()
+          );
+        }
+        // 3. Fallback: match by p.categoryName
+        if (!catMatch && p.categoryName) {
+          catMatch = (this.data.categories || []).find(c => 
+            String(c.id).toLowerCase().trim() === String(p.categoryName || '').toLowerCase().trim() ||
+            String(c.name).toLowerCase().trim() === String(p.categoryName || '').toLowerCase().trim()
+          );
+        }
+        if (catMatch) {
+          p.category = catMatch.id;
+          p.categoryName = catMatch.name;
+        } else if (this.data.categories && this.data.categories.length > 0) {
+          p.category = this.data.categories[0].id;
+          p.categoryName = this.data.categories[0].name;
         }
       });
       // NOTE: Empty array is valid for clean production data
@@ -855,17 +912,24 @@ class NexusApp {
     return Math.round(stock * cost * 100) / 100;
   }
 
+  getProductsForCategory(catOrId) {
+    if (!this.data || !Array.isArray(this.data.products) || !catOrId) return [];
+    const id = typeof catOrId === 'object' ? catOrId.id : catOrId;
+    const name = typeof catOrId === 'object' ? catOrId.name : catOrId;
+    const cId = String(id || '').toLowerCase().trim();
+    const cName = String(name || '').toLowerCase().trim();
+    return this.data.products.filter(p => {
+      if (!p) return false;
+      const pCat = String(p.category || '').toLowerCase().trim();
+      const pCatName = String(p.categoryName || '').toLowerCase().trim();
+      return pCat === cId || pCat === cName || pCatName === cName || pCatName === cId;
+    });
+  }
+
   syncAllCategoryGrams() {
     if (!this.data || !Array.isArray(this.data.categories) || !Array.isArray(this.data.products)) return;
     this.data.categories.forEach(cat => {
-      const prodsInCat = this.data.products.filter(p => {
-        if (!p) return false;
-        const pCat = String(p.category || '').toLowerCase().trim();
-        const pCatName = String(p.categoryName || '').toLowerCase().trim();
-        const cId = String(cat.id || '').toLowerCase().trim();
-        const cName = String(cat.name || '').toLowerCase().trim();
-        return pCat === cId || pCat === cName || pCatName === cName || pCatName === cId;
-      });
+      const prodsInCat = this.getProductsForCategory(cat);
       cat.itemsCount = prodsInCat.length;
 
       const isExtras = cat.type === 'extras' || cat.isExtra;
@@ -1139,7 +1203,8 @@ class NexusApp {
   setupRealtimeSync() {
     // 1. Cross-Tab Live Sync via LocalStorage storage events
     window.addEventListener('storage', async (e) => {
-      if (e.key === 'nexus_pos_data' && e.newValue) {
+      const isCurrentStoreKey = e.key === 'nexus_pos_data' || e.key === ('nexus_pos_data_' + this.currentStoreId);
+      if (isCurrentStoreKey && e.newValue) {
         try {
           const parsed = JSON.parse(e.newValue);
           if (parsed && parsed.products) {
@@ -1210,7 +1275,7 @@ class NexusApp {
 
           // Structural fingerprint to detect real stock, price, debt, cash register, users and configuration updates
           const buildFingerprint = (d) => {
-            const pFp = (d.products || []).map(p => `${p.id}:${p.stock}:${p.price}:${p.status}`).join('|');
+            const pFp = (d.products || []).map(p => `${p.id}:${p.name}:${p.category}:${p.cost}:${p.price}:${p.stock}:${p.status}`).join('|');
             const cFp = (d.customers || []).map(c => `${c.id}:${c.creditBalance}`).join('|');
             const sFp = (d.suppliers || []).map(s => `${s.id}:${s.creditBalance}`).join('|');
             const uFp = (d.users || []).map(u => `${u.id}:${u.status}:${u.role}`).join('|');
@@ -1230,7 +1295,10 @@ class NexusApp {
             this.data = Object.assign({}, INITIAL_DATA, remote);
             this.sanitizeLoadedData();
             try {
-              SafeStorage.setItem('nexus_pos_data', JSON.stringify(this.data));
+              SafeStorage.setItem('nexus_pos_data_' + this.currentStoreId, JSON.stringify(this.data));
+              if (this.currentStoreId === 'store_1') {
+                SafeStorage.setItem('nexus_pos_data', JSON.stringify(this.data));
+              }
             } catch (_) {}
 
             // Immediate logout if user account was deactivated by Admin on another terminal
@@ -3087,8 +3155,13 @@ class NexusApp {
           }
 
           // Cascade name update to all products in inventory
+          const cId = String(cat.id || '').toLowerCase().trim();
+          const oName = String(oldName || '').toLowerCase().trim();
           (this.data.products || []).forEach(p => {
-            if (p.category === cat.id || p.categoryName === oldName) {
+            if (!p) return;
+            const pCat = String(p.category || '').toLowerCase().trim();
+            const pCatName = String(p.categoryName || '').toLowerCase().trim();
+            if (pCat === cId || pCat === oName || pCatName === oName || pCatName === cId) {
               p.category = cat.id;
               p.categoryName = newName;
             }
@@ -3448,18 +3521,15 @@ class NexusApp {
           : 0;
 
         const catId = document.getElementById('new-prod-cat').value;
-        const catObj = (this.data.categories || []).find(c => c.id === catId || c.name === catId);
+        const catObj = (this.data.categories || []).find(c => 
+          String(c.id).toLowerCase().trim() === String(catId).toLowerCase().trim() || 
+          String(c.name).toLowerCase().trim() === String(catId).toLowerCase().trim()
+        );
         const isExtraCat = catObj && (catObj.type === 'extras' || catObj.isExtra);
-
-        if (measureType === 'Unidades' && !isExtraCat && pieceWeight <= 0) {
-          this.showToast('Por favor ingresa el peso del producto (g) para calcular el gramaje del lote y sincronizar la categoría.', 'warning');
-          document.getElementById('new-prod-piece-weight')?.focus();
-          return;
-        }
 
         const supplier = document.getElementById('new-prod-supplier').value;
         const cost = this.parseCleanNumber(document.getElementById('new-prod-cost')?.value);
-        const price = 0; // El precio de venta se fija libremente en el POS
+        const price = this.parseCleanNumber(document.getElementById('new-prod-price')?.value) || 0;
         const stock = this.parseCleanNumber(document.getElementById('new-prod-stock')?.value);
         const active = document.getElementById('new-prod-active')?.checked !== false;
 
@@ -3538,19 +3608,16 @@ class NexusApp {
             : 0;
 
           const editCatId = document.getElementById('edit-prod-cat').value;
-          const catObj = (this.data.categories || []).find(c => c.id === editCatId || c.name === editCatId);
+          const catObj = (this.data.categories || []).find(c => 
+            String(c.id).toLowerCase().trim() === String(editCatId).toLowerCase().trim() || 
+            String(c.name).toLowerCase().trim() === String(editCatId).toLowerCase().trim()
+          );
           const isExtraCat = catObj && (catObj.type === 'extras' || catObj.isExtra);
 
-          if (p.measureType === 'Unidades' && !isExtraCat && pieceWeight <= 0) {
-            this.showToast('Por favor ingresa el peso del producto (g) para calcular el gramaje del lote y sincronizar la categoría.', 'warning');
-            document.getElementById('edit-prod-piece-weight')?.focus();
-            return;
-          }
-
-          p.pieceWeight = isExtraCat ? 0 : pieceWeight;
-          p.weight = isExtraCat ? 0 : pieceWeight;
+          p.pieceWeight = isExtraCat ? 0 : (pieceWeight > 0 ? pieceWeight : 0);
+          p.weight = isExtraCat ? 0 : (pieceWeight > 0 ? pieceWeight : 0);
           p.isExtra = isExtraCat ? true : false;
-          p.category = editCatId;
+          p.category = catObj ? catObj.id : editCatId;
           p.categoryName = catObj ? catObj.name : 'General';
           if (isExtraCat) {
             p.measureType = 'Unidades';
@@ -3559,7 +3626,10 @@ class NexusApp {
           }
           p.supplier = document.getElementById('edit-prod-supplier').value;
           p.cost = this.parseCleanNumber(document.getElementById('edit-prod-cost')?.value);
-          p.price = Number(p.price || 0); // Preserva precio previo si existía, o 0 para fijar en POS
+          const editPriceInput = document.getElementById('edit-prod-price');
+          if (editPriceInput) {
+            p.price = editPriceInput.value.trim() !== '' ? this.parseCleanNumber(editPriceInput.value) : 0;
+          }
 
           // GRAMAJE / CANTIDAD TOTAL DEL ARTÍCULO
           let rawStock = document.getElementById('edit-prod-stock')?.value;
@@ -4626,8 +4696,12 @@ class NexusApp {
   populateProductCategorySelect(selectId, selectedVal = '') {
     const select = document.getElementById(selectId);
     if (!select) return;
+    const sVal = String(selectedVal || '').toLowerCase().trim();
     select.innerHTML = (this.data.categories || []).map(cat => {
-      return `<option value="${this.escapeHtml(cat.id)}" ${cat.id === selectedVal || cat.name === selectedVal ? 'selected' : ''}>${this.escapeHtml(cat.name)}</option>`;
+      const cId = String(cat.id || '').toLowerCase().trim();
+      const cName = String(cat.name || '').toLowerCase().trim();
+      const isSelected = sVal !== '' && (cId === sVal || cName === sVal);
+      return `<option value="${this.escapeHtml(cat.id)}" ${isSelected ? 'selected' : ''}>${this.escapeHtml(cat.name)}</option>`;
     }).join('');
   }
 
@@ -4642,7 +4716,11 @@ class NexusApp {
 
     if (hintEl) hintEl.textContent = '';
     if (!catSelect) return;
-    const cat = (this.data?.categories || []).find(c => c.id === catSelect.value || c.name === catSelect.value);
+    const selVal = String(catSelect.value || '').toLowerCase().trim();
+    const cat = (this.data?.categories || []).find(c => 
+      String(c.id || '').toLowerCase().trim() === selVal || 
+      String(c.name || '').toLowerCase().trim() === selVal
+    );
     if (!cat) return;
 
     const isExtras = cat.type === 'extras' || cat.isExtra;
@@ -4696,6 +4774,8 @@ class NexusApp {
     if (pieceWeightInput) pieceWeightInput.value = '';
     const costInput = document.getElementById('new-prod-cost');
     if (costInput) costInput.value = '';
+    const priceInput = document.getElementById('new-prod-price');
+    if (priceInput) priceInput.value = '';
     const stockInput = document.getElementById('new-prod-stock');
     if (stockInput) stockInput.value = '';
     this.populateProductCategorySelect('new-prod-cat');
@@ -4718,6 +4798,8 @@ class NexusApp {
     document.getElementById('edit-prod-sku').value = p.sku || '001';
     document.getElementById('edit-prod-name').value = p.name;
     document.getElementById('edit-prod-cost').value = p.cost !== undefined ? this.formatNumberWithCommas(p.cost) : '';
+    const priceInput = document.getElementById('edit-prod-price');
+    if (priceInput) priceInput.value = p.price && p.price > 0 ? this.formatNumberWithCommas(p.price) : '';
     document.getElementById('edit-prod-stock').value = p.stock !== undefined ? this.formatNumberWithCommas(p.stock, true) : 0;
     const stockHint = document.getElementById('edit-prod-stock-hint');
     if (stockHint) {
@@ -4831,7 +4913,7 @@ class NexusApp {
       if (extrasFields) extrasFields.style.display = 'none';
     }
 
-    const prodsInCat = (this.data.products || []).filter(p => p.category === cat.id || p.categoryName === cat.name);
+    const prodsInCat = this.getProductsForCategory(cat);
     const totalUnitsInProds = prodsInCat.reduce((sum, p) => sum + (parseFloat(String(p.stock || 0).replace(',', '.')) || 0), 0);
     const totalCostInProds = prodsInCat.reduce((sum, p) => sum + (this.getProductTotalCost(p) || 0), 0);
     const totalGramsInProds = prodsInCat.reduce((sum, p) => sum + (this.getGramsFromProduct(p) || 0), 0);
@@ -4973,7 +5055,7 @@ class NexusApp {
     }
     const cat = (this.data.categories || []).find(c => c.id === id);
     if (!cat) return;
-    const prodsInCat = (this.data.products || []).filter(p => p.category === cat.id || p.categoryName === cat.name);
+    const prodsInCat = this.getProductsForCategory(cat);
     const prodsGrams = prodsInCat.reduce((sum, p) => sum + this.getGramsFromProduct(p), 0);
     let current = (cat.availableGrams !== undefined && cat.availableGrams !== null) ? Number(cat.availableGrams) : prodsGrams;
     cat.availableGrams = Math.max(0, Math.round((current + delta) * 100) / 100);
@@ -5706,7 +5788,7 @@ class NexusApp {
       ? ((this.data.categories || []).find(c => c.id !== id && (c.type === 'extras' || c.isExtra)) || (this.data.categories || []).find(c => c.id !== id))
       : ((this.data.categories || []).find(c => c.id !== id && (c.id === 'oro18k' || c.name.toLowerCase().includes('oro'))) || (this.data.categories || []).find(c => c.id !== id));
     if (fallbackCat) {
-      const prodsToReassign = (this.data.products || []).filter(p => p.category === id || p.categoryName === catName);
+      const prodsToReassign = this.getProductsForCategory(cat || { id, name: catName });
       if (prodsToReassign.length > 0) {
         let movedGrams = 0;
         prodsToReassign.forEach(p => {
@@ -6479,11 +6561,11 @@ class NexusApp {
         if (c.availableGrams !== undefined && Number(c.availableGrams) > 0) {
           return Math.round(Number(c.availableGrams) * 100) / 100;
         }
-        return (this.data.products || []).filter(p => p.category === c.id || p.categoryName === c.name)
+        return this.getProductsForCategory(c)
           .reduce((sum, p) => sum + this.getGramsFromProduct(p), 0);
       });
       const catCounts = (this.data.categories || []).map(c => {
-        return (this.data.products || []).filter(p => p.category === c.id || p.categoryName === c.name).length;
+        return this.getProductsForCategory(c).length;
       });
       const hasGrams = catGrams.some(g => g > 0);
       const hasCounts = catCounts.some(cnt => cnt > 0);
@@ -10243,7 +10325,7 @@ class NexusApp {
     const canDeleteCategory = this.canPerformAction('delete', 'category');
 
     tbody.innerHTML = (this.data.categories || []).map(cat => {
-      const prodsInCat = (this.data.products || []).filter(p => p.category === cat.id || p.categoryName === cat.name);
+      const prodsInCat = this.getProductsForCategory(cat);
       const count = prodsInCat.length;
       cat.itemsCount = count;
 
@@ -10589,6 +10671,7 @@ class NexusApp {
           </td>
           <td>${measureBadge}</td>
           <td><span class="text-xs bg-slate-100 px-2 py-1 rounded">${this.escapeHtml(p.categoryName || p.category || 'General')}</span></td>
+          <td><span style="color:var(--text-muted); font-size:0.85rem;">${this.escapeHtml(p.supplier || 'ANONIMO')}</span></td>
           <td>
             ${!isPesaje && pWeight > 0 ? `
               <div>
@@ -24762,7 +24845,16 @@ class NexusApp {
     if (!grid) return;
 
     const filtered = (this.data.products || []).filter(p => {
-      const matchCat = searchVal !== '' || this.selectedCategory === 'all' || p.category === this.selectedCategory;
+      let matchCat = searchVal !== '' || this.selectedCategory === 'all';
+      if (!matchCat) {
+        const sel = String(this.selectedCategory || '').toLowerCase().trim();
+        const pCat = String(p.category || '').toLowerCase().trim();
+        const pCatName = String(p.categoryName || '').toLowerCase().trim();
+        const catObj = (this.data.categories || []).find(c => String(c.id).toLowerCase() === sel || String(c.name).toLowerCase() === sel);
+        const cId = catObj ? String(catObj.id).toLowerCase() : sel;
+        const cName = catObj ? String(catObj.name).toLowerCase() : sel;
+        matchCat = pCat === cId || pCat === cName || pCatName === cName || pCatName === cId;
+      }
       const matchSearch = this.matchesProductSearch(p, searchVal);
       return matchCat && matchSearch;
     });
@@ -25009,6 +25101,8 @@ class NexusApp {
     let initialPrice = 0;
     if (existing && existing.customPrice !== undefined) {
       initialPrice = existing.customPrice;
+    } else if (p.price && Number(p.price) > 0) {
+      initialPrice = Number(p.price);
     } else {
       initialPrice = 0;
     }

@@ -1148,7 +1148,7 @@
               <div class="table-container">
                 <table class="data-table">
                   <thead>
-                    <tr><th>Codigo</th><th>Producto</th><th>Tipo Medida</th><th>Categoría</th><th>Proveedor</th><th>Costo</th><th>Gramaje Total</th><th>Gramaje / Stock</th><th>Estado</th><th>Acciones</th></tr>
+                    <tr><th>Codigo</th><th>Producto</th><th>Tipo Medida</th><th>Categoría</th><th>Proveedor</th><th>Costo ($)</th><th>Precio Sugerido ($)</th><th>Stock / Gramaje</th><th>Estado</th><th>Acciones</th></tr>
                   </thead>
                   <tbody id="inventory-tbody"></tbody>
                 </table>
@@ -4174,15 +4174,22 @@
             </div>
           </div>
 
-          <div class="form-group" style="margin-bottom:0.75rem;">
-            <label class="form-label" id="new-prod-cost-label">Costo de la mercancía (Adquisición por g/u) *</label>
-            <div style="position:relative; display:flex; align-items:center;">
-              <span style="position:absolute; left:10px; font-weight:700; color:var(--text-subtle); font-size:0.9rem; pointer-events:none;">$</span>
-              <input type="text" inputmode="numeric" id="new-prod-cost" class="form-input" placeholder="444,000" required oninput="app.updateProductCostProfitPreview('new')" style="padding-left:1.6rem; font-weight:700;">
+          <div class="grid-2" style="margin-bottom:0.75rem;">
+            <div class="form-group">
+              <label class="form-label" id="new-prod-cost-label">Costo de adquisición (por g/u) *</label>
+              <div style="position:relative; display:flex; align-items:center;">
+                <span style="position:absolute; left:10px; font-weight:700; color:var(--text-subtle); font-size:0.9rem; pointer-events:none;">$</span>
+                <input type="text" inputmode="numeric" id="new-prod-cost" class="form-input" placeholder="444,000" required oninput="app.updateProductCostProfitPreview('new')" style="padding-left:1.6rem; font-weight:700;">
+              </div>
+              <span class="text-xs" style="color:var(--text-muted); margin-top:2px; display:block;">Costo real de compra/reposición.</span>
             </div>
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:2px;">
-              <span class="text-xs" style="color:var(--text-muted);">Costo de compra/reposición.</span>
-              <span class="badge" style="background:rgba(2,132,199,0.1); color:var(--brand-primary); font-size:0.68rem; padding:2px 6px; font-weight:700;">⚖️ El precio de venta se fija libremente en el POS</span>
+            <div class="form-group">
+              <label class="form-label" id="new-prod-price-label">Precio de venta sugerido (Base)</label>
+              <div style="position:relative; display:flex; align-items:center;">
+                <span style="position:absolute; left:10px; font-weight:700; color:var(--brand-primary); font-size:0.9rem; pointer-events:none;">$</span>
+                <input type="text" inputmode="numeric" id="new-prod-price" class="form-input" placeholder="580,000" oninput="app.updateProductCostProfitPreview('new')" style="padding-left:1.6rem; font-weight:700; color:var(--brand-primary);">
+              </div>
+              <span class="text-xs" style="color:var(--text-muted); margin-top:2px; display:block;">Precio base sugerido (ajustable en POS).</span>
             </div>
           </div>
 
@@ -4687,15 +4694,22 @@
             </div>
           </div>
 
-          <div class="form-group" style="margin-bottom:0.75rem;">
-            <label class="form-label" id="edit-prod-cost-label">Costo de la mercancía (Adquisición por g/u) *</label>
-            <div style="position:relative; display:flex; align-items:center;">
-              <span style="position:absolute; left:10px; font-weight:700; color:var(--text-subtle); font-size:0.9rem; pointer-events:none;">$</span>
-              <input type="text" inputmode="numeric" id="edit-prod-cost" class="form-input" required oninput="app.updateProductCostProfitPreview('edit')" style="padding-left:1.6rem; font-weight:700;">
+          <div class="grid-2" style="margin-bottom:0.75rem;">
+            <div class="form-group">
+              <label class="form-label" id="edit-prod-cost-label">Costo de adquisición (por g/u) *</label>
+              <div style="position:relative; display:flex; align-items:center;">
+                <span style="position:absolute; left:10px; font-weight:700; color:var(--text-subtle); font-size:0.9rem; pointer-events:none;">$</span>
+                <input type="text" inputmode="numeric" id="edit-prod-cost" class="form-input" required oninput="app.updateProductCostProfitPreview('edit')" style="padding-left:1.6rem; font-weight:700;">
+              </div>
+              <span class="text-xs" style="color:var(--text-muted); margin-top:2px; display:block;">Costo real de compra de esa mercancía.</span>
             </div>
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:2px;">
-              <span class="text-xs" style="color:var(--text-muted);">Costo real de compra de esa mercancía.</span>
-              <span class="badge" style="background:rgba(2,132,199,0.1); color:var(--brand-primary); font-size:0.68rem; padding:2px 6px; font-weight:700;">⚖️ El precio de venta se fija libremente en el POS</span>
+            <div class="form-group">
+              <label class="form-label" id="edit-prod-price-label">Precio de venta sugerido (Base)</label>
+              <div style="position:relative; display:flex; align-items:center;">
+                <span style="position:absolute; left:10px; font-weight:700; color:var(--brand-primary); font-size:0.9rem; pointer-events:none;">$</span>
+                <input type="text" inputmode="numeric" id="edit-prod-price" class="form-input" placeholder="0" oninput="app.updateProductCostProfitPreview('edit')" style="padding-left:1.6rem; font-weight:700; color:var(--brand-primary);">
+              </div>
+              <span class="text-xs" style="color:var(--text-muted); margin-top:2px; display:block;">Precio base sugerido (ajustable en POS).</span>
             </div>
           </div>
 

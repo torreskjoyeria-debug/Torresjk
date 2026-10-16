@@ -5,8 +5,8 @@ const SafeStorage = (function() {
   try {
     const test = '__nexus_test_key__';
     if (typeof window !== 'undefined' && window.localStorage) {
-      window.SafeStorage.setItem(test, '1');
-      window.SafeStorage.removeItem(test);
+      window.localStorage.setItem(test, '1');
+      window.localStorage.removeItem(test);
       storageWorks = true;
     }
   } catch (e) {
@@ -19,7 +19,7 @@ const SafeStorage = (function() {
     getItem(key) {
       if (storageWorks) {
         try {
-          return window.SafeStorage.getItem(key);
+          return window.localStorage.getItem(key);
         } catch (_) {}
       }
       return memoryStore.has(key) ? memoryStore.get(key) : null;
@@ -28,7 +28,7 @@ const SafeStorage = (function() {
       const valStr = String(value);
       if (storageWorks) {
         try {
-          window.SafeStorage.setItem(key, valStr);
+          window.localStorage.setItem(key, valStr);
           return;
         } catch (_) {}
       }
@@ -37,7 +37,7 @@ const SafeStorage = (function() {
     removeItem(key) {
       if (storageWorks) {
         try {
-          window.SafeStorage.removeItem(key);
+          window.localStorage.removeItem(key);
           return;
         } catch (_) {}
       }
@@ -46,7 +46,7 @@ const SafeStorage = (function() {
     clear() {
       if (storageWorks) {
         try {
-          window.SafeStorage.clear();
+          window.localStorage.clear();
           return;
         } catch (_) {}
       }
@@ -628,11 +628,23 @@ class NexusApp {
         if (!p.supplier) p.supplier = 'Joyeros Italianos S.A.S.';
         if (!p.sku) p.sku = '001';
 
-        const catMatch = (this.data.categories || []).find(c => 
-          String(c.id).toLowerCase().trim() === String(p.category || '').toLowerCase().trim() ||
-          String(c.name).toLowerCase().trim() === String(p.category || '').toLowerCase().trim() ||
-          String(c.name).toLowerCase().trim() === String(p.categoryName || '').toLowerCase().trim()
+        // 1. Match by category ID first (exact ID match)
+        let catMatch = (this.data.categories || []).find(c => 
+          String(c.id).toLowerCase().trim() === String(p.category || '').toLowerCase().trim()
         );
+        // 2. Fallback: match by category name in p.category
+        if (!catMatch) {
+          catMatch = (this.data.categories || []).find(c => 
+            String(c.name).toLowerCase().trim() === String(p.category || '').toLowerCase().trim()
+          );
+        }
+        // 3. Fallback: match by p.categoryName
+        if (!catMatch && p.categoryName) {
+          catMatch = (this.data.categories || []).find(c => 
+            String(c.id).toLowerCase().trim() === String(p.categoryName || '').toLowerCase().trim() ||
+            String(c.name).toLowerCase().trim() === String(p.categoryName || '').toLowerCase().trim()
+          );
+        }
         if (catMatch) {
           p.category = catMatch.id;
           p.categoryName = catMatch.name;
@@ -1263,7 +1275,7 @@ class NexusApp {
 
           // Structural fingerprint to detect real stock, price, debt, cash register, users and configuration updates
           const buildFingerprint = (d) => {
-            const pFp = (d.products || []).map(p => `${p.id}:${p.stock}:${p.price}:${p.status}`).join('|');
+            const pFp = (d.products || []).map(p => `${p.id}:${p.name}:${p.category}:${p.cost}:${p.price}:${p.stock}:${p.status}`).join('|');
             const cFp = (d.customers || []).map(c => `${c.id}:${c.creditBalance}`).join('|');
             const sFp = (d.suppliers || []).map(s => `${s.id}:${s.creditBalance}`).join('|');
             const uFp = (d.users || []).map(u => `${u.id}:${u.status}:${u.role}`).join('|');
@@ -1283,7 +1295,10 @@ class NexusApp {
             this.data = Object.assign({}, INITIAL_DATA, remote);
             this.sanitizeLoadedData();
             try {
-              SafeStorage.setItem('nexus_pos_data', JSON.stringify(this.data));
+              SafeStorage.setItem('nexus_pos_data_' + this.currentStoreId, JSON.stringify(this.data));
+              if (this.currentStoreId === 'store_1') {
+                SafeStorage.setItem('nexus_pos_data', JSON.stringify(this.data));
+              }
             } catch (_) {}
 
             // Immediate logout if user account was deactivated by Admin on another terminal
@@ -3612,10 +3627,8 @@ class NexusApp {
           p.supplier = document.getElementById('edit-prod-supplier').value;
           p.cost = this.parseCleanNumber(document.getElementById('edit-prod-cost')?.value);
           const editPriceInput = document.getElementById('edit-prod-price');
-          if (editPriceInput && editPriceInput.value !== '') {
-            p.price = this.parseCleanNumber(editPriceInput.value);
-          } else {
-            p.price = Number(p.price || 0);
+          if (editPriceInput) {
+            p.price = editPriceInput.value.trim() !== '' ? this.parseCleanNumber(editPriceInput.value) : 0;
           }
 
           // GRAMAJE / CANTIDAD TOTAL DEL ARTÍCULO
