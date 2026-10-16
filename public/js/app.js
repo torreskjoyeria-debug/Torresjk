@@ -554,6 +554,51 @@ class NexusApp {
     }
   }
 
+  generateUniqueProductId() {
+    let maxNum = 0;
+    const seen = new Set();
+    (this.data?.products || []).forEach(p => {
+      if (!p || !p.id) return;
+      seen.add(String(p.id).trim());
+      const m = String(p.id).match(/^PRD-(\d+)$/i);
+      if (m) {
+        const n = parseInt(m[1], 10);
+        if (!isNaN(n) && n > maxNum) maxNum = n;
+      }
+    });
+    let candidateNum = Math.max(maxNum + 1, (this.data?.products?.length || 0) + 1);
+    let candidate = `PRD-${String(candidateNum).padStart(3, '0')}`;
+    while (seen.has(candidate)) {
+      candidateNum++;
+      candidate = `PRD-${String(candidateNum).padStart(3, '0')}`;
+    }
+    return candidate;
+  }
+
+  ensureUniqueProductIds() {
+    if (!this.data || !Array.isArray(this.data.products) || this.data.products.length === 0) return;
+    const seenIds = new Set();
+    let maxNum = 0;
+    this.data.products.forEach(p => {
+      if (!p) return;
+      const m = String(p.id || '').match(/^PRD-(\d+)$/i);
+      if (m) {
+        const n = parseInt(m[1], 10);
+        if (!isNaN(n) && n > maxNum) maxNum = n;
+      }
+    });
+
+    this.data.products.forEach(p => {
+      if (!p) return;
+      const idStr = String(p.id || '').trim();
+      if (!idStr || seenIds.has(idStr)) {
+        maxNum++;
+        p.id = `PRD-${String(maxNum).padStart(3, '0')}`;
+      }
+      seenIds.add(String(p.id));
+    });
+  }
+
   sanitizeLoadedData() {
     if (this.data.users && Array.isArray(this.data.users)) {
       this.data.users.forEach(u => {
@@ -623,6 +668,7 @@ class NexusApp {
     }
 
     if (this.data.products && Array.isArray(this.data.products)) {
+      this.ensureUniqueProductIds();
       this.data.products.forEach(p => {
         if (!p.measureType) p.measureType = 'Pesaje';
         if (!p.supplier) p.supplier = 'Joyeros Italianos S.A.S.';
@@ -3282,7 +3328,7 @@ class NexusApp {
           }
 
           if (!targetProd) {
-            const newProdId = `PRD-${Date.now().toString().slice(-4)}`;
+            const newProdId = this.generateUniqueProductId();
             const newSku = prodSku || `SKU-${Date.now().toString().slice(-4)}`;
             targetProd = {
               id: newProdId,
@@ -3536,7 +3582,7 @@ class NexusApp {
         const categoryName = catObj ? catObj.name : 'General';
 
         const newP = {
-          id: `PRD-${Math.floor(106 + Math.random() * 900)}`,
+          id: this.generateUniqueProductId(),
           sku: sku || '001',
           name,
           measureType: isExtraCat ? 'Unidades' : measureType,
@@ -4791,7 +4837,7 @@ class NexusApp {
       this.showToast('Acceso Restringido: Tu rol no tiene permisos para editar productos del catálogo.', 'warning');
       return;
     }
-    const p = this.data.products.find(item => item.id === id);
+    const p = this.data.products.find(item => String(item.id) === String(id));
     if (!p) return;
 
     document.getElementById('edit-prod-id').value = p.id;
