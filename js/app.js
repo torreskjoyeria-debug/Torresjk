@@ -2989,9 +2989,17 @@ class NexusApp {
         const amount = this.parseCleanNumber(document.getElementById('exp-amount-input')?.value);
         const method = document.getElementById('exp-method-select').value;
 
+        const activeCashier = this.data.store?.cashier || (this.currentUser ? this.currentUser.name : "Administración");
+        const activeShift = this.data.cashShiftLog && this.data.cashShiftLog.status === 'Abierto' ? this.data.cashShiftLog : null;
+        const now = new Date();
+
         const newExp = {
           id: `EXP-${Math.floor(805 + Math.random() * 900)}`,
-          date: new Date().toISOString().slice(0, 10),
+          date: now.toISOString().slice(0, 10),
+          time: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          timestamp: now.getTime(),
+          shiftId: activeShift ? activeShift.shiftId : null,
+          cashier: activeCashier,
           description: desc,
           category: cat,
           amount,
@@ -3424,6 +3432,9 @@ class NexusApp {
             total: totalCost,
             date: now.toISOString().slice(0, 10),
             time: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            timestamp: now.getTime(),
+            shiftId: (this.data.cashShiftLog && this.data.cashShiftLog.status === 'Abierto') ? this.data.cashShiftLog.shiftId : null,
+            cashier: this.data.store?.cashier || (this.currentUser ? this.currentUser.name : "Cajero"),
             status: "Recibido",
             paymentStatus: paymentStatus,
             paymentMethod: paymentMethod,
@@ -12034,10 +12045,12 @@ class NexusApp {
       if (s.includes('/')) {
         const p = s.split('/');
         if (p.length === 3) {
-          const day = p[0].padStart(2, '0');
-          const mon = p[1].padStart(2, '0');
-          const yr = p[2].length === 2 ? '20' + p[2] : p[2];
-          return `${yr}-${mon}-${day}`;
+          if (p[0].length === 4) {
+            return `${p[0]}-${p[1].padStart(2, '0')}-${p[2].padStart(2, '0')}`;
+          } else {
+            const yr = p[2].length === 2 ? '20' + p[2] : p[2];
+            return `${yr}-${p[1].padStart(2, '0')}-${p[0].padStart(2, '0')}`;
+          }
         }
       }
       return s;
@@ -12061,7 +12074,7 @@ class NexusApp {
       const normItemDate = normalizeDateStr(dateStr);
       if (normItemDate !== normShiftDate) return false;
 
-      // 4. Validación temporal estricta con el momento de apertura del turno
+      // 4. Validación temporal con el momento de apertura del turno (si tiene timestamp u hora comprobable)
       if (openTimestamp > 0) {
         if (itemTimestamp && itemTimestamp > 0) {
           return itemTimestamp >= (openTimestamp - 60000);
@@ -12070,11 +12083,10 @@ class NexusApp {
           const t = this.parseDateAndTimeToTimestamp(normItemDate, timeStr);
           if (t > 0) return t >= (openTimestamp - 60000);
         }
-        // Si no tiene hora ni timestamp comprobable, un egreso previo NO puede cargarse a un turno nuevo recién abierto
-        return false;
       }
 
-      return false;
+      // 5. Fallback para egresos de la fecha del turno actual no asignados a turnos cerrados
+      return true;
     };
 
     // 1. Gastos Operativos en Efectivo
