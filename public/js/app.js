@@ -707,7 +707,7 @@ class NexusApp {
     if (this.data.recentTransactions && Array.isArray(this.data.recentTransactions)) {
       this.data.recentTransactions.forEach(tx => {
         if (!tx.cashier) {
-          tx.cashier = tx.type?.includes('POS') ? 'Javier Ortiz (Cajero)' : (this.data.store?.cashier || 'Carlos Mendoza');
+          tx.cashier = tx.type?.includes('POS') ? 'Javier Ortiz (Cajero)' : (this.data.store?.cashier || 'Administrador Torres Joyería');
         }
       });
     } else {
@@ -1708,8 +1708,8 @@ class NexusApp {
   async quickLogin(roleName) {
     const term = (roleName || '').toLowerCase();
     let user = null;
-    if (term.includes('super') || term.includes('admin') || term === 'carlos') {
-      user = this.data.users.find(u => (u.email?.toLowerCase() === 'carlos@nexuspos.io' || u.role === 'Super Admin') && u.status === 'Active');
+    if (term.includes('super') || term.includes('admin') || term === 'jojan') {
+      user = this.data.users.find(u => (u.email?.toLowerCase() === 'jojan@nexuspos.io' || u.role === 'Super Admin') && u.status === 'Active');
     } else if (term.includes('principal') || term === 'cajero_1' || term === 'store_1') {
       user = this.data.users.find(u => (u.email?.toLowerCase() === 'cajeroprincipal@nexuspos.io' || u.storeId === 'store_1') && u.status === 'Active');
     } else if (term.includes('centro') || term === 'cajero_2' || term === 'store_2') {
@@ -12426,7 +12426,7 @@ class NexusApp {
   populateOpenCashAccountSelect() {
     const select = document.getElementById('open-cash-card-account-select');
     if (!select) return;
-    const accounts = this.getDestinationBankAccounts ? this.getDestinationBankAccounts() : ['Cuenta Carlos', 'Cuenta Sharick', 'CUENTA PRINCIPAL NEGOCIO'];
+    const accounts = this.getDestinationBankAccounts ? this.getDestinationBankAccounts() : ['Cuenta Principal'];
     select.innerHTML = accounts.map(acc => `<option value="${this.escapeHtml(acc)}">${this.escapeHtml(acc)}</option>`).join('');
   }
 
@@ -12505,7 +12505,7 @@ class NexusApp {
     const openingCash = this.parseCleanNumber(inputCash?.value) || 0;
     const isCardEnabled = checkCard ? checkCard.checked : false;
     const openingCard = isCardEnabled ? (this.parseCleanNumber(inputCard?.value) || 0) : 0;
-    const openingAccount = isCardEnabled ? (selectAcc?.value?.trim() || 'Cuenta Carlos') : '';
+    const openingAccount = isCardEnabled ? (selectAcc?.value?.trim() || (this.getDestinationBankAccounts ? this.getDestinationBankAccounts()[0] : 'Cuenta Principal')) : '';
     const openingTotal = openingCash + openingCard;
 
     const currentOperator = this.currentUser?.name || 'Cajero';
@@ -25970,41 +25970,74 @@ class NexusApp {
   }
 
   getDestinationBankAccounts() {
-    // Cuentas base requeridas por el negocio
-    const baseAccounts = [
-      'Cuenta Carlos',
-      'Cuenta Sharick',
-      'CUENTA PRINCIPAL NEGOCIO'
-    ];
-
-    const discoveredAccounts = [];
-    (this.data.paymentMethods || []).forEach(pm => {
-      const lower = (pm.name || '').toLowerCase();
-      if ((lower.includes('cuenta') || lower.includes('cta') || lower.includes('banco') || lower.includes('bancaria')) &&
-          !lower.includes('efectivo') && !lower.includes('separe') && !lower.includes('crédito cliente')) {
-        let cleanName = pm.name.trim();
-        if (cleanName) discoveredAccounts.push(cleanName);
-      }
-    });
-
     const accountsSet = new Set();
     const finalAccounts = [];
 
-    baseAccounts.forEach(name => {
-      accountsSet.add(name.toLowerCase());
-      finalAccounts.push(name);
-    });
-
-    discoveredAccounts.forEach(acc => {
-      const lower = acc.toLowerCase();
-      const alreadyCovered = (lower.includes('carlos') && accountsSet.has('cuenta carlos')) ||
-                             ((lower.includes('zharick') || lower.includes('sharick')) && accountsSet.has('cuenta sharick')) ||
-                             (lower.includes('cuenta principal') && accountsSet.has('cuenta principal negocio'));
-      if (!alreadyCovered && !accountsSet.has(lower)) {
+    const addAccount = (name) => {
+      if (!name || typeof name !== 'string') return;
+      const clean = name.trim();
+      const lower = clean.toLowerCase();
+      // Blocklist residual accounts from older projects and generic non-account payment types
+      if (
+        lower.includes('carlos') ||
+        lower.includes('sharick') ||
+        lower.includes('zharick') ||
+        lower === 'cuenta principal negocio' ||
+        lower === 'transferencia bancaria' ||
+        lower === 'transferencia' ||
+        lower === 'tarjeta' ||
+        lower === 'tarjeta débito/crédito' ||
+        lower === 'tarjeta debito/credito' ||
+        lower.includes('efectivo') ||
+        lower.includes('separe') ||
+        lower.includes('crédito cliente') ||
+        lower.includes('pago mixto') ||
+        lower === 'addi'
+      ) {
+        return;
+      }
+      if (!accountsSet.has(lower)) {
         accountsSet.add(lower);
-        finalAccounts.push(acc);
+        finalAccounts.push(clean);
+      }
+    };
+
+    // 1. Explicitly configured bank accounts in store or root data
+    const explicitAccounts = [
+      ...(Array.isArray(this.data?.destinationBankAccounts) ? this.data.destinationBankAccounts : []),
+      ...(Array.isArray(this.data?.store?.destinationBankAccounts) ? this.data.store.destinationBankAccounts : []),
+      ...(Array.isArray(this.data?.store?.bankAccounts) ? this.data.store.bankAccounts : []),
+      ...(Array.isArray(this.data?.bankAccounts) ? this.data.bankAccounts : [])
+    ];
+    explicitAccounts.forEach(acc => addAccount(typeof acc === 'string' ? acc : acc?.name));
+
+    // 2. Discover accounts from custom payment methods (e.g., 'Transferencia jojan', 'Bancolombia', 'Nequi', 'Daviplata')
+    (this.data?.paymentMethods || []).forEach(pm => {
+      if (pm.active === false) return;
+      const name = (pm.name || '').trim();
+      const lower = name.toLowerCase();
+
+      const isBankOrTransfer =
+        lower.includes('transferencia') ||
+        lower.includes('cuenta') ||
+        lower.includes('cta') ||
+        lower.includes('banco') ||
+        lower.includes('bancolombia') ||
+        lower.includes('nequi') ||
+        lower.includes('daviplata') ||
+        lower.includes('davivienda') ||
+        lower.includes('bbva');
+
+      if (isBankOrTransfer) {
+        addAccount(name);
       }
     });
+
+    // 3. Fallback if no specific account is configured
+    if (finalAccounts.length === 0) {
+      const storeName = this.data?.store?.name || 'Sede Principal';
+      finalAccounts.push(`Cuenta Principal (${storeName})`);
+    }
 
     return finalAccounts;
   }
@@ -26399,14 +26432,14 @@ class NexusApp {
     const payMethodName = payMethodNames[this.selectedPayMethod] || 'Efectivo';
 
     const cardAccount = this.selectedPayMethod === 'card'
-      ? (document.getElementById('checkout-card-account-select')?.value?.trim() || 'Cuenta Carlos')
+      ? (document.getElementById('checkout-card-account-select')?.value?.trim() || (this.getDestinationBankAccounts ? this.getDestinationBankAccounts()[0] : 'Cuenta Principal'))
       : '';
     const cardVoucher = this.selectedPayMethod === 'card'
       ? (document.getElementById('checkout-card-voucher-input')?.value?.trim() || '')
       : '';
 
     const transferAccount = this.selectedPayMethod === 'transfer'
-      ? (document.getElementById('checkout-transfer-account-select')?.value?.trim() || 'Cuenta Carlos')
+      ? (document.getElementById('checkout-transfer-account-select')?.value?.trim() || (this.getDestinationBankAccounts ? this.getDestinationBankAccounts()[0] : 'Cuenta Principal'))
       : '';
     const transferVoucher = this.selectedPayMethod === 'transfer'
       ? (document.getElementById('checkout-transfer-voucher-input')?.value?.trim() || '')
@@ -26467,9 +26500,9 @@ class NexusApp {
       const creditVal = this.parseCleanNumber(document.getElementById('mixed-credit-amount')?.value) || 0;
       const addiVal = this.parseCleanNumber(document.getElementById('mixed-addi-amount')?.value) || 0;
 
-      const mixedCardAccount = document.getElementById('checkout-mixed-card-account')?.value?.trim() || 'Cuenta Carlos';
+      const mixedCardAccount = document.getElementById('checkout-mixed-card-account')?.value?.trim() || (this.getDestinationBankAccounts ? this.getDestinationBankAccounts()[0] : 'Cuenta Principal');
       const mixedCardVoucher = document.getElementById('checkout-mixed-card-voucher')?.value?.trim() || '';
-      const mixedTransferAccount = document.getElementById('checkout-mixed-transfer-account')?.value?.trim() || 'Cuenta Carlos';
+      const mixedTransferAccount = document.getElementById('checkout-mixed-transfer-account')?.value?.trim() || (this.getDestinationBankAccounts ? this.getDestinationBankAccounts()[0] : 'Cuenta Principal');
       const mixedTransferVoucher = document.getElementById('checkout-mixed-transfer-voucher')?.value?.trim() || '';
       const mixedAddiAccount = document.getElementById('checkout-mixed-addi-account')?.value?.trim() || 'ADDI (Liquidación Directa)';
       const mixedAddiVoucher = document.getElementById('checkout-mixed-addi-voucher')?.value?.trim() || '';

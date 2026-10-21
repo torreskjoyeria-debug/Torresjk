@@ -216,9 +216,9 @@
           "active": true
         },
         {
-          "id": "PM-03",
-          "name": "Transferencia Bancaria",
-          "icon": "bank",
+          "id": "PM-96",
+          "name": "Transferencia jojan",
+          "icon": "card",
           "fee": "0%",
           "active": true
         },

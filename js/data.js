@@ -150,7 +150,7 @@ const INITIAL_DATA = {
   paymentMethods: [
     { id: "PM-01", name: "Efectivo", icon: "cash", fee: "0%", active: true },
     { id: "PM-02", name: "Tarjeta Débito/Crédito", icon: "card", fee: "0.8%", active: true },
-    { id: "PM-03", name: "Transferencia Bancaria", icon: "bank", fee: "0%", active: true },
+    { id: "PM-96", name: "Transferencia jojan", icon: "card", fee: "0%", active: true },
     { id: "PM-04", name: "Crédito Cliente", icon: "credit", fee: "0%", active: true },
     { id: "PM-15", name: "Plan Separe", icon: "calendar", fee: "0%", active: true },
     { id: "PM-30", name: "ADDI", icon: "credit", fee: "0%", active: true },
