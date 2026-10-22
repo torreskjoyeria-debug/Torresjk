@@ -1213,15 +1213,20 @@ class NexusApp {
 
     // Serial queuing to prevent race conditions and payload overwrites
     if (this._isSaving) {
+      if (!this._saveQueuePromise) {
+        this._saveQueuePromise = new Promise((resolve) => {
+          this._resolvePendingSave = resolve;
+        });
+      }
       this._pendingSave = true;
-      return;
+      return this._saveQueuePromise;
     }
     this._isSaving = true;
 
     try {
       const userRole = this.currentUser?.role || 'Super Admin';
       const userId = this.currentUser?.id || 'USR-001';
-      await fetch(`/api/data?storeId=${this.currentStoreId}`, {
+      const res = await fetch(`/api/data?storeId=${this.currentStoreId}`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -1232,13 +1237,31 @@ class NexusApp {
         },
         body: JSON.stringify(this.data)
       });
+      if (res && res.ok) {
+        const result = await res.json().catch(() => null);
+        if (result && Array.isArray(result.mergedTransactions)) {
+          this.data.recentTransactions = result.mergedTransactions;
+        }
+      } else if (res && !res.ok) {
+        console.error('[NexusApp] Error en guardado en servidor:', res.status);
+      }
     } catch(e) {
       console.warn('[NexusApp] No se pudo sincronizar con backend REST:', e);
     } finally {
       this._isSaving = false;
       if (this._pendingSave) {
         this._pendingSave = false;
-        this.savePersistence();
+        const nextP = this.savePersistence();
+        if (this._resolvePendingSave) {
+          const resolveFn = this._resolvePendingSave;
+          this._resolvePendingSave = null;
+          this._saveQueuePromise = null;
+          nextP.then(resolveFn).catch(resolveFn);
+        }
+      } else if (this._resolvePendingSave) {
+        this._resolvePendingSave();
+        this._resolvePendingSave = null;
+        this._saveQueuePromise = null;
       }
     }
   }
@@ -1338,6 +1361,25 @@ class NexusApp {
           const remoteFp = buildFingerprint(remote);
 
           if (localFp !== remoteFp) {
+            // Smart local preservation: merge recent local transactions that might not yet be in remote
+            const localTxs = this.data.recentTransactions || [];
+            const remoteTxs = remote.recentTransactions || [];
+            const txMap = new Map();
+            remoteTxs.forEach(t => { if (t && t.id) txMap.set(t.id, t); });
+            localTxs.forEach(t => {
+              if (t && t.id && !txMap.has(t.id)) {
+                const age = Date.now() - (t.timestamp || (t.createdAt ? new Date(t.createdAt).getTime() : 0));
+                if (age < 30 * 60 * 1000) {
+                  txMap.set(t.id, t);
+                }
+              }
+            });
+            remote.recentTransactions = Array.from(txMap.values()).sort((a, b) => {
+              const tA = a.timestamp || 0;
+              const tB = b.timestamp || 0;
+              return tB - tA;
+            });
+
             this.data = Object.assign({}, INITIAL_DATA, remote);
             this.sanitizeLoadedData();
             try {
@@ -26713,6 +26755,10 @@ class NexusApp {
       customerPhone: cust?.phone || '',
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
       date: `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`,
+      timestamp: Date.now(),
+      shiftId: this.data.cashShiftLog?.shiftId || null,
+      storeId: this.currentStoreId || 'store_1',
+      createdAt: new Date().toISOString(),
       type: "Venta POS",
       itemsCount: this.cart.reduce((acc, i) => acc + (i.unitsCount || 1), 0),
       items: this.cart.map(i => {

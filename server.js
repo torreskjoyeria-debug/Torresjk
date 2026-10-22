@@ -75,7 +75,7 @@ const DataSchema = new mongoose.Schema({
   content: mongoose.Schema.Types.Mixed,
   updatedAt: { type: Date, default: Date.now }
 });
-const DataModel = mongoose.model('NexusData', DataSchema);
+const DataModel = mongoose.models.NexusData || mongoose.model('NexusData', DataSchema);
 
 // Robust Serverless-friendly MongoDB Atlas Connection Manager
 async function ensureDbConnected() {
@@ -187,6 +187,163 @@ function saveLocalDb(data, storeId = 'store_1') {
       if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile);
     } catch (_) {}
   }
+}
+
+// Helper: Merge incoming client full-state with existing persistent state to prevent concurrency data loss
+function mergeStoreState(serverData, clientData) {
+  if (!serverData || typeof serverData !== 'object') return clientData;
+  if (!clientData || typeof clientData !== 'object') return serverData;
+
+  const result = Object.assign({}, clientData);
+
+  // 1. MERGE recentTransactions (Keyed by id, strictly preserve any transaction already committed to server)
+  const serverTxs = Array.isArray(serverData.recentTransactions) ? serverData.recentTransactions : [];
+  const clientTxs = Array.isArray(clientData.recentTransactions) ? clientData.recentTransactions : [];
+  const txMap = new Map();
+
+  serverTxs.forEach(tx => {
+    if (tx && tx.id) txMap.set(tx.id, tx);
+  });
+
+  clientTxs.forEach(tx => {
+    if (tx && tx.id) {
+      const existing = txMap.get(tx.id);
+      if (existing) {
+        txMap.set(tx.id, Object.assign({}, existing, tx));
+      } else {
+        txMap.set(tx.id, tx);
+      }
+    }
+  });
+
+  result.recentTransactions = Array.from(txMap.values()).sort((a, b) => {
+    const timeA = a.timestamp || (a.createdAt ? new Date(a.createdAt).getTime() : 0);
+    const timeB = b.timestamp || (b.createdAt ? new Date(b.createdAt).getTime() : 0);
+    if (timeA && timeB) return timeB - timeA;
+    return (b.id || '').localeCompare(a.id || '');
+  });
+
+  // 2. MERGE expenses (Keyed by id)
+  const serverExp = Array.isArray(serverData.expenses) ? serverData.expenses : [];
+  const clientExp = Array.isArray(clientData.expenses) ? clientData.expenses : [];
+  const expMap = new Map();
+  serverExp.forEach(e => { if (e && e.id) expMap.set(e.id, e); });
+  clientExp.forEach(e => { if (e && e.id) expMap.set(e.id, e); });
+  result.expenses = Array.from(expMap.values()).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+
+  // 3. MERGE abonosVentas & abonosCompras (Keyed by id)
+  const serverAv = Array.isArray(serverData.abonosVentas) ? serverData.abonosVentas : [];
+  const clientAv = Array.isArray(clientData.abonosVentas) ? clientData.abonosVentas : [];
+  const avMap = new Map();
+  serverAv.forEach(a => { if (a && a.id) avMap.set(a.id, a); });
+  clientAv.forEach(a => { if (a && a.id) avMap.set(a.id, a); });
+  result.abonosVentas = Array.from(avMap.values());
+
+  const serverAc = Array.isArray(serverData.abonosCompras) ? serverData.abonosCompras : [];
+  const clientAc = Array.isArray(clientData.abonosCompras) ? clientData.abonosCompras : [];
+  const acMap = new Map();
+  serverAc.forEach(a => { if (a && a.id) acMap.set(a.id, a); });
+  clientAc.forEach(a => { if (a && a.id) acMap.set(a.id, a); });
+  result.abonosCompras = Array.from(acMap.values());
+
+  // 4. MERGE cashShiftsHistory (Keyed by shiftId or id)
+  const serverHist = Array.isArray(serverData.cashShiftsHistory) ? serverData.cashShiftsHistory : [];
+  const clientHist = Array.isArray(clientData.cashShiftsHistory) ? clientData.cashShiftsHistory : [];
+  const histMap = new Map();
+  serverHist.forEach(h => { const k = h.shiftId || h.id; if (k) histMap.set(k, h); });
+  clientHist.forEach(h => { const k = h.shiftId || h.id; if (k) histMap.set(k, h); });
+  result.cashShiftsHistory = Array.from(histMap.values());
+
+  // 5. MERGE customerCredits (Keyed by id or customer)
+  const serverCredits = Array.isArray(serverData.customerCredits) ? serverData.customerCredits : [];
+  const clientCredits = Array.isArray(clientData.customerCredits) ? clientData.customerCredits : [];
+  const creditMap = new Map();
+  serverCredits.forEach(c => { const k = c.id || c.customer; if (k) creditMap.set(k, c); });
+  clientCredits.forEach(c => { const k = c.id || c.customer; if (k) creditMap.set(k, c); });
+  result.customerCredits = Array.from(creditMap.values());
+
+  // 6. MERGE products stock preservation:
+  if (Array.isArray(serverData.products) && Array.isArray(clientData.products)) {
+    const serverProdMap = new Map();
+    serverData.products.forEach(p => { if (p && p.id) serverProdMap.set(p.id, p); });
+
+    result.products = clientData.products.map(clientProd => {
+      const serverProd = serverProdMap.get(clientProd.id);
+      if (!serverProd) return clientProd;
+      const serverSold = Number(serverProd.sold30d) || 0;
+      const clientSold = Number(clientProd.sold30d) || 0;
+      const mergedProd = Object.assign({}, clientProd);
+      if (serverSold > clientSold) {
+        mergedProd.sold30d = serverSold;
+        mergedProd.stock = Math.min(Number(serverProd.stock) || 0, Number(clientProd.stock) || 0);
+        if (mergedProd.stock <= 0) {
+          mergedProd.stock = 0;
+          mergedProd.status = 'out_of_stock';
+        }
+      }
+      return mergedProd;
+    });
+  }
+
+  // 7. ACTIVE SHIFT CONSISTENCY:
+  if (result.cashShiftLog && result.cashShiftLog.status === 'Abierto') {
+    const shift = result.cashShiftLog;
+    const shiftId = shift.shiftId;
+    let totalCashSales = 0;
+    let totalCardSales = 0;
+
+    result.recentTransactions.forEach(tx => {
+      const belongs = tx.shiftId ? (tx.shiftId === shiftId) : (!tx.closedShiftId);
+      if (belongs) {
+        const amt = Math.round(Number(tx.total) || 0);
+        const m = (tx.paymentMethod || '').toLowerCase();
+        if (tx.paymentBreakdown) {
+          totalCashSales += Math.round(Number(tx.paymentBreakdown.cash) || 0);
+          totalCardSales += Math.round(Number(tx.paymentBreakdown.card || 0) + Number(tx.paymentBreakdown.transfer || 0) + Number(tx.paymentBreakdown.addi || 0));
+        } else if (m.includes('efectivo') || m.includes('cash')) {
+          totalCashSales += amt;
+        } else if (!m.includes('crédito') && !m.includes('credito')) {
+          totalCardSales += amt;
+        }
+      }
+    });
+
+    let totalCashAbonos = 0;
+    (result.abonosVentas || []).forEach(a => {
+      const belongs = a.shiftId ? (a.shiftId === shiftId) : (!a.closedShiftId);
+      if (belongs) {
+        const amt = Math.round(Number(a.amount) || 0);
+        const m = (a.method || '').toLowerCase();
+        if (a.paymentBreakdown) {
+          totalCashAbonos += Math.round(Number(a.paymentBreakdown.cash) || 0);
+        } else if (m.includes('efectivo') || m.includes('cash')) {
+          totalCashAbonos += amt;
+        }
+      }
+    });
+
+    let totalCashExpenses = 0;
+    (result.expenses || []).forEach(e => {
+      const belongs = e.shiftId ? (e.shiftId === shiftId) : (!e.closedShiftId);
+      if (belongs) {
+        const m = (e.paymentMethod || e.method || '').toLowerCase();
+        if (m.includes('efectivo') || m.includes('cash') || !m.includes('banco')) {
+          totalCashExpenses += Math.round(Number(e.amount) || 0);
+        }
+      }
+    });
+
+    shift.cashSales = totalCashSales;
+    shift.cardSales = totalCardSales;
+    shift.cashExpenses = totalCashExpenses;
+    const opening = Number(shift.openingCash) || 0;
+    shift.expectedCashInDrawer = opening + totalCashSales + totalCashAbonos - totalCashExpenses;
+    if (result.store) {
+      result.store.cashInBox = shift.expectedCashInDrawer;
+    }
+  }
+
+  return result;
 }
 
 // API Health
@@ -345,23 +502,37 @@ app.post('/api/data', async (req, res) => {
       return res.status(400).json({ error: 'Payload de datos inválido o incompleto: estructura requerida ausente' });
     }
 
-    data.updatedAt = new Date().toISOString();
-    saveLocalDb(data, storeId);
-
     if (!mongoConnected) {
       await ensureDbConnected();
     }
 
+    // SMART CONCURRENCY MERGE: Prevent terminal saves from overwriting other active cashiers' transactions, expenses, debts, shifts
+    let mergedData = data;
+    if (mongoConnected) {
+      const existingDoc = await DataModel.findOne({ key: storeId });
+      if (existingDoc && existingDoc.content) {
+        mergedData = mergeStoreState(existingDoc.content, data);
+      }
+    } else {
+      const localExisting = loadLocalDb(storeId);
+      if (localExisting) {
+        mergedData = mergeStoreState(localExisting, data);
+      }
+    }
+
+    mergedData.updatedAt = new Date().toISOString();
+    saveLocalDb(mergedData, storeId);
+
     if (mongoConnected) {
       await DataModel.findOneAndUpdate(
         { key: storeId },
-        { content: data, updatedAt: new Date() },
+        { content: mergedData, updatedAt: new Date() },
         { upsert: true, new: true }
       );
       if (storeId === 'store_1') {
         await DataModel.findOneAndUpdate(
           { key: 'main_store' },
-          { content: data, updatedAt: new Date() },
+          { content: mergedData, updatedAt: new Date() },
           { upsert: true, new: true }
         );
       }
@@ -369,7 +540,15 @@ app.post('/api/data', async (req, res) => {
       return res.status(503).json({ error: 'Error de persistencia: No se pudo conectar a MongoDB Atlas en Vercel.' });
     }
 
-    res.json({ success: true, storeId, mode: mongoConnected ? 'MongoDB (torreskjoyeria_pos)' : 'Local JSON', timestamp: new Date() });
+    res.json({ 
+      success: true, 
+      storeId, 
+      mode: mongoConnected ? 'MongoDB (torreskjoyeria_pos)' : 'Local JSON', 
+      recentTransactionsCount: (mergedData.recentTransactions || []).length,
+      mergedTransactions: mergedData.recentTransactions,
+      updatedAt: mergedData.updatedAt,
+      timestamp: new Date() 
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
