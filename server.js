@@ -289,11 +289,13 @@ function mergeStoreState(serverData, clientData) {
   if (result.cashShiftLog && result.cashShiftLog.status === 'Abierto') {
     const shift = result.cashShiftLog;
     const shiftId = shift.shiftId;
+    const shiftOpenedDate = shift.openedDate || (shift.openedIso ? shift.openedIso.slice(0, 10) : new Date().toISOString().slice(0, 10));
+
     let totalCashSales = 0;
     let totalCardSales = 0;
 
     result.recentTransactions.forEach(tx => {
-      const belongs = tx.shiftId ? (tx.shiftId === shiftId) : (!tx.closedShiftId);
+      const belongs = tx.shiftId ? (tx.shiftId === shiftId) : (!tx.closedShiftId && (tx.date && tx.date.includes(shiftOpenedDate.split('-').reverse().join('/'))));
       if (belongs) {
         const amt = Math.round(Number(tx.total) || 0);
         const m = (tx.paymentMethod || '').toLowerCase();
@@ -310,7 +312,7 @@ function mergeStoreState(serverData, clientData) {
 
     let totalCashAbonos = 0;
     (result.abonosVentas || []).forEach(a => {
-      const belongs = a.shiftId ? (a.shiftId === shiftId) : (!a.closedShiftId);
+      const belongs = a.shiftId ? (a.shiftId === shiftId) : (!a.closedShiftId && a.date && a.date.startsWith(shiftOpenedDate));
       if (belongs) {
         const amt = Math.round(Number(a.amount) || 0);
         const m = (a.method || '').toLowerCase();
@@ -323,12 +325,17 @@ function mergeStoreState(serverData, clientData) {
     });
 
     let totalCashExpenses = 0;
+    let totalBankExpenses = 0;
     (result.expenses || []).forEach(e => {
-      const belongs = e.shiftId ? (e.shiftId === shiftId) : (!e.closedShiftId);
+      // STRICT: Must match this shiftId, OR if no shiftId, must match shift openedDate and NOT belong to a closed shift
+      const belongs = e.shiftId ? (e.shiftId === shiftId) : (!e.closedShiftId && e.date === shiftOpenedDate);
       if (belongs) {
         const m = (e.paymentMethod || e.method || '').toLowerCase();
-        if (m.includes('efectivo') || m.includes('cash') || !m.includes('banco')) {
-          totalCashExpenses += Math.round(Number(e.amount) || 0);
+        const amt = Math.round(Number(e.amount) || 0);
+        if (m.includes('efectivo') || m.includes('cash')) {
+          totalCashExpenses += amt;
+        } else {
+          totalBankExpenses += amt;
         }
       }
     });
@@ -336,6 +343,8 @@ function mergeStoreState(serverData, clientData) {
     shift.cashSales = totalCashSales;
     shift.cardSales = totalCardSales;
     shift.cashExpenses = totalCashExpenses;
+    shift.bankExpenses = totalBankExpenses;
+    shift.totalExpenses = totalCashExpenses + totalBankExpenses;
     const opening = Number(shift.openingCash) || 0;
     shift.expectedCashInDrawer = opening + totalCashSales + totalCashAbonos - totalCashExpenses;
     if (result.store) {
