@@ -26527,6 +26527,11 @@ class NexusApp {
   }
 
   async processPaymentSuccess() {
+    if (this._isProcessingPayment) {
+      console.warn('[NexusApp] Intento de cobro concurrente bloqueado.');
+      return;
+    }
+
     if (!this.currentUser || !this.hasPermission('pos', null)) {
       this.showToast('Acceso Denegado: Tu rol no tiene permisos para procesar cobros en el Punto de Venta.', 'danger');
       return;
@@ -26537,13 +26542,31 @@ class NexusApp {
       return;
     }
 
+    if (!Array.isArray(this.cart) || this.cart.length === 0) {
+      this.showToast('El carrito de compras está vacío.', 'warning');
+      return;
+    }
+
     const modal = document.getElementById('checkout-modal');
+    const confirmBtn = document.getElementById('confirm-payment-btn');
     const totals = this.getCheckoutTotals();
     const subtotal = totals.subtotal;
     const tax = totals.tax;
     const grandTotal = totals.grandTotal;
     const cardFeeAmount = totals.cardFeeAmount;
     const cardFeeRate = totals.cardFeeRate;
+
+    // Idempotency / Anti-double-click guard: check last registered sale in recentTransactions
+    const lastTx = (this.data.recentTransactions || [])[0];
+    if (lastTx && Math.abs((Number(lastTx.total) || 0) - grandTotal) < 0.01) {
+      const nowMs = Date.now();
+      const lastTime = lastTx.timestamp || 0;
+      if (lastTime > 0 && (nowMs - lastTime) < 4000) {
+        console.warn('[NexusApp] Venta duplicada detectada en menos de 4s. Cancelando cobro redundante.');
+        this.showToast('Venta duplicada bloqueada automáticamente.', 'warning');
+        return;
+      }
+    }
 
     const selectedCustomer = document.getElementById('checkout-customer-select')?.value || "Cliente Mostrador";
     const isMostrador = selectedCustomer === 'Cliente Mostrador';
@@ -26699,277 +26722,303 @@ class NexusApp {
       }
     }
 
-    const now = new Date();
-    const currentDay = now.getDate();
-    const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-
-    this.cart.forEach(cartItem => {
-      const p = this.data.products.find(prod => prod.id === cartItem.product.id);
-      if (p) {
-        const soldQty = Number(cartItem.qty) || 0;
-        const isPesaje = (p.measureType || 'Pesaje') === 'Pesaje';
-        const pWeight = parseFloat(String(p.pieceWeight !== undefined && p.pieceWeight !== null ? p.pieceWeight : (p.weight || 0)).replace(',', '.')) || 0;
-        const isUnitWithWeight = !isPesaje && pWeight > 0;
-        const unitsToDeduct = isUnitWithWeight ? (Math.round((soldQty / pWeight) * 100) / 100) : soldQty;
-        p.stock = Math.round(((Number(p.stock) || 0) - unitsToDeduct) * 100) / 100;
-        if (p.stock <= 0) {
-          p.stock = 0;
-          p.status = 'out_of_stock';
-        } else if (p.stock <= (Number(p.minStock) || 0)) {
-          p.status = 'low_stock';
-        } else {
-          p.status = 'active';
-        }
-
-        p.sold30d = (Number(p.sold30d) || 0) + unitsToDeduct;
-        if (!p.monthlySales) p.monthlySales = {};
-        if (!p.monthlySales[currentMonthKey]) p.monthlySales[currentMonthKey] = {};
-        p.monthlySales[currentMonthKey][currentDay] = (Number(p.monthlySales[currentMonthKey][currentDay]) || 0) + unitsToDeduct;
-
-      }
-    });
-
-    // Sincronizar automáticamente disponibilidad de gramos en todas las categorías tras la venta
-    this.syncAllCategoryGrams();
-
-    let newTxId;
-    do {
-      newTxId = `TX-${Math.floor(89000 + Math.random() * 10000)}`;
-    } while ((this.data.recentTransactions || []).some(t => t.id === newTxId));
-    
-    let separeAbono = 0;
-    let separePending = 0;
-
-    if (!this.data.cashShiftLog) {
-      this.data.cashShiftLog = { openingCash: 500000, cashSales: 0, cardSales: 0, cashExpenses: 0, expectedCashInDrawer: 500000, status: 'Abierto' };
+    // LOCK & DISABLE BUTTON IMMEDIATELY TO PREVENT DOUBLE-CLICK
+    this._isProcessingPayment = true;
+    let originalBtnHtml = '';
+    if (confirmBtn) {
+      confirmBtn.disabled = true;
+      originalBtnHtml = confirmBtn.innerHTML;
+      confirmBtn.innerHTML = '⏳ Procesando venta...';
+      confirmBtn.style.opacity = '0.6';
+      confirmBtn.style.pointerEvents = 'none';
     }
 
-    if (this.selectedPayMethod === 'cash') {
-      this.data.cashShiftLog.cashSales = Math.round((Number(this.data.cashShiftLog.cashSales || 0) + grandTotal) * 100) / 100;
-      this.data.cashShiftLog.expectedCashInDrawer = Math.round(((Number(this.data.cashShiftLog.openingCash) || 0) + (Number(this.data.cashShiftLog.cashSales) || 0) - (Number(this.data.cashShiftLog.cashExpenses) || 0)) * 100) / 100;
-      if (this.data.store) this.data.store.cashInBox = this.data.cashShiftLog.expectedCashInDrawer;
-    } else if (this.selectedPayMethod === 'card' || this.selectedPayMethod === 'transfer' || this.selectedPayMethod === 'addi') {
-      this.data.cashShiftLog.cardSales = Math.round((Number(this.data.cashShiftLog.cardSales || 0) + grandTotal) * 100) / 100;
-    } else if (this.selectedPayMethod === 'mixed') {
-      const mCash = mixedPaymentBreakdown?.cash || 0;
-      const mElectronic = (mixedPaymentBreakdown?.card || 0) + (mixedPaymentBreakdown?.transfer || 0) + (mixedPaymentBreakdown?.addi || 0);
-      const mCredit = mixedPaymentBreakdown?.credit || 0;
+    try {
+      // Snapshot cart and clear it immediately so concurrent triggers find an empty cart
+      const soldCart = [...this.cart];
+      this.cart = [];
+      this.renderCart();
 
-      if (mCash > 0) {
-        this.data.cashShiftLog.cashSales = Math.round((Number(this.data.cashShiftLog.cashSales || 0) + mCash) * 100) / 100;
+      const now = new Date();
+      const currentDay = now.getDate();
+      const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+      soldCart.forEach(cartItem => {
+        const p = this.data.products.find(prod => prod.id === cartItem.product.id);
+        if (p) {
+          const soldQty = Number(cartItem.qty) || 0;
+          const isPesaje = (p.measureType || 'Pesaje') === 'Pesaje';
+          const pWeight = parseFloat(String(p.pieceWeight !== undefined && p.pieceWeight !== null ? p.pieceWeight : (p.weight || 0)).replace(',', '.')) || 0;
+          const isUnitWithWeight = !isPesaje && pWeight > 0;
+          const unitsToDeduct = isUnitWithWeight ? (Math.round((soldQty / pWeight) * 100) / 100) : soldQty;
+          p.stock = Math.round(((Number(p.stock) || 0) - unitsToDeduct) * 100) / 100;
+          if (p.stock <= 0) {
+            p.stock = 0;
+            p.status = 'out_of_stock';
+          } else if (p.stock <= (Number(p.minStock) || 0)) {
+            p.status = 'low_stock';
+          } else {
+            p.status = 'active';
+          }
+
+          p.sold30d = (Number(p.sold30d) || 0) + unitsToDeduct;
+          if (!p.monthlySales) p.monthlySales = {};
+          if (!p.monthlySales[currentMonthKey]) p.monthlySales[currentMonthKey] = {};
+          p.monthlySales[currentMonthKey][currentDay] = (Number(p.monthlySales[currentMonthKey][currentDay]) || 0) + unitsToDeduct;
+        }
+      });
+
+      // Sincronizar automáticamente disponibilidad de gramos en todas las categorías tras la venta
+      this.syncAllCategoryGrams();
+
+      let newTxId;
+      do {
+        newTxId = `TX-${Math.floor(89000 + Math.random() * 10000)}`;
+      } while ((this.data.recentTransactions || []).some(t => t.id === newTxId));
+      
+      let separeAbono = 0;
+      let separePending = 0;
+
+      if (!this.data.cashShiftLog) {
+        this.data.cashShiftLog = { openingCash: 500000, cashSales: 0, cardSales: 0, cashExpenses: 0, expectedCashInDrawer: 500000, status: 'Abierto' };
+      }
+
+      if (this.selectedPayMethod === 'cash') {
+        this.data.cashShiftLog.cashSales = Math.round((Number(this.data.cashShiftLog.cashSales || 0) + grandTotal) * 100) / 100;
         this.data.cashShiftLog.expectedCashInDrawer = Math.round(((Number(this.data.cashShiftLog.openingCash) || 0) + (Number(this.data.cashShiftLog.cashSales) || 0) - (Number(this.data.cashShiftLog.cashExpenses) || 0)) * 100) / 100;
         if (this.data.store) this.data.store.cashInBox = this.data.cashShiftLog.expectedCashInDrawer;
-      }
-      if (mElectronic > 0) {
-        this.data.cashShiftLog.cardSales = Math.round((Number(this.data.cashShiftLog.cardSales || 0) + mElectronic) * 100) / 100;
-      }
-      if (mCredit > 0 && cust) {
-        cust.creditBalance = Math.round(((Number(cust.creditBalance) || 0) + mCredit) * 100) / 100;
-        let existing = (this.data.customerCredits || []).find(cr => cr.customer === cust.name);
-        if (existing) {
-          existing.totalGranted = Math.round(((Number(existing.totalGranted) || 0) + mCredit) * 100) / 100;
-          existing.currentBalance = Math.round(((Number(existing.currentBalance) || 0) + mCredit) * 100) / 100;
-          existing.status = 'Al Día';
-        } else {
-          this.data.customerCredits.unshift({
-            id: `CC-${Math.floor(310 + Math.random() * 600)}`,
-            customer: cust.name,
-            totalGranted: mCredit,
-            currentBalance: mCredit,
-            dueDate: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString().split('T')[0],
-            status: 'Al Día'
-          });
+      } else if (this.selectedPayMethod === 'card' || this.selectedPayMethod === 'transfer' || this.selectedPayMethod === 'addi') {
+        this.data.cashShiftLog.cardSales = Math.round((Number(this.data.cashShiftLog.cardSales || 0) + grandTotal) * 100) / 100;
+      } else if (this.selectedPayMethod === 'mixed') {
+        const mCash = mixedPaymentBreakdown?.cash || 0;
+        const mElectronic = (mixedPaymentBreakdown?.card || 0) + (mixedPaymentBreakdown?.transfer || 0) + (mixedPaymentBreakdown?.addi || 0);
+        const mCredit = mixedPaymentBreakdown?.credit || 0;
+
+        if (mCash > 0) {
+          this.data.cashShiftLog.cashSales = Math.round((Number(this.data.cashShiftLog.cashSales || 0) + mCash) * 100) / 100;
+          this.data.cashShiftLog.expectedCashInDrawer = Math.round(((Number(this.data.cashShiftLog.openingCash) || 0) + (Number(this.data.cashShiftLog.cashSales) || 0) - (Number(this.data.cashShiftLog.cashExpenses) || 0)) * 100) / 100;
+          if (this.data.store) this.data.store.cashInBox = this.data.cashShiftLog.expectedCashInDrawer;
         }
-      }
-    } else if (this.selectedPayMethod === 'credit') {
-      if (cust) {
-        cust.creditBalance = Math.round(((Number(cust.creditBalance) || 0) + grandTotal) * 100) / 100;
-        let existing = (this.data.customerCredits || []).find(cr => cr.customer === cust.name);
-        if (existing) {
-          existing.totalGranted = Math.round(((Number(existing.totalGranted) || 0) + grandTotal) * 100) / 100;
-          existing.currentBalance = Math.round(((Number(existing.currentBalance) || 0) + grandTotal) * 100) / 100;
-          existing.status = 'Al Día';
-        } else {
+        if (mElectronic > 0) {
+          this.data.cashShiftLog.cardSales = Math.round((Number(this.data.cashShiftLog.cardSales || 0) + mElectronic) * 100) / 100;
+        }
+        if (mCredit > 0 && cust) {
+          cust.creditBalance = Math.round(((Number(cust.creditBalance) || 0) + mCredit) * 100) / 100;
+          let existing = (this.data.customerCredits || []).find(cr => cr.customer === cust.name);
+          if (existing) {
+            existing.totalGranted = Math.round(((Number(existing.totalGranted) || 0) + mCredit) * 100) / 100;
+            existing.currentBalance = Math.round(((Number(existing.currentBalance) || 0) + mCredit) * 100) / 100;
+            existing.status = 'Al Día';
+          } else {
+            this.data.customerCredits.unshift({
+              id: `CC-${Math.floor(310 + Math.random() * 600)}`,
+              customer: cust.name,
+              totalGranted: mCredit,
+              currentBalance: mCredit,
+              dueDate: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString().split('T')[0],
+              status: 'Al Día'
+            });
+          }
+        }
+      } else if (this.selectedPayMethod === 'credit') {
+        if (cust) {
+          cust.creditBalance = Math.round(((Number(cust.creditBalance) || 0) + grandTotal) * 100) / 100;
+          let existing = (this.data.customerCredits || []).find(cr => cr.customer === cust.name);
+          if (existing) {
+            existing.totalGranted = Math.round(((Number(existing.totalGranted) || 0) + grandTotal) * 100) / 100;
+            existing.currentBalance = Math.round(((Number(existing.currentBalance) || 0) + grandTotal) * 100) / 100;
+            existing.status = 'Al Día';
+          } else {
+            this.data.customerCredits.unshift({
+              id: `CC-${Math.floor(310 + Math.random() * 600)}`,
+              customer: cust.name,
+              totalGranted: grandTotal,
+              currentBalance: grandTotal,
+              dueDate: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString().split('T')[0],
+              status: 'Al Día'
+            });
+          }
+        }
+      } else if (this.selectedPayMethod === 'separe') {
+        separeAbono = this.parseCleanNumber(document.getElementById('separe-abono-input')?.value);
+        separePending = Math.round(Math.max(0, grandTotal - separeAbono) * 100) / 100;
+        if (separeAbono > 0) {
+          this.data.cashShiftLog.cashSales = Math.round((Number(this.data.cashShiftLog.cashSales || 0) + separeAbono) * 100) / 100;
+          this.data.cashShiftLog.expectedCashInDrawer = Math.round(((Number(this.data.cashShiftLog.openingCash) || 0) + (Number(this.data.cashShiftLog.cashSales) || 0) - (Number(this.data.cashShiftLog.cashExpenses) || 0)) * 100) / 100;
+          if (this.data.store) this.data.store.cashInBox = this.data.cashShiftLog.expectedCashInDrawer;
+        }
+        if (cust && separePending > 0) {
+          cust.creditBalance = Math.round(((Number(cust.creditBalance) || 0) + separePending) * 100) / 100;
           this.data.customerCredits.unshift({
-            id: `CC-${Math.floor(310 + Math.random() * 600)}`,
+            id: `SEP-${Math.floor(500 + Math.random() * 500)}`,
             customer: cust.name,
             totalGranted: grandTotal,
-            currentBalance: grandTotal,
-            dueDate: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString().split('T')[0],
-            status: 'Al Día'
+            currentBalance: separePending,
+            dueDate: new Date(Date.now() + 45 * 24 * 3600 * 1000).toISOString().split('T')[0],
+            status: 'Plan Separe'
           });
         }
       }
-    } else if (this.selectedPayMethod === 'separe') {
-      separeAbono = this.parseCleanNumber(document.getElementById('separe-abono-input')?.value);
-      separePending = Math.round(Math.max(0, grandTotal - separeAbono) * 100) / 100;
-      if (separeAbono > 0) {
-        this.data.cashShiftLog.cashSales = Math.round((Number(this.data.cashShiftLog.cashSales || 0) + separeAbono) * 100) / 100;
-        this.data.cashShiftLog.expectedCashInDrawer = Math.round(((Number(this.data.cashShiftLog.openingCash) || 0) + (Number(this.data.cashShiftLog.cashSales) || 0) - (Number(this.data.cashShiftLog.cashExpenses) || 0)) * 100) / 100;
-        if (this.data.store) this.data.store.cashInBox = this.data.cashShiftLog.expectedCashInDrawer;
-      }
-      if (cust && separePending > 0) {
-        cust.creditBalance = Math.round(((Number(cust.creditBalance) || 0) + separePending) * 100) / 100;
-        this.data.customerCredits.unshift({
-          id: `SEP-${Math.floor(500 + Math.random() * 500)}`,
-          customer: cust.name,
-          totalGranted: grandTotal,
-          currentBalance: separePending,
-          dueDate: new Date(Date.now() + 45 * 24 * 3600 * 1000).toISOString().split('T')[0],
-          status: 'Plan Separe'
-        });
+
+      const newTx = {
+        id: newTxId,
+        customer: selectedCustomer,
+        customerDoc: cust?.document || '',
+        customerDocType: cust?.docType || 'CC',
+        customerAddress: cust?.address || '',
+        customerPhone: cust?.phone || '',
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+        date: `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`,
+        timestamp: Date.now(),
+        shiftId: this.data.cashShiftLog?.shiftId || null,
+        storeId: this.currentStoreId || 'store_1',
+        createdAt: new Date().toISOString(),
+        type: "Venta POS",
+        itemsCount: soldCart.reduce((acc, i) => acc + (i.unitsCount || 1), 0),
+        items: soldCart.map(i => {
+          const pPrice = this.getCartItemPrice(i);
+          const isPesaje = (i.product?.measureType || 'Pesaje') === 'Pesaje';
+          const unit = isPesaje ? (i.product?.weightUnit || 'g') : 'u.';
+          return {
+            id: i.product.id,
+            sku: i.product.sku || i.product.id || '',
+            name: i.product.name,
+            qty: i.qty,
+            quantity: i.qty,
+            unit: unit,
+            measureType: i.product?.measureType || 'Pesaje',
+            pieceWeight: Number(i.product?.pieceWeight || i.product?.weight) || 0,
+            price: pPrice,
+            total: Math.round(pPrice * i.qty)
+          };
+        }),
+        subtotal: subtotal,
+        tax: tax,
+        cardFeeRate: cardFeeAmount > 0 ? cardFeeRate : 0,
+        cardFeeAmount: cardFeeAmount,
+        total: grandTotal,
+        paymentMethod: txPaymentMethod,
+        targetAccount: targetAccount || undefined,
+        voucher: voucher || undefined,
+        paymentBreakdown: mixedPaymentBreakdown || undefined,
+        cashier: this.currentUser?.name || this.data.store?.cashier || "Cajero",
+        status: "completed"
+      };
+
+      this.data.recentTransactions.unshift(newTx);
+      this.data.kpis.salesToday += grandTotal;
+      this.data.kpis.transactionsToday += 1;
+
+      // Recalcular arqueo de caja con el nuevo registro de venta
+      this.calculateShiftTotals();
+
+      // Build Thermal Receipt HTML - Factura POS limpia: sin gramos, sin valor del gramo y sin peso
+      const ticketItems = soldCart.map(i => {
+        const pWeight = parseFloat(String(i.product.pieceWeight !== undefined && i.product.pieceWeight !== null ? i.product.pieceWeight : (i.product.weight || 0)).replace(',', '.')) || 0;
+        const unitsCount = pWeight > 0 ? Math.max(1, Math.round((i.qty / pWeight) * 100) / 100) : Math.max(1, Math.round(i.qty * 100) / 100);
+        const totalItemVal = this.getCartItemPrice(i) * i.qty;
+        const unitPriceVal = unitsCount > 0 ? (totalItemVal / unitsCount) : this.getCartItemPrice(i);
+
+        let cleanName = (i.product.name || 'Producto')
+          .replace(/\s*[-–—]?\s*\(?\s*(?:peso\s*:\s*)?\d+(?:[.,]\d+)?\s*(?:g|gr|gramos|g\.)\s*\)?/gi, '')
+          .replace(/\s*\(?\s*peso\s*:\s*\d+(?:[.,]\d+)?\s*\)?/gi, '')
+          .replace(/\bpeso\s*:\s*\d+(?:[.,]\d+)?\b/gi, '')
+          .trim();
+
+        return {
+          product: i.product,
+          name: cleanName,
+          sku: i.product.sku || i.product.id || '',
+          qty: unitsCount,
+          unitsCount: unitsCount,
+          unit: 'u.',
+          price: unitPriceVal,
+          unitPrice: unitPriceVal,
+          formattedQty: `${unitsCount} u.`,
+          formattedUnitPrice: `${this.formatCurrency(unitPriceVal)}/u.`,
+          formattedLineTotal: this.formatCurrency(totalItemVal),
+          total: totalItemVal
+        };
+      });
+
+      const isMixed = this.selectedPayMethod === 'mixed';
+      const totalMixedPaid = isMixed
+        ? ((mixedPaymentBreakdown?.cash || 0) + (mixedPaymentBreakdown?.card || 0) + (mixedPaymentBreakdown?.transfer || 0) + (mixedPaymentBreakdown?.credit || 0) + (mixedPaymentBreakdown?.addi || 0))
+        : 0;
+      const cashReceived = this.selectedPayMethod === 'cash'
+        ? this.parseCleanNumber(document.getElementById('cash-received-input')?.value)
+        : (isMixed ? totalMixedPaid : grandTotal);
+      const changeVal = this.selectedPayMethod === 'cash'
+        ? Math.max(0, cashReceived - grandTotal)
+        : (isMixed ? Math.max(0, totalMixedPaid - grandTotal) : 0);
+
+      const receiptHtml = this.buildThermalTicketHtml({
+        type: 'venta',
+        txId: newTxId,
+        dateStr: new Date().toLocaleDateString('es-CO'),
+        timeStr: newTx.time,
+        partyName: selectedCustomer,
+        partyDocument: cust?.document || '',
+        partyAddress: cust?.address || '',
+        partyPhone: cust?.phone || '',
+        agentName: newTx.cashier,
+        items: ticketItems,
+        subtotal: subtotal,
+        tax: tax,
+        cardFeeRate: cardFeeAmount > 0 ? cardFeeRate : 0,
+        cardFeeAmount: cardFeeAmount,
+        total: grandTotal,
+        paidAmount: cashReceived,
+        changeAmount: changeVal,
+        paymentMethod: txPaymentMethod,
+        targetAccount: targetAccount || undefined,
+        voucher: voucher || undefined,
+        paymentBreakdown: mixedPaymentBreakdown || undefined,
+        separeAbono: separeAbono,
+        separePending: separePending,
+        customerCreditBalance: cust?.creditBalance
+      });
+
+      await this.savePersistence();
+
+      this.syncAllModules();
+      this.renderFinVentasTable();
+      this.renderDashboardRecentSales();
+      this.renderCuadreCajaCard();
+      this.renderRepFinanzas();
+
+      const cardVoucherEl = document.getElementById('checkout-card-voucher-input');
+      if (cardVoucherEl) cardVoucherEl.value = '';
+      const transferVoucherEl = document.getElementById('checkout-transfer-voucher-input');
+      if (transferVoucherEl) transferVoucherEl.value = '';
+      const addiVoucherEl = document.getElementById('checkout-addi-voucher-input');
+      if (addiVoucherEl) addiVoucherEl.value = '';
+      const mixedCreditInp = document.getElementById('mixed-credit-amount');
+      if (mixedCreditInp) mixedCreditInp.value = '';
+      const mixedAddiInp = document.getElementById('mixed-addi-amount');
+      if (mixedAddiInp) mixedAddiInp.value = '';
+      const mixedAddiVoucherEl = document.getElementById('checkout-mixed-addi-voucher');
+      if (mixedAddiVoucherEl) mixedAddiVoucherEl.value = '';
+
+      if (modal) modal.classList.remove('open');
+
+      // Show Printable Receipt Modal
+      const modalTitle = document.getElementById('receipt-modal-title');
+      if (modalTitle) modalTitle.innerHTML = '🧾 Comprobante de Venta POS';
+      const receiptBody = document.getElementById('receipt-modal-body');
+      if (receiptBody) receiptBody.innerHTML = receiptHtml;
+      this.openModal('receipt-modal');
+
+      this.showToast(`¡Venta #${newTxId} (${txPaymentMethod}) completada y guardada!`, 'success');
+    } finally {
+      this._isProcessingPayment = false;
+      if (confirmBtn) {
+        confirmBtn.disabled = false;
+        confirmBtn.innerHTML = originalBtnHtml || '✔ Confirmar & Emitir Recibo';
+        confirmBtn.style.opacity = '';
+        confirmBtn.style.pointerEvents = '';
       }
     }
-
-    const newTx = {
-      id: newTxId,
-      customer: selectedCustomer,
-      customerDoc: cust?.document || '',
-      customerDocType: cust?.docType || 'CC',
-      customerAddress: cust?.address || '',
-      customerPhone: cust?.phone || '',
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-      date: `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`,
-      timestamp: Date.now(),
-      shiftId: this.data.cashShiftLog?.shiftId || null,
-      storeId: this.currentStoreId || 'store_1',
-      createdAt: new Date().toISOString(),
-      type: "Venta POS",
-      itemsCount: this.cart.reduce((acc, i) => acc + (i.unitsCount || 1), 0),
-      items: this.cart.map(i => {
-        const pPrice = this.getCartItemPrice(i);
-        const isPesaje = (i.product?.measureType || 'Pesaje') === 'Pesaje';
-        const unit = isPesaje ? (i.product?.weightUnit || 'g') : 'u.';
-        return {
-          id: i.product.id,
-          sku: i.product.sku || i.product.id || '',
-          name: i.product.name,
-          qty: i.qty,
-          quantity: i.qty,
-          unit: unit,
-          measureType: i.product?.measureType || 'Pesaje',
-          pieceWeight: Number(i.product?.pieceWeight || i.product?.weight) || 0,
-          price: pPrice,
-          total: Math.round(pPrice * i.qty)
-        };
-      }),
-      subtotal: subtotal,
-      tax: tax,
-      cardFeeRate: cardFeeAmount > 0 ? cardFeeRate : 0,
-      cardFeeAmount: cardFeeAmount,
-      total: grandTotal,
-      paymentMethod: txPaymentMethod,
-      targetAccount: targetAccount || undefined,
-      voucher: voucher || undefined,
-      paymentBreakdown: mixedPaymentBreakdown || undefined,
-      cashier: this.currentUser?.name || this.data.store?.cashier || "Cajero",
-      status: "completed"
-    };
-
-    this.data.recentTransactions.unshift(newTx);
-    this.data.kpis.salesToday += grandTotal;
-    this.data.kpis.transactionsToday += 1;
-
-    // Build Thermal Receipt HTML - Factura POS limpia: sin gramos, sin valor del gramo y sin peso
-    const ticketItems = this.cart.map(i => {
-      const pWeight = parseFloat(String(i.product.pieceWeight !== undefined && i.product.pieceWeight !== null ? i.product.pieceWeight : (i.product.weight || 0)).replace(',', '.')) || 0;
-      const unitsCount = pWeight > 0 ? Math.max(1, Math.round((i.qty / pWeight) * 100) / 100) : Math.max(1, Math.round(i.qty * 100) / 100);
-      const totalItemVal = this.getCartItemPrice(i) * i.qty;
-      const unitPriceVal = unitsCount > 0 ? (totalItemVal / unitsCount) : this.getCartItemPrice(i);
-
-      let cleanName = (i.product.name || 'Producto')
-        .replace(/\s*[-–—]?\s*\(?\s*(?:peso\s*:\s*)?\d+(?:[.,]\d+)?\s*(?:g|gr|gramos|g\.)\s*\)?/gi, '')
-        .replace(/\s*\(?\s*peso\s*:\s*\d+(?:[.,]\d+)?\s*\)?/gi, '')
-        .replace(/\bpeso\s*:\s*\d+(?:[.,]\d+)?\b/gi, '')
-        .trim();
-
-      return {
-        product: i.product,
-        name: cleanName,
-        sku: i.product.sku || i.product.id || '',
-        qty: unitsCount,
-        unitsCount: unitsCount,
-        unit: 'u.',
-        price: unitPriceVal,
-        unitPrice: unitPriceVal,
-        formattedQty: `${unitsCount} u.`,
-        formattedUnitPrice: `${this.formatCurrency(unitPriceVal)}/u.`,
-        formattedLineTotal: this.formatCurrency(totalItemVal),
-        total: totalItemVal
-      };
-    });
-
-    const isMixed = this.selectedPayMethod === 'mixed';
-    const totalMixedPaid = isMixed
-      ? ((mixedPaymentBreakdown?.cash || 0) + (mixedPaymentBreakdown?.card || 0) + (mixedPaymentBreakdown?.transfer || 0) + (mixedPaymentBreakdown?.credit || 0) + (mixedPaymentBreakdown?.addi || 0))
-      : 0;
-    const cashReceived = this.selectedPayMethod === 'cash'
-      ? this.parseCleanNumber(document.getElementById('cash-received-input')?.value)
-      : (isMixed ? totalMixedPaid : grandTotal);
-    const changeVal = this.selectedPayMethod === 'cash'
-      ? Math.max(0, cashReceived - grandTotal)
-      : (isMixed ? Math.max(0, totalMixedPaid - grandTotal) : 0);
-
-    const receiptHtml = this.buildThermalTicketHtml({
-      type: 'venta',
-      txId: newTxId,
-      dateStr: new Date().toLocaleDateString('es-CO'),
-      timeStr: newTx.time,
-      partyName: selectedCustomer,
-      partyDocument: cust?.document || '',
-      partyAddress: cust?.address || '',
-      partyPhone: cust?.phone || '',
-      agentName: newTx.cashier,
-      items: ticketItems,
-      subtotal: subtotal,
-      tax: tax,
-      cardFeeRate: cardFeeAmount > 0 ? cardFeeRate : 0,
-      cardFeeAmount: cardFeeAmount,
-      total: grandTotal,
-      paidAmount: cashReceived,
-      changeAmount: changeVal,
-      paymentMethod: txPaymentMethod,
-      targetAccount: targetAccount || undefined,
-      voucher: voucher || undefined,
-      paymentBreakdown: mixedPaymentBreakdown || undefined,
-      separeAbono: separeAbono,
-      separePending: separePending,
-      customerCreditBalance: cust?.creditBalance
-    });
-
-    await this.savePersistence();
-
-    this.cart = [];
-    this.renderCart();
-    this.syncAllModules();
-    this.renderFinVentasTable();
-    this.renderDashboardRecentSales();
-    this.renderCuadreCajaCard();
-    this.renderRepFinanzas();
-
-    const cardVoucherEl = document.getElementById('checkout-card-voucher-input');
-    if (cardVoucherEl) cardVoucherEl.value = '';
-    const transferVoucherEl = document.getElementById('checkout-transfer-voucher-input');
-    if (transferVoucherEl) transferVoucherEl.value = '';
-    const addiVoucherEl = document.getElementById('checkout-addi-voucher-input');
-    if (addiVoucherEl) addiVoucherEl.value = '';
-    const mixedCreditInp = document.getElementById('mixed-credit-amount');
-    if (mixedCreditInp) mixedCreditInp.value = '';
-    const mixedAddiInp = document.getElementById('mixed-addi-amount');
-    if (mixedAddiInp) mixedAddiInp.value = '';
-    const mixedAddiVoucherEl = document.getElementById('checkout-mixed-addi-voucher');
-    if (mixedAddiVoucherEl) mixedAddiVoucherEl.value = '';
-
-    if (modal) modal.classList.remove('open');
-
-    // Show Printable Receipt Modal
-    const modalTitle = document.getElementById('receipt-modal-title');
-    if (modalTitle) modalTitle.innerHTML = '🧾 Comprobante de Venta POS';
-    const receiptBody = document.getElementById('receipt-modal-body');
-    if (receiptBody) receiptBody.innerHTML = receiptHtml;
-    this.openModal('receipt-modal');
-
-    this.showToast(`¡Venta #${newTxId} (${txPaymentMethod}) completada y guardada!`, 'success');
   }
 
   /* --------------------------------------------------------------------------
