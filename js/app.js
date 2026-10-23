@@ -838,13 +838,7 @@ class NexusApp {
     if (!this.data.supplierCredits || !Array.isArray(this.data.supplierCredits)) {
       this.data.supplierCredits = [];
     }
-    if (this.data.expenses && Array.isArray(this.data.expenses)) {
-      this.data.expenses = this.data.expenses.filter(e => {
-        const cat = (e.category || '').toLowerCase().trim();
-        const desc = (e.description || '').toLowerCase().trim();
-        return cat !== 'pago a proveedor' && !desc.startsWith('pago/abono a proveedor') && !desc.startsWith('pago orden de compra');
-      });
-    } else {
+    if (!this.data.expenses || !Array.isArray(this.data.expenses)) {
       this.data.expenses = [];
     }
     if (!this.data.purchases || !Array.isArray(this.data.purchases)) {
@@ -1430,6 +1424,21 @@ class NexusApp {
               const tB = b.timestamp || 0;
               return tB - tA;
             });
+
+            // Smart local preservation: merge recent local expenses that might not yet be in remote
+            const localExp = this.data.expenses || [];
+            const remoteExp = remote.expenses || [];
+            const expMap = new Map();
+            remoteExp.forEach(e => { if (e && e.id) expMap.set(e.id, e); });
+            localExp.forEach(e => {
+              if (e && e.id && !expMap.has(e.id)) {
+                const age = Date.now() - (e.timestamp || 0);
+                if (age < 30 * 60 * 1000) {
+                  expMap.set(e.id, e);
+                }
+              }
+            });
+            remote.expenses = Array.from(expMap.values()).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
             this.data = Object.assign({}, INITIAL_DATA, remote);
             this.sanitizeLoadedData();
@@ -2413,7 +2422,7 @@ class NexusApp {
     bindOpen('open-add-product-btn', 'product-modal', () => this.openAddProductModal());
     bindOpen('open-customer-modal-btn', 'customer-modal', () => this.openCustomerModal());
     bindOpen('open-supplier-modal-btn', 'supplier-modal', () => this.openSupplierModal());
-    bindOpen('open-expense-modal-btn', 'expense-modal');
+    bindOpen('open-expense-modal-btn', 'expense-modal', () => this.openExpenseModal());
     bindOpen('open-service-modal-btn', 'service-modal');
     bindOpen('open-category-modal-btn', 'category-modal', () => this.openAddCategoryModal());
     bindOpen('open-asset-modal-btn', 'asset-modal');
@@ -3077,10 +3086,20 @@ class NexusApp {
           this.showToast('Acceso Denegado: Tu rol no tiene permisos para registrar gastos.', 'danger');
           return;
         }
-        const desc = document.getElementById('exp-desc-input').value;
-        const cat = document.getElementById('exp-cat-select').value;
-        const amount = this.parseCleanNumber(document.getElementById('exp-amount-input')?.value);
-        const method = document.getElementById('exp-method-select').value;
+        const desc = (document.getElementById('exp-desc-input')?.value || '').trim();
+        const cat = document.getElementById('exp-cat-select')?.value || 'Servicios Básicos';
+        const rawAmount = document.getElementById('exp-amount-input')?.value;
+        const amount = this.parseCleanNumber(rawAmount, false);
+        const method = document.getElementById('exp-method-select')?.value || 'Efectivo';
+
+        if (!desc) {
+          this.showToast('Por favor ingrese la descripción del gasto.', 'warning');
+          return;
+        }
+        if (!amount || isNaN(amount) || amount <= 0) {
+          this.showToast('Por favor ingrese un monto válido mayor a 0 para el gasto.', 'warning');
+          return;
+        }
 
         const activeCashier = this.data.store?.cashier || (this.currentUser ? this.currentUser.name : "Administración");
         const activeShift = this.data.cashShiftLog && this.data.cashShiftLog.status === 'Abierto' ? this.data.cashShiftLog : null;
@@ -3088,7 +3107,7 @@ class NexusApp {
         const todayStr = this.getLocalDateIso ? this.getLocalDateIso(now) : now.toLocaleDateString('sv-SE');
 
         const newExp = {
-          id: `EXP-${Math.floor(805 + Math.random() * 900)}`,
+          id: `EXP-${Date.now().toString().slice(-6)}-${Math.floor(100 + Math.random() * 900)}`,
           date: todayStr,
           time: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           timestamp: now.getTime(),
@@ -3106,12 +3125,17 @@ class NexusApp {
         // Recalcular totales de arqueo del turno en tiempo real (Gaveta física y Bancos)
         this.calculateShiftTotals();
 
-        await this.savePersistence();
-        this.syncAllModules();
-        expForm.reset();
-        this.closeModal('expense-modal');
-        const isCashMethod = (method || '').toLowerCase().includes('efectivo') || (method || '').toLowerCase().includes('caja');
-        this.showToast(`Gasto de ${this.formatCurrency(amount)} registrado (${isCashMethod ? 'descontado en gaveta física' : 'registrado en banco / transferencia'})`, 'success');
+        try {
+          await this.savePersistence();
+          this.syncAllModules();
+          expForm.reset();
+          this.closeModal('expense-modal');
+          const isCashMethod = (method || '').toLowerCase().includes('efectivo') || (method || '').toLowerCase().includes('caja');
+          this.showToast(`Gasto de ${this.formatCurrency(amount)} registrado exitosamente (${isCashMethod ? 'descontado en gaveta física' : 'registrado en banco / transferencia'})`, 'success');
+        } catch (err) {
+          console.error('[NexusApp] Error persistiendo gasto:', err);
+          this.showToast('Gasto guardado localmente, sincronizando...', 'warning');
+        }
       });
     }
 
@@ -3127,9 +3151,19 @@ class NexusApp {
         const id = document.getElementById('edit-exp-id').value;
         const exp = this.data.expenses.find(x => x.id === id);
         if (exp) {
-          exp.description = document.getElementById('edit-exp-desc').value;
+          const editDesc = (document.getElementById('edit-exp-desc')?.value || '').trim();
+          const editAmount = this.parseCleanNumber(document.getElementById('edit-exp-amount')?.value, false);
+          if (!editDesc) {
+            this.showToast('Por favor ingrese la descripción del gasto.', 'warning');
+            return;
+          }
+          if (!editAmount || isNaN(editAmount) || editAmount <= 0) {
+            this.showToast('Por favor ingrese un monto válido mayor a 0.', 'warning');
+            return;
+          }
+          exp.description = editDesc;
           exp.category = document.getElementById('edit-exp-cat').value;
-          exp.amount = this.parseCleanNumber(document.getElementById('edit-exp-amount')?.value);
+          exp.amount = editAmount;
           exp.method = document.getElementById('edit-exp-method').value;
 
           this.calculateShiftTotals();
@@ -5282,6 +5316,37 @@ class NexusApp {
     const accType = document.getElementById('supp-account-type-select');
     if (accType) accType.value = 'Ahorros';
     this.openModal('supplier-modal');
+  }
+
+  openExpenseModal() {
+    const expForm = document.getElementById('add-expense-form');
+    if (expForm) expForm.reset();
+    const descInput = document.getElementById('exp-desc-input');
+    if (descInput) descInput.value = '';
+    const amtInput = document.getElementById('exp-amount-input');
+    if (amtInput) amtInput.value = '';
+
+    const storeNameEl = document.getElementById('expense-modal-store-name');
+    const shiftStatusEl = document.getElementById('expense-modal-shift-status');
+    const isStore2 = this.currentStoreId === 'store_2';
+    const storeName = isStore2 ? 'Sede Centro' : (this.data.store?.name || 'Sede Principal');
+    if (storeNameEl) storeNameEl.textContent = storeName;
+
+    const activeShift = this.data.cashShiftLog && this.data.cashShiftLog.status === 'Abierto' ? this.data.cashShiftLog : null;
+    if (shiftStatusEl) {
+      if (activeShift) {
+        shiftStatusEl.textContent = `Turno #${activeShift.shiftId || ''} (Abierto)`;
+        shiftStatusEl.style.color = '#10b981';
+      } else {
+        shiftStatusEl.textContent = 'Sin Turno Abierto (General)';
+        shiftStatusEl.style.color = '#f59e0b';
+      }
+    }
+    const catSelect = document.getElementById('exp-cat-select');
+    if (catSelect) catSelect.value = 'Servicios Básicos';
+    const methodSelect = document.getElementById('exp-method-select');
+    if (methodSelect) methodSelect.value = 'Efectivo';
+    this.openModal('expense-modal');
   }
 
   openEditSupplierModal(id) {
