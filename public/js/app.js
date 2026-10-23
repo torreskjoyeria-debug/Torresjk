@@ -745,6 +745,10 @@ class NexusApp {
             p.stock = 2.05;
           }
         }
+        const swollenTargetSkus = ['5195', '5194', '5192', '5190', '5160', '5144', '5143', '5142', '5138', '5108', '5107', '5106', '5105', '5104', '5094', '5093', '5092', '5091', '5090', '5088', '5087', '5083', '5196'];
+        if (swollenTargetSkus.includes(String(p.sku)) && p.stock > 50) {
+          p.stock = Math.round((Number(p.stock) / 100) * 100) / 100;
+        }
       });
       // NOTE: Empty array is valid for clean production data
     } else {
@@ -4937,6 +4941,10 @@ class NexusApp {
 
     if ((p.id === 'PRD-1867' || p.sku === '5415') && p.stock === 205) {
       p.stock = 2.05;
+    }
+    const swollenTargetSkus = ['5195', '5194', '5192', '5190', '5160', '5144', '5143', '5142', '5138', '5108', '5107', '5106', '5105', '5104', '5094', '5093', '5092', '5091', '5090', '5088', '5087', '5083', '5196'];
+    if (swollenTargetSkus.includes(String(p.sku)) && p.stock > 50) {
+      p.stock = Math.round((Number(p.stock) / 100) * 100) / 100;
     }
 
     document.getElementById('edit-prod-id').value = p.id;
