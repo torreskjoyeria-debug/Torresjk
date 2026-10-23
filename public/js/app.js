@@ -217,35 +217,62 @@ class NexusApp {
     const isNegative = str.startsWith('-');
     if (isNegative) str = str.slice(1);
 
-    if (str.includes(',') && str.includes('.')) {
-      if (str.lastIndexOf('.') > str.lastIndexOf(',')) {
-        str = str.replace(/,/g, '');
-      } else {
-        str = str.replace(/\./g, '').replace(',', '.');
-      }
-    } else if (str.includes(',')) {
-      const parts = str.split(',');
-      if (parts.length === 2) {
-        if (isDecimal || parts[0] === '0' || parts[0] === '' || parts[1].length !== 3) {
+    if (isDecimal) {
+      if (str.includes(',') && str.includes('.')) {
+        if (str.lastIndexOf('.') > str.lastIndexOf(',')) {
+          str = str.replace(/,/g, '');
+        } else {
+          str = str.replace(/\./g, '').replace(',', '.');
+        }
+      } else if (str.includes(',')) {
+        const parts = str.split(',');
+        if (parts.length === 2) {
           str = (parts[0] || '0') + '.' + parts[1];
         } else {
           str = str.replace(/,/g, '');
         }
-      } else {
-        str = str.replace(/,/g, '');
+      } else if (str.includes('.')) {
+        const parts = str.split('.');
+        if (parts.length > 2) {
+          str = str.replace(/\./g, '');
+        }
       }
-    } else if (str.includes('.')) {
-      const parts = str.split('.');
-      if (parts.length > 2) {
-        str = str.replace(/\./g, '');
-      } else if (parts.length === 2) {
-        if (isDecimal || parts[0] === '0' || parts[0] === '' || parts[1].length !== 3) {
-          // Keep dot as decimal separator (e.g. 0.001, 0.500, 1.3, 1.001)
+    } else {
+      if (str.includes(',') && str.includes('.')) {
+        if (str.lastIndexOf('.') > str.lastIndexOf(',')) {
+          const lastDot = str.lastIndexOf('.');
+          const decPart = str.slice(lastDot + 1);
+          if (decPart.length <= 2) {
+            str = str.slice(0, lastDot).replace(/[,.]/g, '');
+          } else {
+            str = str.replace(/[,.]/g, '');
+          }
+        } else {
+          const lastComma = str.lastIndexOf(',');
+          const decPart = str.slice(lastComma + 1);
+          if (decPart.length <= 2) {
+            str = str.slice(0, lastComma).replace(/[,.]/g, '');
+          } else {
+            str = str.replace(/[,.]/g, '');
+          }
+        }
+      } else if (str.includes(',')) {
+        const parts = str.split(',');
+        if (parts.length === 2 && parts[1].length <= 2 && (parts[0] === '0' || parts[0] === '')) {
+          str = (parts[0] || '0') + '.' + parts[1];
+        } else {
+          str = str.replace(/,/g, '');
+        }
+      } else if (str.includes('.')) {
+        const parts = str.split('.');
+        if (parts.length === 2 && parts[1].length <= 2 && (parts[0] === '0' || parts[0] === '')) {
+          str = (parts[0] || '0') + '.' + parts[1];
         } else {
           str = str.replace(/\./g, '');
         }
       }
     }
+
     const n = parseFloat(str);
     return isNaN(n) ? 0 : (isNegative ? -n : n);
   }
@@ -358,7 +385,11 @@ class NexusApp {
       const el = document.getElementById(id);
       if (el) {
         let callback = null;
-        if (id.startsWith('mixed-')) {
+        if (id === 'pos-add-custom-price-input') {
+          callback = () => this.onAddToCartFieldAChange();
+        } else if (id === 'pos-add-total-price-input') {
+          callback = () => this.onAddToCartFieldBChange();
+        } else if (id.startsWith('mixed-')) {
           callback = () => this.updateMixedPaymentCalc();
         } else if (id.startsWith('abono-mixed-')) {
           callback = () => this.updateAbonoMixedCalc();
@@ -25414,7 +25445,7 @@ class NexusApp {
     const elTotalCost = document.getElementById('pos-add-total-cost-val');
     const elTotalCostSub = document.getElementById('pos-add-total-cost-sub');
     if (elTotalCost) {
-      elTotalCost.textContent = `${this.formatCurrency(totalCost)} COP`;
+      elTotalCost.textContent = this.formatCurrency(totalCost);
       if (elTotalCostSub) {
         elTotalCostSub.textContent = costPerGram > 0 
           ? `${this.formatCurrency(costPerGram)}/${unit} × ${this.formatNumberWithCommas(qty, isPesaje || isUnitWithWeight)} ${unit}`
@@ -25426,7 +25457,7 @@ class NexusApp {
     const elTotalSale = document.getElementById('pos-add-total-sale-val');
     const elTotalSaleSub = document.getElementById('pos-add-total-sale-sub');
     if (elTotalSale) {
-      elTotalSale.textContent = `${this.formatCurrency(totalSale)} COP`;
+      elTotalSale.textContent = this.formatCurrency(totalSale);
       if (elTotalSaleSub) {
         elTotalSaleSub.textContent = `${this.formatCurrency(unitPrice)}/${unit} × ${this.formatNumberWithCommas(qty, isPesaje || isUnitWithWeight)} ${unit}`;
       }
@@ -25440,10 +25471,10 @@ class NexusApp {
         elProfit.textContent = `$ 0 COP`;
         elProfit.style.color = 'var(--text-muted)';
       } else if (profit >= 0) {
-        elProfit.textContent = `+${this.formatCurrency(profit)} COP`;
+        elProfit.textContent = `+${this.formatCurrency(profit)}`;
         elProfit.style.color = '#059669'; // verde destacado
       } else {
-        elProfit.textContent = `-${this.formatCurrency(Math.abs(profit))} COP`;
+        elProfit.textContent = `-${this.formatCurrency(Math.abs(profit))}`;
         elProfit.style.color = '#DC2626'; // rojo destacado
       }
       if (elProfitSub) {
@@ -25490,7 +25521,7 @@ class NexusApp {
         elLossWarning.style.display = 'flex';
       }
       if (elLossAmt) {
-        elLossAmt.textContent = `${this.formatCurrency(Math.abs(profit))} COP`;
+        elLossAmt.textContent = this.formatCurrency(Math.abs(profit));
       }
     } else if (totalSale > 0 && profit >= 0) {
       if (elCard) {
