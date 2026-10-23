@@ -173,8 +173,8 @@ class NexusApp {
         }
       } else if (str.includes(',')) {
         const parts = str.split(',');
-        if (parts.length === 2 && parts[1].length <= 3) {
-          str = parts[0] + '.' + parts[1];
+        if (parts.length === 2 && (parts[0] === '0' || parts[0] === '' || parts[1].length <= 6)) {
+          str = (parts[0] || '0') + '.' + parts[1];
         } else {
           str = str.replace(/,/g, '');
         }
@@ -205,7 +205,7 @@ class NexusApp {
     }
   }
 
-  parseCleanNumber(val) {
+  parseCleanNumber(val, isDecimal = false) {
     if (val === null || val === undefined) return 0;
     if (typeof val === 'number') return isNaN(val) ? 0 : val;
     let str = String(val).trim();
@@ -225,8 +225,12 @@ class NexusApp {
       }
     } else if (str.includes(',')) {
       const parts = str.split(',');
-      if (parts.length === 2 && parts[1].length <= 2) {
-        str = parts[0] + '.' + parts[1];
+      if (parts.length === 2) {
+        if (isDecimal || parts[0] === '0' || parts[0] === '' || parts[1].length !== 3) {
+          str = (parts[0] || '0') + '.' + parts[1];
+        } else {
+          str = str.replace(/,/g, '');
+        }
       } else {
         str = str.replace(/,/g, '');
       }
@@ -234,8 +238,12 @@ class NexusApp {
       const parts = str.split('.');
       if (parts.length > 2) {
         str = str.replace(/\./g, '');
-      } else if (parts.length === 2 && parts[1].length === 3 && parts[0].length >= 1) {
-        str = str.replace(/\./g, '');
+      } else if (parts.length === 2) {
+        if (isDecimal || parts[0] === '0' || parts[0] === '' || parts[1].length !== 3) {
+          // Keep dot as decimal separator (e.g. 0.001, 0.500, 1.3, 1.001)
+        } else {
+          str = str.replace(/\./g, '');
+        }
       }
     }
     const n = parseFloat(str);
@@ -279,9 +287,9 @@ class NexusApp {
       } catch (_) {}
 
       if (typeof input._onThousandMaskUpdate === 'function') {
-        input._onThousandMaskUpdate(this.parseCleanNumber(input.value));
+        input._onThousandMaskUpdate(this.parseCleanNumber(input.value, allowDecimals));
       } else if (typeof onUpdate === 'function') {
-        onUpdate(this.parseCleanNumber(input.value));
+        onUpdate(this.parseCleanNumber(input.value, allowDecimals));
       }
     };
 
@@ -25307,8 +25315,8 @@ class NexusApp {
   onAddToCartFieldAChange() {
     if (this._isSyncingAddToCartFields) return;
     this._lastAddToCartSource = 'unit';
-    const qty = this.parseCleanNumber(document.getElementById('pos-add-qty-input')?.value) || 0;
-    const unitPrice = this.parseCleanNumber(document.getElementById('pos-add-custom-price-input')?.value) || 0;
+    const qty = this.parseCleanNumber(document.getElementById('pos-add-qty-input')?.value, true) || 0;
+    const unitPrice = this.parseCleanNumber(document.getElementById('pos-add-custom-price-input')?.value, false) || 0;
     const totalPrice = Math.round(qty * unitPrice);
 
     const elTotal = document.getElementById('pos-add-total-price-input');
@@ -25324,8 +25332,8 @@ class NexusApp {
   onAddToCartFieldBChange() {
     if (this._isSyncingAddToCartFields) return;
     this._lastAddToCartSource = 'total';
-    const qty = this.parseCleanNumber(document.getElementById('pos-add-qty-input')?.value) || 0;
-    const totalPrice = this.parseCleanNumber(document.getElementById('pos-add-total-price-input')?.value) || 0;
+    const qty = this.parseCleanNumber(document.getElementById('pos-add-qty-input')?.value, true) || 0;
+    const totalPrice = this.parseCleanNumber(document.getElementById('pos-add-total-price-input')?.value, false) || 0;
     const unitPrice = qty > 0 ? Math.round(totalPrice / qty) : 0;
 
     const elPrice = document.getElementById('pos-add-custom-price-input');
@@ -25340,12 +25348,12 @@ class NexusApp {
 
   onAddToCartQtyChange() {
     if (this._isSyncingAddToCartFields) return;
-    const qty = this.parseCleanNumber(document.getElementById('pos-add-qty-input')?.value) || 0;
+    const qty = this.parseCleanNumber(document.getElementById('pos-add-qty-input')?.value, true) || 0;
     const elPrice = document.getElementById('pos-add-custom-price-input');
     const elTotal = document.getElementById('pos-add-total-price-input');
 
-    let unitPrice = this.parseCleanNumber(elPrice?.value) || 0;
-    let totalPrice = this.parseCleanNumber(elTotal?.value) || 0;
+    let unitPrice = this.parseCleanNumber(elPrice?.value, false) || 0;
+    let totalPrice = this.parseCleanNumber(elTotal?.value, false) || 0;
 
     if (this._lastAddToCartSource === 'total' && totalPrice > 0) {
       unitPrice = qty > 0 ? Math.round(totalPrice / qty) : 0;
@@ -25523,7 +25531,7 @@ class NexusApp {
     const pWeight = parseFloat(String(p.pieceWeight !== undefined && p.pieceWeight !== null ? p.pieceWeight : (p.weight || 0)).replace(',', '.')) || 0;
     const isUnitWithWeight = !isPesaje && pWeight > 0;
     const stockUnits = parseFloat(String(p.stock || 0).replace(',', '.')) || 0;
-    const maxStock = isUnitWithWeight ? Math.round(stockUnits * pWeight * 100) / 100 : stockUnits;
+    const maxStock = isUnitWithWeight ? Math.round(stockUnits * pWeight * 10000) / 10000 : stockUnits;
 
     let step = 1;
     if (isPesaje) {
@@ -25533,9 +25541,9 @@ class NexusApp {
     }
     const deltaStep = delta > 0 ? step : -step;
 
-    let cur = this.parseCleanNumber(input.value);
-    let next = Math.round((cur + deltaStep) * 100) / 100;
-    const minVal = isUnitWithWeight ? pWeight : (isPesaje ? 0.01 : 1);
+    let cur = this.parseCleanNumber(input.value, isPesaje || isUnitWithWeight);
+    let next = Math.round((cur + deltaStep) * 10000) / 10000;
+    const minVal = isUnitWithWeight ? pWeight : (isPesaje ? 0.001 : 1);
     if (next < minVal) next = minVal;
     if (next > maxStock) next = maxStock;
     input.value = this.formatNumberWithCommas(next, isPesaje || isUnitWithWeight);
@@ -25584,20 +25592,20 @@ class NexusApp {
     const priceInput = document.getElementById('pos-add-custom-price-input');
     const totalPriceInput = document.getElementById('pos-add-total-price-input');
 
-    const qty = this.parseCleanNumber(qtyInput?.value);
-    let price = this.parseCleanNumber(priceInput?.value);
-    const totalPrice = this.parseCleanNumber(totalPriceInput?.value);
-
-    if (price <= 0 && totalPrice > 0 && qty > 0) {
-      price = Math.round(totalPrice / qty);
-    }
-
     const stockNum = parseFloat(String(p.stock || 0).replace(',', '.')) || 0;
     const isPesaje = (p.measureType || 'Pesaje') === 'Pesaje';
     const pWeight = parseFloat(String(p.pieceWeight !== undefined && p.pieceWeight !== null ? p.pieceWeight : (p.weight || 0)).replace(',', '.')) || 0;
     const isUnitWithWeight = !isPesaje && pWeight > 0;
-    const maxStock = isUnitWithWeight ? Math.round(stockNum * pWeight * 100) / 100 : stockNum;
+    const maxStock = isUnitWithWeight ? Math.round(stockNum * pWeight * 10000) / 10000 : stockNum;
     const unit = (isPesaje || isUnitWithWeight) ? 'g' : 'u.';
+
+    const qty = this.parseCleanNumber(qtyInput?.value, isPesaje || isUnitWithWeight);
+    let price = this.parseCleanNumber(priceInput?.value, false);
+    const totalPrice = this.parseCleanNumber(totalPriceInput?.value, false);
+
+    if (price <= 0 && totalPrice > 0 && qty > 0) {
+      price = Math.round(totalPrice / qty);
+    }
 
     if (qty <= 0) {
       this.showToast('Ingrese una cantidad válida mayor a 0', 'warning');
@@ -25694,7 +25702,7 @@ class NexusApp {
     const isUnitWithWeight = !isPesaje && pWeight > 0;
     const unit = (isPesaje || isUnitWithWeight) ? (cartItem.product.weightUnit || 'g') : 'u.';
     const maxStockUnits = parseFloat(String(cartItem.product.stock || 0).replace(',', '.')) || 0;
-    const maxStock = isUnitWithWeight ? Math.round(maxStockUnits * pWeight * 100) / 100 : maxStockUnits;
+    const maxStock = isUnitWithWeight ? Math.round(maxStockUnits * pWeight * 10000) / 10000 : maxStockUnits;
 
     let step = 1;
     if (isPesaje) {
@@ -25704,7 +25712,7 @@ class NexusApp {
     }
     const deltaStep = delta > 0 ? step : -step;
 
-    const newQty = Math.round((Number(cartItem.qty) + Number(deltaStep)) * 100) / 100;
+    const newQty = Math.round((Number(cartItem.qty) + Number(deltaStep)) * 10000) / 10000;
     if (newQty <= 0) {
       this.cart.splice(itemIndex, 1);
     } else {
@@ -25726,9 +25734,9 @@ class NexusApp {
     const isUnitWithWeight = !isPesaje && pWeight > 0;
     const unit = (isPesaje || isUnitWithWeight) ? (cartItem.product.weightUnit || 'g') : 'u.';
     const maxStockUnits = parseFloat(String(cartItem.product.stock || 0).replace(',', '.')) || 0;
-    const maxStock = isUnitWithWeight ? Math.round(maxStockUnits * pWeight * 100) / 100 : maxStockUnits;
+    const maxStock = isUnitWithWeight ? Math.round(maxStockUnits * pWeight * 10000) / 10000 : maxStockUnits;
 
-    let val = this.parseCleanNumber(rawValue);
+    let val = this.parseCleanNumber(rawValue, isPesaje || isUnitWithWeight);
     if (isNaN(val) || val <= 0) {
       this.cart.splice(itemIndex, 1);
     } else {
@@ -25736,7 +25744,7 @@ class NexusApp {
         this.showToast(`Ajustado al máximo disponible: ${maxStock} ${unit}`, 'warning');
         val = maxStock;
       }
-      cartItem.qty = Math.round(val * 100) / 100;
+      cartItem.qty = Math.round(val * 10000) / 10000;
     }
     this.renderCart();
   }
@@ -25928,7 +25936,7 @@ class NexusApp {
     if (badge) {
       if (hasPesaje) {
         badge.style.display = 'inline-block';
-        const formattedTotalGrams = (Math.round(totalGrams * 100) / 100).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const formattedTotalGrams = (Math.round(totalGrams * 10000) / 10000).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
         badge.innerHTML = `⚖️ Pesaje Total: <b>${formattedTotalGrams} g</b>`;
       } else {
         const totalUnits = this.cart.reduce((s, i) => s + (Number(i.qty) || 0), 0);
@@ -26750,8 +26758,8 @@ class NexusApp {
           const isPesaje = (p.measureType || 'Pesaje') === 'Pesaje';
           const pWeight = parseFloat(String(p.pieceWeight !== undefined && p.pieceWeight !== null ? p.pieceWeight : (p.weight || 0)).replace(',', '.')) || 0;
           const isUnitWithWeight = !isPesaje && pWeight > 0;
-          const unitsToDeduct = isUnitWithWeight ? (Math.round((soldQty / pWeight) * 100) / 100) : soldQty;
-          p.stock = Math.round(((Number(p.stock) || 0) - unitsToDeduct) * 100) / 100;
+          const unitsToDeduct = isUnitWithWeight ? (Math.round((soldQty / pWeight) * 10000) / 10000) : soldQty;
+          p.stock = Math.round(((Number(p.stock) || 0) - unitsToDeduct) * 10000) / 10000;
           if (p.stock <= 0) {
             p.stock = 0;
             p.status = 'out_of_stock';
@@ -26761,10 +26769,10 @@ class NexusApp {
             p.status = 'active';
           }
 
-          p.sold30d = (Number(p.sold30d) || 0) + unitsToDeduct;
+          p.sold30d = Math.round(((Number(p.sold30d) || 0) + unitsToDeduct) * 10000) / 10000;
           if (!p.monthlySales) p.monthlySales = {};
           if (!p.monthlySales[currentMonthKey]) p.monthlySales[currentMonthKey] = {};
-          p.monthlySales[currentMonthKey][currentDay] = (Number(p.monthlySales[currentMonthKey][currentDay]) || 0) + unitsToDeduct;
+          p.monthlySales[currentMonthKey][currentDay] = Math.round(((Number(p.monthlySales[currentMonthKey][currentDay]) || 0) + unitsToDeduct) * 10000) / 10000;
         }
       });
 
