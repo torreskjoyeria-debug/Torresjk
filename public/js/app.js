@@ -640,6 +640,49 @@ class NexusApp {
     });
   }
 
+  normalizeCategoryStr(s) {
+    return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+  }
+
+  findMatchingCategory(val1, val2) {
+    if (!this.data || !Array.isArray(this.data.categories) || this.data.categories.length === 0) return null;
+    const v1 = String(val1 || '').trim().toLowerCase();
+    const v2 = String(val2 || '').trim().toLowerCase();
+    const n1 = this.normalizeCategoryStr(val1);
+    const n2 = this.normalizeCategoryStr(val2);
+
+    // 1. Exact ID match
+    let m = this.data.categories.find(c => {
+      const cId = String(c.id || '').trim().toLowerCase();
+      return cId && (cId === v1 || cId === v2);
+    });
+    if (m) return m;
+
+    // 2. Exact Name match
+    m = this.data.categories.find(c => {
+      const cName = String(c.name || '').trim().toLowerCase();
+      return cName && (cName === v1 || cName === v2);
+    });
+    if (m) return m;
+
+    // 3. Normalized ID or Name match (ignoring accents, hyphens, spaces)
+    m = this.data.categories.find(c => {
+      const cNId = this.normalizeCategoryStr(c.id);
+      const cNName = this.normalizeCategoryStr(c.name);
+      return (cNId && (cNId === n1 || cNId === n2)) || (cNName && (cNName === n1 || cNName === n2));
+    });
+    if (m) return m;
+
+    // 4. Fuzzy containment match (e.g. "cadenanacional" vs "cadenanacinal")
+    m = this.data.categories.find(c => {
+      const cNName = this.normalizeCategoryStr(c.name);
+      const cNId = this.normalizeCategoryStr(c.id);
+      return (n1 && (cNName.includes(n1) || n1.includes(cNName) || cNId.includes(n1) || n1.includes(cNId))) ||
+             (n2 && (cNName.includes(n2) || n2.includes(cNName) || cNId.includes(n2) || n2.includes(cNId)));
+    });
+    return m || null;
+  }
+
   sanitizeLoadedData() {
     if (this.data.users && Array.isArray(this.data.users)) {
       this.data.users.forEach(u => {
@@ -715,30 +758,18 @@ class NexusApp {
         if (!p.supplier) p.supplier = 'Joyeros Italianos S.A.S.';
         if (!p.sku) p.sku = '001';
 
-        // 1. Match by category ID first (exact ID match)
-        let catMatch = (this.data.categories || []).find(c => 
-          String(c.id).toLowerCase().trim() === String(p.category || '').toLowerCase().trim()
-        );
-        // 2. Fallback: match by category name in p.category
-        if (!catMatch) {
-          catMatch = (this.data.categories || []).find(c => 
-            String(c.name).toLowerCase().trim() === String(p.category || '').toLowerCase().trim()
-          );
-        }
-        // 3. Fallback: match by p.categoryName
-        if (!catMatch && p.categoryName) {
-          catMatch = (this.data.categories || []).find(c => 
-            String(c.id).toLowerCase().trim() === String(p.categoryName || '').toLowerCase().trim() ||
-            String(c.name).toLowerCase().trim() === String(p.categoryName || '').toLowerCase().trim()
-          );
-        }
+        // Robust Category Matching without destructive fallback
+        const catMatch = this.findMatchingCategory(p.category, p.categoryName);
         if (catMatch) {
           p.category = catMatch.id;
           p.categoryName = catMatch.name;
-        } else if (this.data.categories && this.data.categories.length > 0) {
-          p.category = this.data.categories[0].id;
-          p.categoryName = this.data.categories[0].name;
+        } else if (!p.category && !p.categoryName && this.data.categories && this.data.categories.length > 0) {
+          // ONLY if product has NO category at all, assign default fallback
+          const defaultCat = this.data.categories.find(c => c.id === 'oronacional' || c.name.toLowerCase().includes('oro')) || this.data.categories[0];
+          p.category = defaultCat.id;
+          p.categoryName = defaultCat.name;
         }
+        // SAFEGUARD: Never force existing products into categories[0] ('cajasdelujo')!
 
         if (p.id === 'PRD-1867' || p.sku === '5415' || (p.name && p.name.toLowerCase().includes('letra a casting'))) {
           if (p.stock === 205) {
@@ -968,13 +999,7 @@ class NexusApp {
     if (!p) return 0;
     if (p.isExtra) return 0;
     if (this.data && Array.isArray(this.data.categories)) {
-      const cat = this.data.categories.find(c => {
-        const cId = String(c.id || '').toLowerCase().trim();
-        const cName = String(c.name || '').toLowerCase().trim();
-        const pCat = String(p.category || '').toLowerCase().trim();
-        const pCatName = String(p.categoryName || '').toLowerCase().trim();
-        return pCat === cId || pCat === cName || pCatName === cName || pCatName === cId;
-      });
+      const cat = this.findMatchingCategory(p.category, p.categoryName);
       if (cat && (cat.type === 'extras' || cat.isExtra)) return 0;
     }
     const stock = parseFloat(String(p.stock || 0).replace(',', '.')) || 0;
@@ -1009,11 +1034,27 @@ class NexusApp {
     const name = typeof catOrId === 'object' ? catOrId.name : catOrId;
     const cId = String(id || '').toLowerCase().trim();
     const cName = String(name || '').toLowerCase().trim();
+    const cNId = this.normalizeCategoryStr(id);
+    const cNName = this.normalizeCategoryStr(name);
+
     return this.data.products.filter(p => {
       if (!p) return false;
       const pCat = String(p.category || '').toLowerCase().trim();
+      if (pCat) {
+        if (cId && pCat === cId) return true;
+        if (cNId && this.normalizeCategoryStr(p.category) === cNId) return true;
+        if (cName && pCat === cName) return true;
+        if (cNName && this.normalizeCategoryStr(p.category) === cNName) return true;
+        return false;
+      }
+      // If product has no category ID, check categoryName
       const pCatName = String(p.categoryName || '').toLowerCase().trim();
-      return pCat === cId || pCat === cName || pCatName === cName || pCatName === cId;
+      if (pCatName) {
+        if (cName && pCatName === cName) return true;
+        if (cNName && this.normalizeCategoryStr(p.categoryName) === cNName) return true;
+        if (cId && pCatName === cId) return true;
+      }
+      return false;
     });
   }
 
