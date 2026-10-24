@@ -291,20 +291,52 @@ function mergeStoreState(serverData, clientData) {
   clientCredits.forEach(c => { const k = c.id || c.customer; if (k) creditMap.set(k, c); });
   result.customerCredits = Array.from(creditMap.values());
 
+  // 5b. MERGE supplierCredits (Keyed by id or supplier)
+  const serverSuppCredits = Array.isArray(serverData.supplierCredits) ? serverData.supplierCredits : [];
+  const clientSuppCredits = Array.isArray(clientData.supplierCredits) ? clientData.supplierCredits : [];
+  const suppCreditMap = new Map();
+  serverSuppCredits.forEach(sc => { const k = sc.id || sc.supplier; if (k) suppCreditMap.set(k, sc); });
+  clientSuppCredits.forEach(sc => { const k = sc.id || sc.supplier; if (k) suppCreditMap.set(k, sc); });
+  result.supplierCredits = Array.from(suppCreditMap.values());
+
+  // 5c. MERGE purchases (Keyed by id)
+  const serverPurchases = Array.isArray(serverData.purchases) ? serverData.purchases : [];
+  const clientPurchases = Array.isArray(clientData.purchases) ? clientData.purchases : [];
+  const poMap = new Map();
+  serverPurchases.forEach(po => { if (po && po.id) poMap.set(po.id, po); });
+  clientPurchases.forEach(po => { if (po && po.id) poMap.set(po.id, po); });
+  result.purchases = Array.from(poMap.values()).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+
+  // 5d. MERGE customers & suppliers (Keyed by id or name)
+  if (Array.isArray(serverData.customers) && Array.isArray(clientData.customers)) {
+    const custMap = new Map();
+    serverData.customers.forEach(c => { const k = c.id || c.name; if (k) custMap.set(k, c); });
+    clientData.customers.forEach(c => { const k = c.id || c.name; if (k) custMap.set(k, Object.assign({}, custMap.get(k) || {}, c)); });
+    result.customers = Array.from(custMap.values());
+  }
+  if (Array.isArray(serverData.suppliers) && Array.isArray(clientData.suppliers)) {
+    const suppMap = new Map();
+    serverData.suppliers.forEach(s => { const k = s.id || s.name; if (k) suppMap.set(k, s); });
+    clientData.suppliers.forEach(s => { const k = s.id || s.name; if (k) suppMap.set(k, Object.assign({}, suppMap.get(k) || {}, s)); });
+    result.suppliers = Array.from(suppMap.values());
+  }
+
   // 6. MERGE products stock preservation:
   if (Array.isArray(serverData.products) && Array.isArray(clientData.products)) {
     const serverProdMap = new Map();
     serverData.products.forEach(p => { if (p && p.id) serverProdMap.set(p.id, p); });
 
-    result.products = clientData.products.map(clientProd => {
+    const mergedProducts = clientData.products.map(clientProd => {
       const serverProd = serverProdMap.get(clientProd.id);
       if (!serverProd) return clientProd;
       const serverSold = Number(serverProd.sold30d) || 0;
       const clientSold = Number(clientProd.sold30d) || 0;
       const mergedProd = Object.assign({}, clientProd);
       if (serverSold > clientSold) {
+        const deltaSold = serverSold - clientSold;
         mergedProd.sold30d = serverSold;
-        mergedProd.stock = Math.min(Number(serverProd.stock) || 0, Number(clientProd.stock) || 0);
+        const currentClientStock = Number(clientProd.stock) || 0;
+        mergedProd.stock = Math.max(0, Math.round((currentClientStock - deltaSold) * 10000) / 10000);
         if (mergedProd.stock <= 0) {
           mergedProd.stock = 0;
           mergedProd.status = 'out_of_stock';
@@ -312,6 +344,16 @@ function mergeStoreState(serverData, clientData) {
       }
       return mergedProd;
     });
+
+    // Safeguard: preserve any products present on server that client did not have
+    const clientProdIds = new Set(clientData.products.map(p => p.id));
+    serverData.products.forEach(sp => {
+      if (sp && sp.id && !clientProdIds.has(sp.id)) {
+        mergedProducts.push(sp);
+      }
+    });
+
+    result.products = mergedProducts;
   }
 
   // 7. ACTIVE SHIFT CONSISTENCY:

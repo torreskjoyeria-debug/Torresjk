@@ -3500,8 +3500,8 @@ class NexusApp {
           const totalCost = totalGramsAdded > 0 ? Math.round(totalGramsAdded * unitCost) : Math.round(quantity * unitCost);
 
           // 1. Actualizar producto en inventario numéricamente seguro
-          const currentStock = this.parseCleanNumber(targetProd.stock) || 0;
-          targetProd.stock = Math.round((currentStock + quantity) * 100) / 100;
+          const currentStock = this.parseCleanNumber(targetProd.stock, true) || 0;
+          targetProd.stock = Math.round((currentStock + quantity) * 10000) / 10000;
           if (unitCost > 0) {
             targetProd.cost = unitCost;
           }
@@ -3639,7 +3639,7 @@ class NexusApp {
             const currentDrawerCash = Number(this.data.cashShiftLog?.expectedCashInDrawer) || 0;
             if (totalCost <= currentDrawerCash && currentDrawerCash > 0) {
               if (!this.data.cashShiftLog) {
-                this.data.cashShiftLog = { openingCash: 500000, cashSales: 0, cashExpenses: 0, expectedCashInDrawer: 500000, status: 'Abierto' };
+                this.data.cashShiftLog = { openingCash: 0, cashSales: 0, cardSales: 0, cashExpenses: 0, expectedCashInDrawer: 0, status: 'Abierto' };
               }
               this.data.cashShiftLog.cashExpenses = Math.round(((Number(this.data.cashShiftLog.cashExpenses) || 0) + totalCost) * 100) / 100;
               this.data.cashShiftLog.expectedCashInDrawer = Math.round(((Number(this.data.cashShiftLog.openingCash) || 0) + (Number(this.data.cashShiftLog.cashSales) || 0) - (Number(this.data.cashShiftLog.cashExpenses) || 0)) * 100) / 100;
@@ -5188,7 +5188,7 @@ class NexusApp {
     } else {
       const gramsInput = document.getElementById('edit-cat-grams-input');
       const costInput = document.getElementById('edit-cat-cost-input');
-      const grams = this.parseCleanNumber(gramsInput?.value);
+      const grams = this.parseCleanNumber(gramsInput?.value, true);
       const cost = this.parseCleanNumber(costInput?.value);
       if (gramsBadgeEl) {
         gramsBadgeEl.textContent = `⚖️ ${grams.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} g`;
@@ -6096,8 +6096,8 @@ class NexusApp {
     const targetProd = (this.data.products || []).find(p => p.id === po.productId || (po.productSku && p.sku === po.productSku));
     const qtyToRevert = Number(po.quantity !== undefined ? po.quantity : (po.itemsCount || 1)) || 0;
     if (targetProd && qtyToRevert > 0) {
-      const currentStock = this.parseCleanNumber(targetProd.stock) || 0;
-      targetProd.stock = Math.round(Math.max(0, currentStock - qtyToRevert) * 100) / 100;
+      const currentStock = this.parseCleanNumber(targetProd.stock, true) || 0;
+      targetProd.stock = Math.round(Math.max(0, currentStock - qtyToRevert) * 10000) / 10000;
       const minStock = targetProd.minStock !== undefined ? targetProd.minStock : 1;
       targetProd.status = targetProd.stock > minStock ? 'active' : (targetProd.stock > 0 ? 'low_stock' : 'out_of_stock');
     }
@@ -6470,7 +6470,7 @@ class NexusApp {
 
       // Sync with cashier cash drawer and electronic sales
       if (method === 'Pago Mixto') {
-        if (!this.data.cashShiftLog) this.data.cashShiftLog = { openingCash: 500000, cashSales: 0, cashExpenses: 0, expectedCashInDrawer: 500000, status: 'Abierto' };
+        if (!this.data.cashShiftLog) this.data.cashShiftLog = { openingCash: 0, cashSales: 0, cardSales: 0, cashExpenses: 0, expectedCashInDrawer: 0, status: 'Abierto' };
         if (mixedCash > 0) {
           this.data.cashShiftLog.cashSales = Math.round(((Number(this.data.cashShiftLog.cashSales) || 0) + mixedCash) * 100) / 100;
           this.data.cashShiftLog.expectedCashInDrawer = Math.round(((Number(this.data.cashShiftLog.openingCash) || 0) + (Number(this.data.cashShiftLog.cashSales) || 0) - (Number(this.data.cashShiftLog.cashExpenses) || 0)) * 100) / 100;
@@ -6482,14 +6482,14 @@ class NexusApp {
           this.data.cashShiftLog.cardSales = Math.round(((Number(this.data.cashShiftLog.cardSales) || 0) + mixedElec) * 100) / 100;
         }
       } else if (method.toLowerCase().includes('efectivo')) {
-        if (!this.data.cashShiftLog) this.data.cashShiftLog = { openingCash: 500000, cashSales: 0, cashExpenses: 0, expectedCashInDrawer: 500000, status: 'Abierto' };
+        if (!this.data.cashShiftLog) this.data.cashShiftLog = { openingCash: 0, cashSales: 0, cardSales: 0, cashExpenses: 0, expectedCashInDrawer: 0, status: 'Abierto' };
         this.data.cashShiftLog.cashSales = Math.round(((Number(this.data.cashShiftLog.cashSales) || 0) + actualPay) * 100) / 100;
         this.data.cashShiftLog.expectedCashInDrawer = Math.round(((Number(this.data.cashShiftLog.openingCash) || 0) + (Number(this.data.cashShiftLog.cashSales) || 0) - (Number(this.data.cashShiftLog.cashExpenses) || 0)) * 100) / 100;
         if (this.data.store) {
           this.data.store.cashInBox = this.data.cashShiftLog.expectedCashInDrawer;
         }
       } else if (method.toLowerCase().includes('tarjeta') || method.toLowerCase().includes('transfer')) {
-        if (!this.data.cashShiftLog) this.data.cashShiftLog = { openingCash: 500000, cashSales: 0, cashExpenses: 0, expectedCashInDrawer: 500000, status: 'Abierto' };
+        if (!this.data.cashShiftLog) this.data.cashShiftLog = { openingCash: 0, cashSales: 0, cardSales: 0, cashExpenses: 0, expectedCashInDrawer: 0, status: 'Abierto' };
         this.data.cashShiftLog.cardSales = Math.round(((Number(this.data.cashShiftLog.cardSales) || 0) + actualPay) * 100) / 100;
       }
 
@@ -26904,7 +26904,7 @@ class NexusApp {
       let separePending = 0;
 
       if (!this.data.cashShiftLog) {
-        this.data.cashShiftLog = { openingCash: 500000, cashSales: 0, cardSales: 0, cashExpenses: 0, expectedCashInDrawer: 500000, status: 'Abierto' };
+        this.data.cashShiftLog = { openingCash: 0, cashSales: 0, cardSales: 0, cashExpenses: 0, expectedCashInDrawer: 0, status: 'Abierto' };
       }
 
       if (this.selectedPayMethod === 'cash') {
