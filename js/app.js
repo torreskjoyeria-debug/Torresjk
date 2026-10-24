@@ -161,45 +161,9 @@ class NexusApp {
     let str = String(val).trim();
     if (str === '') return '';
 
-    const isDecimalVal = allowDecimals || 
-      (typeof val === 'number' && val % 1 !== 0) || 
-      (str.includes('.') && str.split('.')[1]?.length <= 4 && !str.includes(',')) || 
-      (str.includes(',') && str.split(',')[1]?.length <= 4 && !str.includes('.'));
+    const hasDecimals = allowDecimals || (typeof val === 'number' && val % 1 !== 0);
 
-    if (isDecimalVal) {
-      const isNegative = str.startsWith('-');
-      if (isNegative) str = str.slice(1);
-
-      if (str.includes(',') && str.includes('.')) {
-        if (str.lastIndexOf('.') > str.lastIndexOf(',')) {
-          str = str.replace(/,/g, '');
-        } else {
-          str = str.replace(/\./g, '').replace(',', '.');
-        }
-      } else if (str.includes(',')) {
-        const parts = str.split(',');
-        if (parts.length === 2 && (parts[0] === '0' || parts[0] === '' || parts[1].length <= 6)) {
-          str = (parts[0] || '0') + '.' + parts[1];
-        } else {
-          str = str.replace(/,/g, '');
-        }
-      }
-
-      const parts = str.split('.');
-      let intPart = parts[0].replace(/\D/g, '') || '0';
-      if (intPart.length > 1 && intPart.startsWith('0')) {
-        intPart = intPart.replace(/^0+/, '') || '0';
-      }
-      const formattedInt = (isNegative ? '-' : '') + intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-      if (parts.length > 1) {
-        const decPart = parts.slice(1).join('').replace(/\D/g, '');
-        return `${formattedInt}.${decPart}`;
-      }
-      if (str.endsWith('.')) {
-        return `${formattedInt}.`;
-      }
-      return formattedInt;
-    } else {
+    if (!hasDecimals) {
       const isNegative = str.startsWith('-');
       const digits = str.replace(/\D/g, '');
       if (!digits) return '';
@@ -208,6 +172,39 @@ class NexusApp {
       let numStr = String(cleanNum);
       return (isNegative ? '-' : '') + numStr.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
     }
+
+    const isNegative = str.startsWith('-');
+    if (isNegative) str = str.slice(1);
+
+    if (str.includes(',') && str.includes('.')) {
+      if (str.lastIndexOf('.') > str.lastIndexOf(',')) {
+        str = str.replace(/,/g, '');
+      } else {
+        str = str.replace(/\./g, '').replace(',', '.');
+      }
+    } else if (str.includes(',')) {
+      const parts = str.split(',');
+      if (parts.length === 2 && (parts[0] === '0' || parts[0] === '' || parts[1].length <= 6)) {
+        str = (parts[0] || '0') + '.' + parts[1];
+      } else {
+        str = str.replace(/,/g, '');
+      }
+    }
+
+    const parts = str.split('.');
+    let intPart = parts[0].replace(/\D/g, '') || '0';
+    if (intPart.length > 1 && intPart.startsWith('0')) {
+      intPart = intPart.replace(/^0+/, '') || '0';
+    }
+    const formattedInt = (isNegative ? '-' : '') + intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    if (parts.length > 1) {
+      const decPart = parts.slice(1).join('').replace(/\D/g, '');
+      return `${formattedInt}.${decPart}`;
+    }
+    if (str.endsWith('.')) {
+      return `${formattedInt}.`;
+    }
+    return formattedInt;
   }
 
   parseCleanNumber(val, isDecimal = false) {
@@ -221,6 +218,23 @@ class NexusApp {
 
     const isNegative = str.startsWith('-');
     if (isNegative) str = str.slice(1);
+
+    if (!isDecimal) {
+      if (str.includes(',') && str.includes('.')) {
+        const lastDot = str.lastIndexOf('.');
+        const lastComma = str.lastIndexOf(',');
+        if (lastDot > lastComma) {
+          str = str.slice(0, lastDot).replace(/,/g, '') + '.' + str.slice(lastDot + 1);
+        } else {
+          str = str.slice(0, lastComma).replace(/\./g, '') + '.' + str.slice(lastComma + 1);
+        }
+        const n = Math.round(parseFloat(str));
+        return isNaN(n) ? 0 : (isNegative ? -n : n);
+      }
+      const digits = str.replace(/[,.]/g, '');
+      const n = parseInt(digits, 10);
+      return isNaN(n) ? 0 : (isNegative ? -n : n);
+    }
 
     if (str.includes(',') && str.includes('.')) {
       const lastDot = str.lastIndexOf('.');
@@ -236,15 +250,9 @@ class NexusApp {
       const sep = str.includes(',') ? ',' : '.';
       const parts = str.split(sep);
       if (parts.length === 2) {
-        if (isDecimal) {
-          str = (parts[0] || '0') + '.' + parts[1];
-        } else {
-          if (parts[1].length !== 3 || parts[0] === '0' || parts[0] === '') {
-            str = (parts[0] || '0') + '.' + parts[1];
-          } else {
-            str = str.replace(/[,.]/g, '');
-          }
-        }
+        str = (parts[0] || '0') + '.' + parts[1];
+      } else if (parts.length > 2) {
+        str = parts.slice(0, -1).join('') + '.' + parts[parts.length - 1];
       } else {
         str = str.replace(/[,.]/g, '');
       }
@@ -294,7 +302,7 @@ class NexusApp {
       const cursorPos = input.selectionStart || 0;
 
       const rawBeforeCursor = rawVal.slice(0, cursorPos);
-      const digitsBeforeCursor = rawBeforeCursor.replace(/,/g, '').length;
+      const digitsBeforeCursor = rawBeforeCursor.replace(/\D/g, '').length;
 
       const formatted = this.formatNumberWithCommas(rawVal, false);
       input.value = formatted;
@@ -306,7 +314,7 @@ class NexusApp {
           newCursorPos = i;
           break;
         }
-        if (formatted[i] !== ',') {
+        if (formatted[i] >= '0' && formatted[i] <= '9') {
           countedDigits++;
         }
         newCursorPos = i + 1;
@@ -379,6 +387,8 @@ class NexusApp {
       'mixed-cash-amount',
       'mixed-card-amount',
       'mixed-transfer-amount',
+      'mixed-credit-amount',
+      'mixed-addi-amount',
       'abono-mixed-cash',
       'abono-mixed-electronic'
     ];
@@ -395,6 +405,12 @@ class NexusApp {
           callback = () => this.updateMixedPaymentCalc();
         } else if (id.startsWith('abono-mixed-')) {
           callback = () => this.updateAbonoMixedCalc();
+        } else if (id === 'cash-received-input') {
+          callback = () => this.updateCashChange();
+        } else if (id === 'new-prod-cost' || id === 'new-prod-price') {
+          callback = () => this.updateProductCostProfitPreview('new');
+        } else if (id === 'edit-prod-cost' || id === 'edit-prod-price') {
+          callback = () => this.updateProductCostProfitPreview('edit');
         }
         this.setupThousandMask(el, false, callback);
       }
@@ -414,7 +430,17 @@ class NexusApp {
 
     decimalInputs.forEach(id => {
       const el = document.getElementById(id);
-      if (el) this.setupThousandMask(el, true);
+      if (el) {
+        let callback = null;
+        if (id === 'pos-add-qty-input') {
+          callback = () => this.onAddToCartQtyChange();
+        } else if (id === 'new-prod-stock' || id === 'new-prod-piece-weight') {
+          callback = () => this.updateProductCostProfitPreview('new');
+        } else if (id === 'edit-prod-stock' || id === 'edit-prod-piece-weight') {
+          callback = () => this.updateProductCostProfitPreview('edit');
+        }
+        this.setupThousandMask(el, true, callback);
+      }
     });
 
     document.querySelectorAll('.cart-custom-price-input').forEach(el => {
@@ -26037,6 +26063,13 @@ class NexusApp {
     if (subtotalEl) subtotalEl.innerText = this.formatCurrency(subtotal);
     if (taxEl) taxEl.innerText = this.formatCurrency(tax);
     if (totalEl) totalEl.innerText = this.formatCurrency(grandTotal);
+
+    document.querySelectorAll('.cart-custom-price-input').forEach(el => {
+      this.setupThousandMask(el, false);
+    });
+    document.querySelectorAll('.cart-qty-input').forEach(el => {
+      this.setupThousandMask(el, true);
+    });
   }
 
   renderCheckoutSummary() {
