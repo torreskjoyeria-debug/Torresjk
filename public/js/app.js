@@ -2035,6 +2035,12 @@ class NexusApp {
     return false;
   }
 
+  isSuperAdmin() {
+    if (!this.currentUser) return false;
+    const role = String(this.currentUser.role || '').trim().toLowerCase();
+    return role === 'super admin' || role.includes('super');
+  }
+
   canPerformAction(action, entity) {
     if (!this.currentUser) return false;
     const role = (this.currentUser.role || '').toLowerCase();
@@ -25277,6 +25283,7 @@ class NexusApp {
                   <div>
                     <span class="badge" style="background:rgba(2,132,199,0.1); color:var(--brand-primary); font-size:0.72rem; font-weight:700; padding:2px 6px;">Fijar precio en POS</span>
                     ${(() => {
+                      if (!this.isSuperAdmin()) return '';
                       const cat = this.data.categories?.find(c => c.id === p.category || c.name === p.categoryName);
                       const costPerGram = Number(p.cost || cat?.cost || 0);
                       const pWeight = parseFloat(String(p.pieceWeight !== undefined && p.pieceWeight !== null ? p.pieceWeight : (p.weight || 0)).replace(',', '.')) || 0;
@@ -25340,6 +25347,20 @@ class NexusApp {
     const isUnitWithWeight = !isPesaje && pWeight > 0;
     const unit = (isPesaje || isUnitWithWeight) ? 'g' : (p.weightUnit || 'u.');
     const maxAvailableQty = isUnitWithWeight ? Math.round(stockNum * pWeight * 100) / 100 : stockNum;
+
+    const isSuperAdmin = this.isSuperAdmin();
+    const elProfitCard = document.getElementById('pos-add-profitability-card');
+    if (elProfitCard) {
+      elProfitCard.style.display = isSuperAdmin ? 'block' : 'none';
+    }
+    const elCostBox = document.getElementById('pos-add-cost-box');
+    const elPriceCostRow = document.getElementById('pos-add-price-cost-row');
+    if (elCostBox) {
+      elCostBox.style.display = isSuperAdmin ? 'block' : 'none';
+    }
+    if (elPriceCostRow) {
+      elPriceCostRow.style.gridTemplateColumns = isSuperAdmin ? '1fr 1fr' : '1fr';
+    }
 
     const elId = document.getElementById('pos-add-product-id');
     const elName = document.getElementById('pos-add-product-name');
@@ -25593,6 +25614,16 @@ class NexusApp {
     const elSub = document.getElementById('pos-add-subtotal-val');
     if (elSub) elSub.textContent = this.formatCurrency(totalSale);
 
+    const isSuperAdmin = this.isSuperAdmin();
+    const elCard = document.getElementById('pos-add-profitability-card');
+    const elLossWarning = document.getElementById('pos-add-loss-warning');
+    if (!isSuperAdmin) {
+      if (elCard) elCard.style.display = 'none';
+      if (elLossWarning) elLossWarning.style.display = 'none';
+      return;
+    }
+    if (elCard) elCard.style.display = 'block';
+
     // 1. Costo Total
     const elTotalCost = document.getElementById('pos-add-total-cost-val');
     const elTotalCostSub = document.getElementById('pos-add-total-cost-sub');
@@ -25654,9 +25685,7 @@ class NexusApp {
     }
 
     // Badge y estado visual de alerta
-    const elCard = document.getElementById('pos-add-profitability-card');
     const elBadge = document.getElementById('pos-add-margin-badge');
-    const elLossWarning = document.getElementById('pos-add-loss-warning');
     const elLossAmt = document.getElementById('pos-add-loss-amount');
 
     if (totalSale > 0 && costPerGram > 0 && profit < 0) {
