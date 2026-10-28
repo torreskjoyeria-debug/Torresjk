@@ -19682,7 +19682,6 @@ class NexusApp {
             <div style="display:flex; justify-content:space-between; align-items:flex-start; font-size:13px; font-weight:800;">
               <div style="font-weight:800; color:#000; flex:2.2; padding-right:8px; line-height:1.35;">
                 ${codePrefix}${name}
-                ${qtyNum > 1 ? `<div style="font-size:12px; font-weight:800; color:#000; margin-top:1px;">${qtyNum} u. x ${this.formatCurrency(unitPriceVal)}</div>` : ''}
               </div>
               <div style="flex:1.1; text-align:right; font-weight:900; color:#000; font-size:13.5px; white-space:nowrap;">
                 ${totalStr}
@@ -19865,6 +19864,8 @@ class NexusApp {
             unitsCount = Number(i.unitsCount) || 1;
           } else if (pWeight > 0 && i.qty >= pWeight) {
             unitsCount = Math.round((i.qty / pWeight) * 100) / 100;
+          } else if (i.measureType === 'Pesaje' || !i.measureType) {
+            unitsCount = 1;
           } else {
             unitsCount = Math.round(Number(i.qty || 1) * 100) / 100;
           }
@@ -19880,7 +19881,7 @@ class NexusApp {
             .trim();
 
           const qtyStr = `${unitsCount} u.`;
-          const formattedUnitPrice = `${this.formatCurrency(unitPriceVal)}/u.`;
+          const formattedUnitPrice = '';
           const totalStr = this.formatCurrency(totalVal);
           const itemSku = i.sku || p?.sku || (p?.id ? p.id : '');
 
@@ -27141,10 +27142,11 @@ class NexusApp {
 
       // Build Thermal Receipt HTML - Factura POS limpia: sin gramos, sin valor del gramo y sin peso
       const ticketItems = soldCart.map(i => {
+        const isPesaje = (i.product?.measureType || 'Pesaje') === 'Pesaje';
         const pWeight = parseFloat(String(i.product.pieceWeight !== undefined && i.product.pieceWeight !== null ? i.product.pieceWeight : (i.product.weight || 0)).replace(',', '.')) || 0;
-        const unitsCount = pWeight > 0 ? Math.max(1, Math.round((i.qty / pWeight) * 100) / 100) : Math.max(1, Math.round(i.qty * 100) / 100);
+        const unitsCount = pWeight > 0 ? Math.max(1, Math.round((i.qty / pWeight) * 100) / 100) : (isPesaje ? 1 : Math.max(1, Math.round(i.qty * 100) / 100));
         const totalItemVal = this.getCartItemPrice(i) * i.qty;
-        const unitPriceVal = unitsCount > 0 ? (totalItemVal / unitsCount) : this.getCartItemPrice(i);
+        const unitPriceVal = unitsCount > 0 ? (totalItemVal / unitsCount) : totalItemVal;
 
         let cleanName = (i.product.name || 'Producto')
           .replace(/\s*[-–—]?\s*\(?\s*(?:peso\s*:\s*)?\d+(?:[.,]\d+)?\s*(?:g|gr|gramos|g\.)\s*\)?/gi, '')
@@ -27159,10 +27161,10 @@ class NexusApp {
           qty: unitsCount,
           unitsCount: unitsCount,
           unit: 'u.',
-          price: unitPriceVal,
+          price: totalItemVal,
           unitPrice: unitPriceVal,
           formattedQty: `${unitsCount} u.`,
-          formattedUnitPrice: `${this.formatCurrency(unitPriceVal)}/u.`,
+          formattedUnitPrice: '',
           formattedLineTotal: this.formatCurrency(totalItemVal),
           total: totalItemVal
         };
