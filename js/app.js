@@ -487,13 +487,14 @@ class NexusApp {
 
     const name = this.normalizeSearchStr(p.name);
     const sku = this.normalizeSearchStr(p.sku);
+    const code = this.normalizeSearchStr(p.code);
     const id = this.normalizeSearchStr(p.id);
     const barcode = this.normalizeSearchStr(p.barcode);
     const category = this.normalizeSearchStr(p.categoryName || p.category);
     const supplier = this.normalizeSearchStr(p.supplier);
 
     // Direct match against query
-    if (name.includes(q) || sku.includes(q) || id.includes(q) || barcode.includes(q) || category.includes(q) || supplier.includes(q)) {
+    if (name.includes(q) || sku.includes(q) || code.includes(q) || id.includes(q) || barcode.includes(q) || category.includes(q) || supplier.includes(q)) {
       return true;
     }
 
@@ -501,7 +502,7 @@ class NexusApp {
     const tokens = q.split(/\s+/).filter(Boolean);
     if (tokens.length > 1) {
       return tokens.every(tok => 
-        name.includes(tok) || sku.includes(tok) || id.includes(tok) || barcode.includes(tok) || category.includes(tok) || supplier.includes(tok)
+        name.includes(tok) || sku.includes(tok) || code.includes(tok) || id.includes(tok) || barcode.includes(tok) || category.includes(tok) || supplier.includes(tok)
       );
     }
 
@@ -663,6 +664,8 @@ class NexusApp {
         p.id = `PRD-${String(maxNum).padStart(3, '0')}`;
       }
       seenIds.add(String(p.id));
+      // Preservar código/SKU del producto sin sobreescribirlo jamás
+      if (!p.sku && p.code) p.sku = String(p.code).trim();
     });
   }
 
@@ -691,20 +694,11 @@ class NexusApp {
     });
     if (m) return m;
 
-    // 3. Normalized ID or Name match (ignoring accents, hyphens, spaces)
+    // 3. Normalized ID or Name exact match (ignoring accents, hyphens, spaces)
     m = this.data.categories.find(c => {
       const cNId = this.normalizeCategoryStr(c.id);
       const cNName = this.normalizeCategoryStr(c.name);
       return (cNId && (cNId === n1 || cNId === n2)) || (cNName && (cNName === n1 || cNName === n2));
-    });
-    if (m) return m;
-
-    // 4. Fuzzy containment match (e.g. "cadenanacional" vs "cadenanacinal")
-    m = this.data.categories.find(c => {
-      const cNName = this.normalizeCategoryStr(c.name);
-      const cNId = this.normalizeCategoryStr(c.id);
-      return (n1 && (cNName.includes(n1) || n1.includes(cNName) || cNId.includes(n1) || n1.includes(cNId))) ||
-             (n2 && (cNName.includes(n2) || n2.includes(cNName) || cNId.includes(n2) || n2.includes(cNId)));
     });
     return m || null;
   }
@@ -782,18 +776,29 @@ class NexusApp {
       this.data.products.forEach(p => {
         if (!p.measureType) p.measureType = 'Pesaje';
         if (!p.supplier) p.supplier = 'Joyeros Italianos S.A.S.';
-        if (!p.sku) p.sku = '001';
+        if (!p.sku) {
+          p.sku = (p.code && String(p.code).trim()) ? String(p.code).trim() : (p.id || '');
+        }
 
-        // Robust Category Matching without destructive fallback
-        const catMatch = this.findMatchingCategory(p.category, p.categoryName);
-        if (catMatch) {
-          p.category = catMatch.id;
-          p.categoryName = catMatch.name;
-        } else if (!p.category && !p.categoryName && this.data.categories && this.data.categories.length > 0) {
-          // ONLY if product has NO category at all, assign default fallback
-          const defaultCat = this.data.categories.find(c => c.id === 'oronacional' || c.name.toLowerCase().includes('oro')) || this.data.categories[0];
-          p.category = defaultCat.id;
-          p.categoryName = defaultCat.name;
+        // Protección estricta de categorías: si el producto ya tiene un ID de categoría válido existente, ¡PRESERVARLO!
+        const existingCat = (this.data.categories || []).find(c => 
+          String(c.id).trim().toLowerCase() === String(p.category || '').trim().toLowerCase()
+        );
+        if (existingCat) {
+          p.category = existingCat.id;
+          p.categoryName = existingCat.name;
+        } else {
+          // Solo si p.category no coincide directamente con un ID existente, intentar resolver de forma segura
+          const catMatch = this.findMatchingCategory(p.category, p.categoryName);
+          if (catMatch) {
+            p.category = catMatch.id;
+            p.categoryName = catMatch.name;
+          } else if (!p.category && !p.categoryName && this.data.categories && this.data.categories.length > 0) {
+            // SOLO si el producto no tiene absolutamente ninguna categoría, asignar fallback
+            const defaultCat = this.data.categories.find(c => c.id === 'oronacional' || c.name.toLowerCase().includes('oro')) || this.data.categories[0];
+            p.category = defaultCat.id;
+            p.categoryName = defaultCat.name;
+          }
         }
         // SAFEGUARD: Never force existing products into categories[0] ('cajasdelujo')!
 
@@ -3524,9 +3529,12 @@ class NexusApp {
             targetProd = (this.data.products || []).find(p => p.id === prodId);
           }
           if (!targetProd && prodSku) {
-            targetProd = (this.data.products || []).find(p => p.sku && p.sku.toLowerCase().trim() === prodSku.toLowerCase().trim());
+            targetProd = (this.data.products || []).find(p => 
+              (p.sku && p.sku.toLowerCase().trim() === prodSku.toLowerCase().trim()) ||
+              (p.code && p.code.toLowerCase().trim() === prodSku.toLowerCase().trim())
+            );
           }
-          if (!targetProd && prodName) {
+          if (!targetProd && prodName && !prodSku) {
             targetProd = (this.data.products || []).find(p => p.name && p.name.toLowerCase().trim() === prodName.toLowerCase().trim());
           }
 
@@ -3578,7 +3586,7 @@ class NexusApp {
           if (unitCost > 0) {
             targetProd.cost = unitCost;
           }
-          if (prodSku) {
+          if (prodSku && !targetProd.sku) {
             targetProd.sku = prodSku;
           }
           if (isUnidades && productGrams > 0) {
@@ -3787,9 +3795,10 @@ class NexusApp {
 
         const categoryName = catObj ? catObj.name : 'General';
 
+        const newProdUniqueId = this.generateUniqueProductId();
         const newP = {
-          id: this.generateUniqueProductId(),
-          sku: sku || '001',
+          id: newProdUniqueId,
+          sku: sku || newProdUniqueId,
           name,
           measureType: isExtraCat ? 'Unidades' : measureType,
           weightUnit: isExtraCat ? 'u.' : weightUnit,
@@ -10948,7 +10957,7 @@ class NexusApp {
 
       return `
         <tr class="${rowClass}">
-          <td><span class="font-bold text-xs" style="color:var(--text-subtle);">${this.escapeHtml(p.sku || p.id || '001')}</span></td>
+          <td><span class="font-bold text-xs" style="color:var(--text-subtle);">${this.escapeHtml(p.sku || p.code || p.id || '---')}</span></td>
           <td>
             <div style="font-weight:700; color:var(--text-main);">${this.escapeHtml(p.name || 'Sin Nombre')}</div>
           </td>
@@ -19856,7 +19865,7 @@ class NexusApp {
 
     const ticketItems = (tx.items && Array.isArray(tx.items) && tx.items.length > 0)
       ? tx.items.map(i => {
-          const p = this.data.products?.find(prod => prod.id === i.id || prod.sku === i.sku || prod.name === i.name);
+          const p = this.data.products?.find(prod => (i.id && prod.id === i.id) || (i.sku && prod.sku === i.sku));
           const pWeight = p ? parseFloat(String(p.pieceWeight !== undefined && p.pieceWeight !== null ? p.pieceWeight : (p.weight || 0)).replace(',', '.')) || 0 : 0;
           
           let unitsCount = 1;
@@ -19883,7 +19892,7 @@ class NexusApp {
           const qtyStr = `${unitsCount} u.`;
           const formattedUnitPrice = '';
           const totalStr = this.formatCurrency(totalVal);
-          const itemSku = i.sku || p?.sku || (p?.id ? p.id : '');
+          const itemSku = i.sku || p?.sku || p?.code || (p?.id ? p.id : '');
 
           return {
             name: cleanName,
@@ -24101,7 +24110,7 @@ class NexusApp {
 
       return `
         <tr>
-          <td><b>${this.escapeHtml(p.sku || p.id || '')}</b></td>
+          <td><b>${this.escapeHtml(p.sku || p.code || p.id || '')}</b></td>
           <td>
             <div style="font-weight:700; color:var(--text-main);">${this.escapeHtml(p.name || '')}</div>
             <div style="font-size:0.75rem; color:var(--text-muted); margin-top:2px;">${this.escapeHtml(cat?.name || p.categoryName || 'General')} · ${p.measureType || 'Pesaje'}</div>
@@ -25043,17 +25052,18 @@ class NexusApp {
           const term = searchInput.value.trim();
           if (!term) return;
 
-          // Priority 1: Exact code match (SKU, barcode, ID)
+          // Priority 1: Exact code match (SKU, Code, barcode, ID)
           const normTerm = this.normalizeSearchStr(term);
           const exactCodeMatch = (this.data.products || []).find(p => 
             this.normalizeSearchStr(p.sku) === normTerm ||
+            this.normalizeSearchStr(p.code) === normTerm ||
             this.normalizeSearchStr(p.barcode) === normTerm ||
             this.normalizeSearchStr(p.id) === normTerm
           );
 
           if (exactCodeMatch) {
             this.addToCart(exactCodeMatch.id);
-            this.showToast(`Producto agregado: "${exactCodeMatch.name}" [${exactCodeMatch.sku || exactCodeMatch.id}]`, 'success');
+            this.showToast(`Producto agregado: "${exactCodeMatch.name}" [${exactCodeMatch.sku || exactCodeMatch.code || exactCodeMatch.id}]`, 'success');
             searchInput.value = '';
             this.renderPOSProducts();
             return;
@@ -25248,7 +25258,7 @@ class NexusApp {
       const unit = isPesaje ? (p.weightUnit || 'g') : 'u.';
       const unitLabel = isPesaje ? `/ ${unit}` : '';
       const stockUnit = unit;
-      const skuBadge = p.sku || p.id || 'S/C';
+      const skuBadge = p.sku || p.code || p.id || 'S/C';
       const isAgotado = p.stock <= 0 || p.status === 'out_of_stock';
       const isStockBajo = !isAgotado && p.stock <= (p.minStock || (isPesaje ? (unit === 'kg' ? 0.001 : 0.5) : 2));
 
@@ -25386,7 +25396,7 @@ class NexusApp {
 
     if (elId) elId.value = p.id;
     if (elName) elName.textContent = p.name;
-    if (elSku) elSku.textContent = `Código: ${p.sku || p.id}`;
+    if (elSku) elSku.textContent = `Código: ${p.sku || p.code || p.id}`;
     if (elCat) elCat.textContent = cat?.name || p.categoryName || p.category || 'General';
     if (elStock) elStock.textContent = isUnitWithWeight ? `Stock: ${stockNum} u. (${maxAvailableQty} g)` : `Stock: ${stockNum} ${unit}`;
     if (elPill) {
@@ -26972,7 +26982,7 @@ class NexusApp {
       const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
       soldCart.forEach(cartItem => {
-        const p = this.data.products.find(prod => prod.id === cartItem.product.id);
+        const p = this.data.products.find(prod => prod.id === cartItem.product.id || (prod.sku && cartItem.product.sku && String(prod.sku).trim() === String(cartItem.product.sku).trim()));
         if (p) {
           const soldQty = Number(cartItem.qty) || 0;
           const isPesaje = (p.measureType || 'Pesaje') === 'Pesaje';
@@ -27109,7 +27119,7 @@ class NexusApp {
           const unit = isPesaje ? (i.product?.weightUnit || 'g') : 'u.';
           return {
             id: i.product.id,
-            sku: i.product.sku || i.product.id || '',
+            sku: i.product.sku || i.product.code || i.product.id || '',
             name: i.product.name,
             qty: i.qty,
             quantity: i.qty,
@@ -27157,7 +27167,7 @@ class NexusApp {
         return {
           product: i.product,
           name: cleanName,
-          sku: i.product.sku || i.product.id || '',
+          sku: i.product.sku || i.product.code || i.product.id || '',
           qty: unitsCount,
           unitsCount: unitsCount,
           unit: 'u.',
@@ -27354,7 +27364,7 @@ class NexusApp {
           html += filteredProds.map(p => {
             const isPesaje = (p.measureType || 'Pesaje') === 'Pesaje';
             const stockUnit = isPesaje ? 'g' : 'u';
-            const skuBadge = p.sku || p.id || 'S/C';
+            const skuBadge = p.sku || p.code || p.id || 'S/C';
 
             return `
               <div style="display:flex; align-items:center; justify-content:space-between; padding:0.65rem 0.75rem; border-radius:var(--radius-md); cursor:pointer; margin-bottom:0.35rem; transition:background 0.15s ease; border:1px solid var(--card-border);" onmouseover="this.style.background='var(--canvas-bg)'" onmouseout="this.style.background='transparent'" onclick="app.selectSearchResult('${p.id}')">
