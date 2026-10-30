@@ -906,6 +906,12 @@ class NexusApp {
     if (!this.data.purchases || !Array.isArray(this.data.purchases)) {
       this.data.purchases = [];
     }
+    if (!this.data.deletedPurchases || !Array.isArray(this.data.deletedPurchases)) {
+      this.data.deletedPurchases = [];
+    } else if (this.data.deletedPurchases.length > 0) {
+      const delSet = new Set(this.data.deletedPurchases);
+      this.data.purchases = (this.data.purchases || []).filter(p => !delSet.has(p.id));
+    }
     if (!this.data.services || !Array.isArray(this.data.services)) {
       this.data.services = [];
     }
@@ -1511,6 +1517,16 @@ class NexusApp {
               }
             });
             remote.expenses = Array.from(expMap.values()).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+
+            // Smart local preservation: merge deletedPurchases
+            const localDel = Array.isArray(this.data.deletedPurchases) ? this.data.deletedPurchases : [];
+            const remoteDel = Array.isArray(remote.deletedPurchases) ? remote.deletedPurchases : [];
+            const combinedDel = Array.from(new Set([...localDel, ...remoteDel]));
+            remote.deletedPurchases = combinedDel;
+            if (combinedDel.length > 0 && Array.isArray(remote.purchases)) {
+              const delSet = new Set(combinedDel);
+              remote.purchases = remote.purchases.filter(p => !delSet.has(p.id));
+            }
 
             this.data = Object.assign({}, INITIAL_DATA, remote);
             this.sanitizeLoadedData();
@@ -6175,7 +6191,10 @@ class NexusApp {
     }
 
     // 2. REVERTIR STOCK DEL PRODUCTO
-    const targetProd = (this.data.products || []).find(p => p.id === po.productId || (po.productSku && p.sku === po.productSku));
+    const targetProd = (this.data.products || []).find(p => 
+      (po.productId && p.id === po.productId) || 
+      (po.productSku && (p.sku === po.productSku || p.code === po.productSku))
+    );
     const qtyToRevert = Number(po.quantity !== undefined ? po.quantity : (po.itemsCount || 1)) || 0;
     if (targetProd && qtyToRevert > 0) {
       const currentStock = this.parseCleanNumber(targetProd.stock, true) || 0;
@@ -6186,19 +6205,55 @@ class NexusApp {
     this.syncAllCategoryGrams();
 
     // 3. REVERTIR CRÉDITOS Y DEUDAS DE PROVEEDORES
+    const poTotal = Number(po.total) || 0;
+    const isCreditPurchase = (po.paymentStatus || '').toLowerCase().includes('pend') || 
+                             (po.paymentMethod || '').toLowerCase().includes('crédito') ||
+                             (po.paymentMethod || '').toLowerCase().includes('credito');
+
     if (Array.isArray(this.data.supplierCredits)) {
-      const relatedCredits = this.data.supplierCredits.filter(c => c.poId === po.id || c.id === po.id);
-      relatedCredits.forEach(cred => {
-        const suppObj = (this.data.suppliers || []).find(s => s.name?.toLowerCase().trim() === cred.supplier?.toLowerCase().trim());
-        if (suppObj) {
-          const pendingToDeduct = Number(cred.pendingAmount) || 0;
-          suppObj.creditBalance = Math.round(Math.max(0, (Number(suppObj.creditBalance) || 0) - pendingToDeduct) * 100) / 100;
+      const suppNorm = (po.supplier || '').toLowerCase().trim();
+      const suppObj = (this.data.suppliers || []).find(s => (s.name || '').toLowerCase().trim() === suppNorm);
+
+      this.data.supplierCredits.forEach(cred => {
+        const credSuppNorm = (cred.supplier || '').toLowerCase().trim();
+        const matchesPO = cred.poId === po.id || 
+                          cred.id === po.id || 
+                          (Array.isArray(cred.purchaseOrderIds) && cred.purchaseOrderIds.includes(po.id));
+
+        if (matchesPO || (isCreditPurchase && credSuppNorm && credSuppNorm === suppNorm)) {
+          const amountToDeduct = Math.min(Number(cred.pendingAmount) || 0, poTotal);
+          cred.totalOwed = Math.round(Math.max(0, (Number(cred.totalOwed) || 0) - poTotal) * 100) / 100;
+          cred.pendingAmount = Math.round(Math.max(0, (Number(cred.pendingAmount) || 0) - amountToDeduct) * 100) / 100;
+
+          if (Array.isArray(cred.purchaseOrderIds)) {
+            cred.purchaseOrderIds = cred.purchaseOrderIds.filter(pid => pid !== po.id);
+          }
+          if (Array.isArray(cred.history)) {
+            cred.history = cred.history.filter(h => h.poId !== po.id);
+          }
+          if (cred.pendingAmount <= 0) {
+            cred.status = 'Pagado Total';
+          }
+          if (cred.totalOwed <= 0 && (!cred.purchaseOrderIds || cred.purchaseOrderIds.length === 0)) {
+            cred._delete = true;
+          }
         }
       });
-      this.data.supplierCredits = this.data.supplierCredits.filter(c => c.poId !== po.id && c.id !== po.id);
+
+      this.data.supplierCredits = this.data.supplierCredits.filter(cred => !cred._delete);
+
+      if (isCreditPurchase && suppObj) {
+        suppObj.creditBalance = Math.round(Math.max(0, (Number(suppObj.creditBalance) || 0) - poTotal) * 100) / 100;
+      }
     }
 
-    // 4. ELIMINAR LA ORDEN DE COMPRA
+    // 4. REGISTRAR EN LISTA NEGRA DE COMPRAS ELIMINADAS Y RETIRAR DE PURCHASES
+    if (!Array.isArray(this.data.deletedPurchases)) {
+      this.data.deletedPurchases = [];
+    }
+    if (!this.data.deletedPurchases.includes(id)) {
+      this.data.deletedPurchases.push(id);
+    }
     this.data.purchases = (this.data.purchases || []).filter(p => p.id !== id);
 
     await this.savePersistence();
@@ -10116,7 +10171,7 @@ class NexusApp {
     const tbody = document.getElementById('fin-compras-tbody');
     if (!tbody) return;
     if (!this.data.purchases || this.data.purchases.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:2.5rem 1rem; color:var(--text-muted);"><div style="font-size:1.5rem; margin-bottom:0.5rem;">📦</div><div style="font-weight:600;">No hay órdenes de compra registradas</div><div style="font-size:0.8rem; margin-top:0.25rem;">Haga clic en "+ Nueva Orden de Compra" para registrar una entrada de stock.</div></td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:2.5rem 1rem; color:var(--text-muted);"><div style="font-size:1.5rem; margin-bottom:0.5rem;">📦</div><div style="font-weight:600;">No hay órdenes de compra registradas</div><div style="font-size:0.8rem; margin-top:0.25rem;">Haga clic en "+ Nueva Orden de Compra" para registrar una entrada de stock.</div></td></tr>`;
       return;
     }
     const canDeletePO = this.canPerformAction('delete', 'purchase');

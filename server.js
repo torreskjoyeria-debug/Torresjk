@@ -190,7 +190,7 @@ function saveLocalDb(data, storeId = 'store_1') {
 }
 
 // Helper: Merge incoming client full-state with existing persistent state to prevent concurrency data loss
-function mergeStoreState(serverData, clientData) {
+function mergeStoreState(serverData, clientData, isAdmin = false) {
   if (!serverData || typeof serverData !== 'object') return clientData;
   if (!clientData || typeof clientData !== 'object') return serverData;
 
@@ -291,21 +291,72 @@ function mergeStoreState(serverData, clientData) {
   clientCredits.forEach(c => { const k = c.id || c.customer; if (k) creditMap.set(k, c); });
   result.customerCredits = Array.from(creditMap.values());
 
-  // 5b. MERGE supplierCredits (Keyed by id or supplier)
-  const serverSuppCredits = Array.isArray(serverData.supplierCredits) ? serverData.supplierCredits : [];
-  const clientSuppCredits = Array.isArray(clientData.supplierCredits) ? clientData.supplierCredits : [];
-  const suppCreditMap = new Map();
-  serverSuppCredits.forEach(sc => { const k = sc.id || sc.supplier; if (k) suppCreditMap.set(k, sc); });
-  clientSuppCredits.forEach(sc => { const k = sc.id || sc.supplier; if (k) suppCreditMap.set(k, sc); });
-  result.supplierCredits = Array.from(suppCreditMap.values());
+  // 5b. DELETED PURCHASES BLACKLIST & PURCHASES MERGE:
+  // Strictly prevent deleted purchases from resurrecting via server merge
+  const deletedPurchases = new Set([
+    ...(Array.isArray(clientData.deletedPurchases) ? clientData.deletedPurchases : []),
+    ...(Array.isArray(serverData.deletedPurchases) ? serverData.deletedPurchases : [])
+  ]);
 
-  // 5c. MERGE purchases (Keyed by id)
   const serverPurchases = Array.isArray(serverData.purchases) ? serverData.purchases : [];
   const clientPurchases = Array.isArray(clientData.purchases) ? clientData.purchases : [];
+
+  // If an authorized admin explicitly submitted purchases, any purchase absent in clientPurchases is marked deleted
+  if (isAdmin && Array.isArray(clientData.purchases)) {
+    const clientPoIds = new Set(clientPurchases.map(p => p && p.id).filter(Boolean));
+    serverPurchases.forEach(sp => {
+      if (sp && sp.id && !clientPoIds.has(sp.id)) {
+        deletedPurchases.add(sp.id);
+      }
+    });
+  }
+  result.deletedPurchases = Array.from(deletedPurchases);
+
   const poMap = new Map();
-  serverPurchases.forEach(po => { if (po && po.id) poMap.set(po.id, po); });
-  clientPurchases.forEach(po => { if (po && po.id) poMap.set(po.id, po); });
+  serverPurchases.forEach(po => {
+    if (po && po.id && !deletedPurchases.has(po.id)) {
+      poMap.set(po.id, po);
+    }
+  });
+  clientPurchases.forEach(po => {
+    if (po && po.id && !deletedPurchases.has(po.id)) {
+      poMap.set(po.id, po);
+    }
+  });
   result.purchases = Array.from(poMap.values()).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+
+  // 5c. MERGE supplierCredits (Keyed by id or supplier, respecting admin updates and purged purchases)
+  if (isAdmin && Array.isArray(clientData.supplierCredits)) {
+    result.supplierCredits = clientData.supplierCredits.map(sc => Object.assign({}, sc));
+  } else {
+    const serverSuppCredits = Array.isArray(serverData.supplierCredits) ? serverData.supplierCredits : [];
+    const clientSuppCredits = Array.isArray(clientData.supplierCredits) ? clientData.supplierCredits : [];
+    const suppCreditMap = new Map();
+    serverSuppCredits.forEach(sc => { const k = sc.id || sc.supplier; if (k) suppCreditMap.set(k, sc); });
+    clientSuppCredits.forEach(sc => { const k = sc.id || sc.supplier; if (k) suppCreditMap.set(k, sc); });
+    result.supplierCredits = Array.from(suppCreditMap.values());
+  }
+
+  // Purge any references to deleted purchases in supplierCredits and abonosCompras
+  if (deletedPurchases.size > 0) {
+    if (Array.isArray(result.supplierCredits)) {
+      result.supplierCredits.forEach(sc => {
+        if (sc && Array.isArray(sc.purchaseOrderIds)) {
+          sc.purchaseOrderIds = sc.purchaseOrderIds.filter(pid => !deletedPurchases.has(pid));
+        }
+      });
+      result.supplierCredits = result.supplierCredits.filter(sc => {
+        if (!sc) return false;
+        if (deletedPurchases.has(sc.poId) || deletedPurchases.has(sc.id)) {
+          if (!sc.purchaseOrderIds || sc.purchaseOrderIds.length === 0) return false;
+        }
+        return true;
+      });
+    }
+    if (Array.isArray(result.abonosCompras)) {
+      result.abonosCompras = result.abonosCompras.filter(ab => !ab || !deletedPurchases.has(ab.poId));
+    }
+  }
 
   // 5d. MERGE customers & suppliers (Keyed by id or name)
   if (Array.isArray(serverData.customers) && Array.isArray(clientData.customers)) {
@@ -599,16 +650,17 @@ app.post('/api/data', async (req, res) => {
     }
 
     // SMART CONCURRENCY MERGE: Prevent terminal saves from overwriting other active cashiers' transactions, expenses, debts, shifts
+    const isAdminUser = roleLower.includes('admin') || roleLower.includes('gerente') || roleLower.includes('super');
     let mergedData = data;
     if (mongoConnected) {
       const existingDoc = await DataModel.findOne({ key: storeId });
       if (existingDoc && existingDoc.content) {
-        mergedData = mergeStoreState(existingDoc.content, data);
+        mergedData = mergeStoreState(existingDoc.content, data, isAdminUser);
       }
     } else {
       const localExisting = loadLocalDb(storeId);
       if (localExisting) {
-        mergedData = mergeStoreState(localExisting, data);
+        mergedData = mergeStoreState(localExisting, data, isAdminUser);
       }
     }
 

@@ -159,6 +159,7 @@ const INITIAL_DATA = {
 
   // 2. FINANZAS SUB-DATA
   purchases: [],
+  deletedPurchases: [],
   customerCredits: [],
   supplierCredits: [],
 

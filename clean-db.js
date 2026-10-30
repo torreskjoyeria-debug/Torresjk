@@ -173,6 +173,7 @@ const baseStoreData = {
     { id: "PM-06", name: "Pago Mixto", icon: "shuffle", fee: "0%", active: true }
   ],
   purchases: [],
+  deletedPurchases: [],
   customerCredits: [],
   supplierCredits: [],
   services: [],
