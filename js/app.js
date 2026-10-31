@@ -3541,16 +3541,19 @@ class NexusApp {
           const isExtras = catObj.type === 'extras' || catObj.isExtra;
 
           let targetProd = null;
-          if (prodId) {
-            targetProd = (this.data.products || []).find(p => p.id === prodId);
-          }
-          if (!targetProd && prodSku) {
+          // Prioridad 1: Coincidencia exacta por SKU/código especificado por el usuario
+          if (prodSku) {
             targetProd = (this.data.products || []).find(p => 
               (p.sku && p.sku.toLowerCase().trim() === prodSku.toLowerCase().trim()) ||
               (p.code && p.code.toLowerCase().trim() === prodSku.toLowerCase().trim())
             );
           }
-          if (!targetProd && prodName && !prodSku) {
+          // Prioridad 2: ID del producto si no hubo SKU o no coincidió
+          if (!targetProd && prodId) {
+            targetProd = (this.data.products || []).find(p => p.id === prodId);
+          }
+          // Prioridad 3: Nombre exacto
+          if (!targetProd && prodName) {
             targetProd = (this.data.products || []).find(p => p.name && p.name.toLowerCase().trim() === prodName.toLowerCase().trim());
           }
 
@@ -4164,6 +4167,44 @@ class NexusApp {
     }
 
     this.onPurchaseMeasureTypeChange();
+  }
+
+  onPurchaseSkuInput() {
+    const skuInput = document.getElementById('po-product-sku');
+    if (!skuInput) return;
+    const skuVal = skuInput.value.trim().toLowerCase();
+    if (!skuVal) return;
+
+    const matchedProd = (this.data.products || []).find(p => 
+      (p.sku && p.sku.toLowerCase().trim() === skuVal) ||
+      (p.code && p.code.toLowerCase().trim() === skuVal) ||
+      (p.id && p.id.toLowerCase().trim() === skuVal)
+    );
+
+    if (matchedProd) {
+      const hiddenId = document.getElementById('po-product-id');
+      const nameInput = document.getElementById('po-product-name');
+      const unitCostInput = document.getElementById('po-unit-cost');
+      const gramsInput = document.getElementById('po-product-grams');
+      const measureSelect = document.getElementById('po-measure-type');
+      const catSelect = document.getElementById('po-category-select');
+      const catInfo = document.getElementById('po-preview-cat-info');
+
+      if (hiddenId) hiddenId.value = matchedProd.id;
+      if (nameInput && !nameInput.value) nameInput.value = matchedProd.name;
+      if (unitCostInput && (!unitCostInput.value || unitCostInput.value === '0')) {
+        unitCostInput.value = this.formatNumberWithCommas(matchedProd.cost || 0);
+      }
+      if (catSelect && matchedProd.category) catSelect.value = matchedProd.category;
+      const isUnidades = (matchedProd.measureType || 'Pesaje') === 'Unidades';
+      if (measureSelect) measureSelect.value = isUnidades ? 'Unidades' : 'Pesaje';
+      if (gramsInput && isUnidades) {
+        const val = matchedProd.pieceWeight !== undefined && matchedProd.pieceWeight !== null ? matchedProd.pieceWeight : (matchedProd.weight || 0);
+        gramsInput.value = val > 0 ? this.formatNumberWithCommas(val, true) : '';
+      }
+      if (catInfo) catInfo.textContent = `Categoría: ${matchedProd.categoryName || matchedProd.category || 'General'}`;
+      this.updatePurchaseCalculations();
+    }
   }
 
   updatePurchaseCalculations() {
@@ -6142,7 +6183,7 @@ class NexusApp {
       return;
     }
 
-    if (!confirm(`¿Estás seguro de eliminar la orden de compra #${id}? Si se pagó en efectivo o tuvo abonos en efectivo, el dinero se reintegrará automáticamente a la caja, se revertirá el stock y se cancelarán deudas vinculadas.`)) return;
+    if (!confirm(`¿Estás seguro de eliminar la orden de compra #${id}? Si se pagó en efectivo o tuvo abonos en efectivo, el dinero se reintegrará automáticamente a la caja y se cancelarán deudas vinculadas con el proveedor.`)) return;
 
     // 1. REVERSIÓN AUTOMÁTICA DE EFECTIVO A LA CAJA
     let cashToRefund = 0;
@@ -6190,17 +6231,34 @@ class NexusApp {
       }
     }
 
-    // 2. REVERTIR STOCK DEL PRODUCTO
-    const targetProd = (this.data.products || []).find(p => 
-      (po.productId && p.id === po.productId) || 
-      (po.productSku && (p.sku === po.productSku || p.code === po.productSku))
-    );
+    // 2. REVERSIÓN DE STOCK DEL PRODUCTO (OPCIONAL Y ESTRICTA)
+    let targetProd = null;
+    if (po.productId) {
+      targetProd = (this.data.products || []).find(p => p.id === po.productId);
+    }
+    if (!targetProd && po.productSku) {
+      const skuMatches = (this.data.products || []).filter(p => p.sku === po.productSku || p.code === po.productSku);
+      if (skuMatches.length === 1) {
+        targetProd = skuMatches[0];
+      } else if (skuMatches.length > 1 && po.productName) {
+        targetProd = skuMatches.find(p => (p.name || '').toLowerCase().trim() === (po.productName || '').toLowerCase().trim());
+      }
+    }
+
+    let revertedStock = false;
     const qtyToRevert = Number(po.quantity !== undefined ? po.quantity : (po.itemsCount || 1)) || 0;
     if (targetProd && qtyToRevert > 0) {
-      const currentStock = this.parseCleanNumber(targetProd.stock, true) || 0;
-      targetProd.stock = Math.round(Math.max(0, currentStock - qtyToRevert) * 10000) / 10000;
-      const minStock = targetProd.minStock !== undefined ? targetProd.minStock : 1;
-      targetProd.status = targetProd.stock > minStock ? 'active' : (targetProd.stock > 0 ? 'low_stock' : 'out_of_stock');
+      const isPesaje = (targetProd.measureType || 'Pesaje') === 'Pesaje';
+      const unitLabel = isPesaje ? (targetProd.weightUnit || 'g') : 'u.';
+      const shouldRevert = confirm(`¿Deseas descontar ${qtyToRevert} ${unitLabel} de "${targetProd.name}" del inventario actual?\n\n• ACEPTAR: Sí, descontar del inventario (la mercancía no ingresó físicamente o fue devuelta al proveedor).\n• CANCELAR: No descontar, conservar el inventario actual (la joya física ya está en vitrina o fue una orden duplicada).`);
+
+      if (shouldRevert) {
+        const currentStock = this.parseCleanNumber(targetProd.stock, true) || 0;
+        targetProd.stock = Math.round(Math.max(0, currentStock - qtyToRevert) * 10000) / 10000;
+        const minStock = targetProd.minStock !== undefined ? targetProd.minStock : 1;
+        targetProd.status = targetProd.stock > minStock ? 'active' : (targetProd.stock > 0 ? 'low_stock' : 'out_of_stock');
+        revertedStock = true;
+      }
     }
     this.syncAllCategoryGrams();
 
@@ -6268,7 +6326,8 @@ class NexusApp {
     this.renderCashStatusIndicator();
 
     const refundMsg = cashToRefund > 0 ? ` y ${this.formatCurrency(cashToRefund)} reintegrados automáticamente a caja` : '';
-    this.showToast(`Orden #${id} eliminada, stock revertido${refundMsg}`, 'success');
+    const stockMsg = revertedStock ? ', inventario descontado' : ', inventario conservado';
+    this.showToast(`Orden #${id} eliminada correctamente${stockMsg}${refundMsg}`, 'success');
   }
 
   async deleteAbonoCompra(id) {
