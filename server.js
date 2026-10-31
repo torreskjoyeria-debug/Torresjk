@@ -372,44 +372,56 @@ function mergeStoreState(serverData, clientData, isAdmin = false) {
     result.suppliers = Array.from(suppMap.values());
   }
 
-  // 6. MERGE products stock & code preservation (Strict ID-based matching to prevent duplicate SKU collisions):
+  // 6. DELETED PRODUCTS BLACKLIST & PRODUCTS MERGE:
+  // Strictly prevent deleted products from resurrecting via server merge (keyed strictly by ID)
+  const deletedProducts = new Set([
+    ...(Array.isArray(clientData.deletedProducts) ? clientData.deletedProducts : []),
+    ...(Array.isArray(serverData.deletedProducts) ? serverData.deletedProducts : [])
+  ]);
+  result.deletedProducts = Array.from(deletedProducts);
+
   if (Array.isArray(serverData.products) && Array.isArray(clientData.products)) {
     const serverProdMap = new Map();
     serverData.products.forEach(p => { 
-      if (p && p.id) serverProdMap.set(p.id, p); 
+      if (p && p.id && !deletedProducts.has(p.id)) serverProdMap.set(p.id, p); 
     });
 
-    const mergedProducts = clientData.products.map(clientProd => {
-      const serverProd = clientProd && clientProd.id ? serverProdMap.get(clientProd.id) : null;
-      if (!serverProd) return clientProd;
-      const serverSold = Number(serverProd.sold30d) || 0;
-      const clientSold = Number(clientProd.sold30d) || 0;
-      const mergedProd = Object.assign({}, clientProd);
-      // Preserve product SKU/code integrity if missing on client
-      if (!mergedProd.sku && serverProd.sku) mergedProd.sku = serverProd.sku;
-      if (!mergedProd.code && serverProd.code) mergedProd.code = serverProd.code;
-      if (serverSold > clientSold) {
-        const deltaSold = serverSold - clientSold;
-        mergedProd.sold30d = serverSold;
-        const currentClientStock = Number(clientProd.stock) || 0;
-        mergedProd.stock = Math.max(0, Math.round((currentClientStock - deltaSold) * 10000) / 10000);
-        if (mergedProd.stock <= 0) {
-          mergedProd.stock = 0;
-          mergedProd.status = 'out_of_stock';
+    const mergedProducts = clientData.products
+      .filter(p => p && p.id && !deletedProducts.has(p.id))
+      .map(clientProd => {
+        const serverProd = clientProd && clientProd.id ? serverProdMap.get(clientProd.id) : null;
+        if (!serverProd) return clientProd;
+        const serverSold = Number(serverProd.sold30d) || 0;
+        const clientSold = Number(clientProd.sold30d) || 0;
+        const mergedProd = Object.assign({}, clientProd);
+        // Preserve product SKU/code integrity if missing on client
+        if (!mergedProd.sku && serverProd.sku) mergedProd.sku = serverProd.sku;
+        if (!mergedProd.code && serverProd.code) mergedProd.code = serverProd.code;
+        if (serverSold > clientSold) {
+          const deltaSold = serverSold - clientSold;
+          mergedProd.sold30d = serverSold;
+          const currentClientStock = Number(clientProd.stock) || 0;
+          mergedProd.stock = Math.max(0, Math.round((currentClientStock - deltaSold) * 10000) / 10000);
+          if (mergedProd.stock <= 0) {
+            mergedProd.stock = 0;
+            mergedProd.status = 'out_of_stock';
+          }
         }
-      }
-      return mergedProd;
-    });
+        return mergedProd;
+      });
 
-    // Safeguard: preserve any products present on server that client did not have (keyed strictly by ID)
+    // Safeguard: preserve any products present on server that client did not have (keyed strictly by ID),
+    // provided they have not been deleted
     const clientProdIds = new Set(clientData.products.map(p => p.id).filter(Boolean));
     serverData.products.forEach(sp => {
-      if (sp && sp.id && !clientProdIds.has(sp.id)) {
+      if (sp && sp.id && !clientProdIds.has(sp.id) && !deletedProducts.has(sp.id)) {
         mergedProducts.push(sp);
       }
     });
 
-    result.products = mergedProducts;
+    result.products = mergedProducts.filter(p => p && p.id && !deletedProducts.has(p.id));
+  } else if (Array.isArray(result.products)) {
+    result.products = result.products.filter(p => p && p.id && !deletedProducts.has(p.id));
   }
 
   // 7. ACTIVE SHIFT CONSISTENCY:

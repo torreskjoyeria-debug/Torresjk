@@ -772,6 +772,12 @@ class NexusApp {
     }
 
     if (this.data.products && Array.isArray(this.data.products)) {
+      if (!this.data.deletedProducts || !Array.isArray(this.data.deletedProducts)) {
+        this.data.deletedProducts = [];
+      } else if (this.data.deletedProducts.length > 0) {
+        const delSet = new Set(this.data.deletedProducts);
+        this.data.products = (this.data.products || []).filter(p => p && p.id && !delSet.has(p.id));
+      }
       this.ensureUniqueProductIds();
       this.data.products.forEach(p => {
         if (!p.measureType) p.measureType = 'Pesaje';
@@ -806,10 +812,6 @@ class NexusApp {
           if (p.stock === 205) {
             p.stock = 2.05;
           }
-        }
-        const swollenTargetSkus = ['5195', '5194', '5192', '5190', '5160', '5144', '5143', '5142', '5138', '5108', '5107', '5106', '5105', '5104', '5094', '5093', '5092', '5091', '5090', '5088', '5087', '5083', '5196'];
-        if (swollenTargetSkus.includes(String(p.sku)) && p.stock > 50) {
-          p.stock = Math.round((Number(p.stock) / 100) * 100) / 100;
         }
       });
       // NOTE: Empty array is valid for clean production data
@@ -1526,6 +1528,16 @@ class NexusApp {
             if (combinedDel.length > 0 && Array.isArray(remote.purchases)) {
               const delSet = new Set(combinedDel);
               remote.purchases = remote.purchases.filter(p => !delSet.has(p.id));
+            }
+
+            // Smart local preservation: merge deletedProducts
+            const localDelProd = Array.isArray(this.data.deletedProducts) ? this.data.deletedProducts : [];
+            const remoteDelProd = Array.isArray(remote.deletedProducts) ? remote.deletedProducts : [];
+            const combinedDelProd = Array.from(new Set([...localDelProd, ...remoteDelProd]));
+            remote.deletedProducts = combinedDelProd;
+            if (combinedDelProd.length > 0 && Array.isArray(remote.products)) {
+              const delProdSet = new Set(combinedDelProd);
+              remote.products = remote.products.filter(p => p && p.id && !delProdSet.has(p.id));
             }
 
             this.data = Object.assign({}, INITIAL_DATA, remote);
@@ -3792,6 +3804,18 @@ class NexusApp {
           return;
         }
         const sku = document.getElementById('new-prod-sku').value.trim();
+        if (sku) {
+          const duplicate = (this.data.products || []).find(prod => 
+            prod && (
+              (prod.sku && String(prod.sku).trim().toLowerCase() === sku.toLowerCase()) ||
+              (prod.code && String(prod.code).trim().toLowerCase() === sku.toLowerCase())
+            )
+          );
+          if (duplicate) {
+            this.showToast(`Error: Ya existe el producto "${duplicate.name}" con el código/SKU "${sku}". Por favor usa un código único.`, 'danger');
+            return;
+          }
+        }
         const name = document.getElementById('new-prod-name').value.trim();
         const measureType = document.getElementById('new-prod-measure-type').value;
         const weightUnit = measureType === 'Pesaje' ? (document.getElementById('new-prod-weight-unit')?.value || 'g') : 'u.';
@@ -3878,7 +3902,20 @@ class NexusApp {
           const oldCatId = p.category;
           const oldCatName = p.categoryName;
 
-          p.sku = document.getElementById('edit-prod-sku').value.trim();
+          const newSku = document.getElementById('edit-prod-sku').value.trim();
+          if (newSku) {
+            const duplicate = (this.data.products || []).find(prod => 
+              prod && String(prod.id) !== String(id) && (
+                (prod.sku && String(prod.sku).trim().toLowerCase() === newSku.toLowerCase()) ||
+                (prod.code && String(prod.code).trim().toLowerCase() === newSku.toLowerCase())
+              )
+            );
+            if (duplicate) {
+              this.showToast(`Error: Ya existe otro producto ("${duplicate.name}") con el código/SKU "${newSku}". Cada producto debe tener un código único.`, 'danger');
+              return;
+            }
+          }
+          p.sku = newSku;
           p.name = document.getElementById('edit-prod-name').value.trim();
           p.measureType = document.getElementById('edit-prod-measure-type').value;
           p.weightUnit = p.measureType === 'Pesaje' ? (document.getElementById('edit-prod-weight-unit')?.value || 'g') : 'u.';
@@ -5115,10 +5152,6 @@ class NexusApp {
     if ((p.id === 'PRD-1867' || p.sku === '5415') && p.stock === 205) {
       p.stock = 2.05;
     }
-    const swollenTargetSkus = ['5195', '5194', '5192', '5190', '5160', '5144', '5143', '5142', '5138', '5108', '5107', '5106', '5105', '5104', '5094', '5093', '5092', '5091', '5090', '5088', '5087', '5083', '5196'];
-    if (swollenTargetSkus.includes(String(p.sku)) && p.stock > 50) {
-      p.stock = Math.round((Number(p.stock) / 100) * 100) / 100;
-    }
 
     document.getElementById('edit-prod-id').value = p.id;
     document.getElementById('edit-prod-sku').value = p.sku || '001';
@@ -6139,22 +6172,17 @@ class NexusApp {
     if (fallbackCat) {
       const prodsToReassign = this.getProductsForCategory(cat || { id, name: catName });
       if (prodsToReassign.length > 0) {
-        let movedGrams = 0;
         prodsToReassign.forEach(p => {
           p.category = fallbackCat.id;
           p.categoryName = fallbackCat.name;
-          movedGrams += this.getGramsFromProduct(p);
         });
-        if (!isExtras && fallbackCat.type !== 'extras' && !fallbackCat.isExtra) {
-          const catGrams = Number(cat?.availableGrams) || movedGrams;
-          fallbackCat.availableGrams = Math.round(((fallbackCat.availableGrams || 0) + catGrams) * 100) / 100;
-        }
         this.showToast(`${prodsToReassign.length} productos reasignados a "${fallbackCat.name}"`, 'info');
       }
     }
 
     this.data.categories = (this.data.categories || []).filter(c => c.id !== id);
     if (this.selectedCategory === id) this.selectedCategory = 'all';
+    this.syncAllCategoryGrams();
     await this.savePersistence();
     this.syncAllModules();
     this.showToast(`Categoría "${catName}" eliminada y sincronizada`, 'warning');
@@ -11105,6 +11133,13 @@ class NexusApp {
     const p = this.data.products.find(item => item.id === id);
     if (!p) return;
     if (!confirm(`¿Está seguro de eliminar el producto "${p.name}"? Esta acción no se puede deshacer.`)) return;
+
+    if (!Array.isArray(this.data.deletedProducts)) {
+      this.data.deletedProducts = [];
+    }
+    if (!this.data.deletedProducts.includes(id)) {
+      this.data.deletedProducts.push(id);
+    }
 
     this.data.products = this.data.products.filter(item => item.id !== id);
     this.syncAllCategoryGrams();
