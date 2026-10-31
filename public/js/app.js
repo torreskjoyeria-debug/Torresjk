@@ -3560,13 +3560,18 @@ class NexusApp {
               (p.code && p.code.toLowerCase().trim() === prodSku.toLowerCase().trim())
             );
           }
-          // Prioridad 2: ID del producto si no hubo SKU o no coincidió
-          if (!targetProd && prodId) {
-            targetProd = (this.data.products || []).find(p => p.id === prodId);
-          }
-          // Prioridad 3: Nombre exacto
-          if (!targetProd && prodName) {
-            targetProd = (this.data.products || []).find(p => p.name && p.name.toLowerCase().trim() === prodName.toLowerCase().trim());
+          // Si el usuario ingresó un SKU explícito y no existió en el catálogo, es un producto nuevo.
+          // NO se debe secuestrar ni sumarle el stock a otro producto existente que tenga diferente SKU
+          // solo porque coincida el nombre o el ID oculto sugerido por el autocompletado.
+          if (!targetProd && !prodSku) {
+            // Prioridad 2: ID del producto si no hubo SKU
+            if (prodId) {
+              targetProd = (this.data.products || []).find(p => p.id === prodId);
+            }
+            // Prioridad 3: Nombre exacto si no hubo SKU
+            if (!targetProd && prodName) {
+              targetProd = (this.data.products || []).find(p => p.name && p.name.toLowerCase().trim() === prodName.toLowerCase().trim());
+            }
           }
 
           if (!targetProd) {
@@ -4241,6 +4246,9 @@ class NexusApp {
       }
       if (catInfo) catInfo.textContent = `Categoría: ${matchedProd.categoryName || matchedProd.category || 'General'}`;
       this.updatePurchaseCalculations();
+    } else {
+      const hiddenId = document.getElementById('po-product-id');
+      if (hiddenId) hiddenId.value = '';
     }
   }
 
@@ -25576,7 +25584,7 @@ class NexusApp {
 
     if (elQtyLabel) {
       if (isUnitWithWeight) {
-        elQtyLabel.textContent = `📦 Cantidad de Unidades a Vender (Peso: ${pWeight} g/u) *`;
+        elQtyLabel.textContent = `⚖️ Gramaje Total a Vender (${pWeight} g/u) *`;
       } else if (isPesaje) {
         elQtyLabel.textContent = '⚖️ Cantidad / Gramos a Vender *';
       } else {
@@ -25633,7 +25641,7 @@ class NexusApp {
       defaultQty = existing.qty;
     } else {
       if (isPesaje) {
-        defaultQty = stockNum;
+        defaultQty = stockNum <= 10 ? stockNum : 1;
       } else if (isUnitWithWeight) {
         defaultQty = (stockNum === 1 && pWeight > 0) ? pWeight : (pWeight > 0 ? pWeight : 1);
       } else {
@@ -26061,7 +26069,8 @@ class NexusApp {
         existing.customPrice = resolvedPrice;
       }
     } else {
-      const initialQty = qty !== null ? qty : (isPesaje ? stockNum : (isUnitWithWeight ? pWeight : 1));
+      const defaultPesajeQty = (stockNum > 0 && stockNum <= 10) ? stockNum : 1;
+      const initialQty = qty !== null ? qty : (isPesaje ? defaultPesajeQty : (isUnitWithWeight ? pWeight : 1));
       this.cart.push({
         product,
         qty: initialQty,
@@ -27156,12 +27165,11 @@ class NexusApp {
           const isUnitWithWeight = !isPesaje && pWeight > 0;
           
           let unitsToDeduct = soldQty;
-          if (isUnitWithWeight) {
-            if (soldQty > 0 && Math.abs(soldQty - Math.round(soldQty)) < 0.0001 && soldQty <= Number(p.stock || 0) && pWeight > 1) {
-              unitsToDeduct = Math.round(soldQty);
-            } else if (pWeight > 0) {
-              unitsToDeduct = Math.round((soldQty / pWeight) * 10000) / 10000;
-            }
+          if (isUnitWithWeight && pWeight > 0) {
+            const rawUnits = soldQty / pWeight;
+            unitsToDeduct = Math.abs(rawUnits - Math.round(rawUnits)) < 0.005
+              ? Math.round(rawUnits)
+              : Math.round(rawUnits * 10000) / 10000;
           }
 
           p.stock = Math.max(0, Math.round(((Number(p.stock) || 0) - unitsToDeduct) * 10000) / 10000);
