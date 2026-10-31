@@ -372,23 +372,20 @@ function mergeStoreState(serverData, clientData, isAdmin = false) {
     result.suppliers = Array.from(suppMap.values());
   }
 
-  // 6. MERGE products stock & code preservation:
+  // 6. MERGE products stock & code preservation (Strict ID-based matching to prevent duplicate SKU collisions):
   if (Array.isArray(serverData.products) && Array.isArray(clientData.products)) {
     const serverProdMap = new Map();
-    const serverSkuMap = new Map();
     serverData.products.forEach(p => { 
       if (p && p.id) serverProdMap.set(p.id, p); 
-      if (p && p.sku) serverSkuMap.set(String(p.sku).trim().toLowerCase(), p);
     });
 
     const mergedProducts = clientData.products.map(clientProd => {
-      const serverProd = (clientProd && clientProd.id ? serverProdMap.get(clientProd.id) : null) ||
-                         (clientProd && clientProd.sku ? serverSkuMap.get(String(clientProd.sku).trim().toLowerCase()) : null);
+      const serverProd = clientProd && clientProd.id ? serverProdMap.get(clientProd.id) : null;
       if (!serverProd) return clientProd;
       const serverSold = Number(serverProd.sold30d) || 0;
       const clientSold = Number(clientProd.sold30d) || 0;
       const mergedProd = Object.assign({}, clientProd);
-      // Preserve product SKU/code integrity
+      // Preserve product SKU/code integrity if missing on client
       if (!mergedProd.sku && serverProd.sku) mergedProd.sku = serverProd.sku;
       if (!mergedProd.code && serverProd.code) mergedProd.code = serverProd.code;
       if (serverSold > clientSold) {
@@ -404,15 +401,11 @@ function mergeStoreState(serverData, clientData, isAdmin = false) {
       return mergedProd;
     });
 
-    // Safeguard: preserve any products present on server that client did not have (neither by ID nor by SKU)
+    // Safeguard: preserve any products present on server that client did not have (keyed strictly by ID)
     const clientProdIds = new Set(clientData.products.map(p => p.id).filter(Boolean));
-    const clientProdSkus = new Set(clientData.products.map(p => String(p.sku || '').trim().toLowerCase()).filter(Boolean));
     serverData.products.forEach(sp => {
       if (sp && sp.id && !clientProdIds.has(sp.id)) {
-        const spSku = String(sp.sku || '').trim().toLowerCase();
-        if (!spSku || !clientProdSkus.has(spSku)) {
-          mergedProducts.push(sp);
-        }
+        mergedProducts.push(sp);
       }
     });
 

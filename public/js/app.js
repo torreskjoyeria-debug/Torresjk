@@ -25109,18 +25109,22 @@ class NexusApp {
 
           // Priority 1: Exact code match (SKU, Code, barcode, ID)
           const normTerm = this.normalizeSearchStr(term);
-          const exactCodeMatch = (this.data.products || []).find(p => 
+          const exactCodeMatches = (this.data.products || []).filter(p => 
             this.normalizeSearchStr(p.sku) === normTerm ||
             this.normalizeSearchStr(p.code) === normTerm ||
             this.normalizeSearchStr(p.barcode) === normTerm ||
             this.normalizeSearchStr(p.id) === normTerm
           );
 
-          if (exactCodeMatch) {
-            this.addToCart(exactCodeMatch.id);
-            this.showToast(`Producto agregado: "${exactCodeMatch.name}" [${exactCodeMatch.sku || exactCodeMatch.code || exactCodeMatch.id}]`, 'success');
+          if (exactCodeMatches.length === 1) {
+            this.addToCart(exactCodeMatches[0].id);
+            this.showToast(`Producto agregado: "${exactCodeMatches[0].name}" [${exactCodeMatches[0].sku || exactCodeMatches[0].code || exactCodeMatches[0].id}]`, 'success');
             searchInput.value = '';
             this.renderPOSProducts();
+            return;
+          } else if (exactCodeMatches.length > 1) {
+            this.renderPOSProducts();
+            this.showToast(`⚠️ Hay ${exactCodeMatches.length} productos con el código "${term}". Haz clic en el producto correspondiente en pantalla para evitar descontar el incorrecto.`, 'warning', 6000);
             return;
           }
 
@@ -25131,6 +25135,9 @@ class NexusApp {
             this.showToast(`Producto agregado: "${filtered[0].name}" [${filtered[0].sku || filtered[0].id}]`, 'success');
             searchInput.value = '';
             this.renderPOSProducts();
+          } else if (filtered.length > 1) {
+            this.renderPOSProducts();
+            this.showToast(`Se encontraron ${filtered.length} productos. Haz clic en el producto correspondiente de la lista.`, 'info');
           }
         }
       });
@@ -25139,11 +25146,11 @@ class NexusApp {
     const scanBtn = document.getElementById('barcode-scan-sim-btn');
     if (scanBtn) {
       scanBtn.addEventListener('click', () => {
-        const activeProds = this.data.products.filter(p => p.stock > 0);
-        if (activeProds.length > 0) {
-          const randomItem = activeProds[Math.floor(Math.random() * activeProds.length)];
-          this.addToCart(randomItem.id);
-          this.showToast(`Escáner: "${randomItem.name}" [${randomItem.sku || randomItem.id}] añadido al carrito`);
+        const searchInput = document.getElementById('pos-product-search');
+        if (searchInput) {
+          searchInput.focus();
+          searchInput.select();
+          this.showToast('Lector listo: escanea el código de barras con la pistola o escribe el código', 'info');
         }
       });
     }
@@ -27037,14 +27044,33 @@ class NexusApp {
       const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
       soldCart.forEach(cartItem => {
-        const p = this.data.products.find(prod => prod.id === cartItem.product.id || (prod.sku && cartItem.product.sku && String(prod.sku).trim() === String(cartItem.product.sku).trim()));
+        // Enlace estricto por ID único para evitar descontar productos erróneos cuando hay códigos duplicados
+        let p = null;
+        if (cartItem.product && cartItem.product.id) {
+          p = this.data.products.find(prod => prod.id === cartItem.product.id);
+        }
+        if (!p && cartItem.product && cartItem.product.sku) {
+          const skuMatches = this.data.products.filter(prod => prod.sku && String(prod.sku).trim().toLowerCase() === String(cartItem.product.sku).trim().toLowerCase());
+          if (skuMatches.length === 1) {
+            p = skuMatches[0];
+          }
+        }
         if (p) {
           const soldQty = Number(cartItem.qty) || 0;
           const isPesaje = (p.measureType || 'Pesaje') === 'Pesaje';
           const pWeight = parseFloat(String(p.pieceWeight !== undefined && p.pieceWeight !== null ? p.pieceWeight : (p.weight || 0)).replace(',', '.')) || 0;
           const isUnitWithWeight = !isPesaje && pWeight > 0;
-          const unitsToDeduct = isUnitWithWeight ? (Math.round((soldQty / pWeight) * 10000) / 10000) : soldQty;
-          p.stock = Math.round(((Number(p.stock) || 0) - unitsToDeduct) * 10000) / 10000;
+          
+          let unitsToDeduct = soldQty;
+          if (isUnitWithWeight) {
+            if (soldQty > 0 && Math.abs(soldQty - Math.round(soldQty)) < 0.0001 && soldQty <= Number(p.stock || 0) && pWeight > 1) {
+              unitsToDeduct = Math.round(soldQty);
+            } else if (pWeight > 0) {
+              unitsToDeduct = Math.round((soldQty / pWeight) * 10000) / 10000;
+            }
+          }
+
+          p.stock = Math.max(0, Math.round(((Number(p.stock) || 0) - unitsToDeduct) * 10000) / 10000);
           if (p.stock <= 0) {
             p.stock = 0;
             p.status = 'out_of_stock';
