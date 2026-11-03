@@ -252,13 +252,41 @@ function mergeStoreState(serverData, clientData, isAdmin = false) {
   });
   result.recentTransactions = deduplicatedTxs;
 
-  // 2. MERGE expenses (Keyed by id)
+  // 2. DELETED EXPENSES BLACKLIST & EXPENSES MERGE:
+  // Strictly prevent deleted expenses from resurrecting via server merge
+  const deletedExpenses = new Set([
+    ...(Array.isArray(clientData.deletedExpenses) ? clientData.deletedExpenses : []),
+    ...(Array.isArray(serverData.deletedExpenses) ? serverData.deletedExpenses : [])
+  ]);
+
   const serverExp = Array.isArray(serverData.expenses) ? serverData.expenses : [];
   const clientExp = Array.isArray(clientData.expenses) ? clientData.expenses : [];
+
+  // If an authorized admin/user explicitly submitted expenses, any expense absent in clientExp is marked deleted
+  if (isAdmin && Array.isArray(clientData.expenses)) {
+    const clientExpIds = new Set(clientExp.map(e => e && e.id).filter(Boolean));
+    serverExp.forEach(se => {
+      if (se && se.id && !clientExpIds.has(se.id)) {
+        deletedExpenses.add(se.id);
+      }
+    });
+  }
+  result.deletedExpenses = Array.from(deletedExpenses);
+
   const expMap = new Map();
-  serverExp.forEach(e => { if (e && e.id) expMap.set(e.id, e); });
-  clientExp.forEach(e => { if (e && e.id) expMap.set(e.id, e); });
-  result.expenses = Array.from(expMap.values()).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+  serverExp.forEach(e => {
+    if (e && e.id && !deletedExpenses.has(e.id)) {
+      expMap.set(e.id, e);
+    }
+  });
+  clientExp.forEach(e => {
+    if (e && e.id && !deletedExpenses.has(e.id)) {
+      expMap.set(e.id, e);
+    }
+  });
+  result.expenses = Array.from(expMap.values())
+    .filter(e => e && e.id && !deletedExpenses.has(e.id))
+    .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
   // 3. MERGE abonosVentas & abonosCompras (Keyed by id)
   const serverAv = Array.isArray(serverData.abonosVentas) ? serverData.abonosVentas : [];

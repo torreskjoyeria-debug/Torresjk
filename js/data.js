@@ -161,6 +161,7 @@ const INITIAL_DATA = {
   purchases: [],
   deletedPurchases: [],
   deletedProducts: [],
+  deletedExpenses: [],
   customerCredits: [],
   supplierCredits: [],
 

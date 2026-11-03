@@ -905,6 +905,12 @@ class NexusApp {
     if (!this.data.expenses || !Array.isArray(this.data.expenses)) {
       this.data.expenses = [];
     }
+    if (!this.data.deletedExpenses || !Array.isArray(this.data.deletedExpenses)) {
+      this.data.deletedExpenses = [];
+    } else if (this.data.deletedExpenses.length > 0) {
+      const delSet = new Set(this.data.deletedExpenses);
+      this.data.expenses = (this.data.expenses || []).filter(e => e && e.id && !delSet.has(e.id));
+    }
     if (!this.data.purchases || !Array.isArray(this.data.purchases)) {
       this.data.purchases = [];
     }
@@ -1505,13 +1511,20 @@ class NexusApp {
               return tB - tA;
             });
 
+            // Smart local preservation: merge deletedExpenses
+            const localDelExp = Array.isArray(this.data.deletedExpenses) ? this.data.deletedExpenses : [];
+            const remoteDelExp = Array.isArray(remote.deletedExpenses) ? remote.deletedExpenses : [];
+            const combinedDelExp = Array.from(new Set([...localDelExp, ...remoteDelExp]));
+            remote.deletedExpenses = combinedDelExp;
+            const delExpSet = new Set(combinedDelExp);
+
             // Smart local preservation: merge recent local expenses that might not yet be in remote
-            const localExp = this.data.expenses || [];
-            const remoteExp = remote.expenses || [];
+            const localExp = (this.data.expenses || []).filter(e => e && e.id && !delExpSet.has(e.id));
+            const remoteExp = (remote.expenses || []).filter(e => e && e.id && !delExpSet.has(e.id));
             const expMap = new Map();
-            remoteExp.forEach(e => { if (e && e.id) expMap.set(e.id, e); });
+            remoteExp.forEach(e => { if (e && e.id && !delExpSet.has(e.id)) expMap.set(e.id, e); });
             localExp.forEach(e => {
-              if (e && e.id && !expMap.has(e.id)) {
+              if (e && e.id && !delExpSet.has(e.id) && !expMap.has(e.id)) {
                 const age = Date.now() - (e.timestamp || 0);
                 if (age < 30 * 60 * 1000) {
                   expMap.set(e.id, e);
@@ -2105,7 +2118,7 @@ class NexusApp {
       };
       const requiredMod = entityModuleMap[entity];
       if (requiredMod && perms.includes(requiredMod)) {
-        if (action === 'edit' || action === 'create') return true;
+        if (action === 'edit' || action === 'create' || (action === 'delete' && !role.includes('cajer'))) return true;
       }
     }
 
@@ -6144,11 +6157,21 @@ class NexusApp {
       return;
     }
     if (!confirm('¿Estás seguro de eliminar este registro de gasto operativo?')) return;
-    this.data.expenses = (this.data.expenses || []).filter(e => e.id !== id);
+    const cleanId = String(id || '').trim();
+    if (!cleanId) return;
+
+    if (!Array.isArray(this.data.deletedExpenses)) {
+      this.data.deletedExpenses = [];
+    }
+    if (!this.data.deletedExpenses.includes(cleanId)) {
+      this.data.deletedExpenses.push(cleanId);
+    }
+    this.data.expenses = (this.data.expenses || []).filter(e => e && String(e.id).trim() !== cleanId);
     this.calculateShiftTotals();
     await this.savePersistence();
     this.syncAllModules();
-    this.showToast(`Gasto ${id} eliminado y recalculado en caja`, 'warning');
+    this.renderExpensesTable();
+    this.showToast(`Gasto ${cleanId} eliminado y recalculado en caja`, 'warning');
   }
 
   async deleteService(id) {
