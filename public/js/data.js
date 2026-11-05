@@ -198,6 +198,7 @@ const INITIAL_DATA = {
   cashShiftsHistory: [],
   abonosVentas: [],
   abonosCompras: [],
+  deletedAbonosCompras: [],
 
   // 5. INFORMES DATA & RADAR JOYERÍA
   balanceSheet: {

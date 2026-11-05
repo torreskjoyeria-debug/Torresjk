@@ -296,12 +296,36 @@ function mergeStoreState(serverData, clientData, isAdmin = false) {
   clientAv.forEach(a => { if (a && a.id) avMap.set(a.id, a); });
   result.abonosVentas = Array.from(avMap.values());
 
+  const deletedAbonosCompras = new Set([
+    ...(Array.isArray(clientData.deletedAbonosCompras) ? clientData.deletedAbonosCompras : []),
+    ...(Array.isArray(serverData.deletedAbonosCompras) ? serverData.deletedAbonosCompras : [])
+  ]);
+
   const serverAc = Array.isArray(serverData.abonosCompras) ? serverData.abonosCompras : [];
   const clientAc = Array.isArray(clientData.abonosCompras) ? clientData.abonosCompras : [];
+
+  if (isAdmin && Array.isArray(clientData.abonosCompras)) {
+    const clientAcIds = new Set(clientAc.map(a => a && a.id).filter(Boolean));
+    serverAc.forEach(sa => {
+      if (sa && sa.id && !clientAcIds.has(sa.id)) {
+        deletedAbonosCompras.add(sa.id);
+      }
+    });
+  }
+  result.deletedAbonosCompras = Array.from(deletedAbonosCompras);
+
   const acMap = new Map();
-  serverAc.forEach(a => { if (a && a.id) acMap.set(a.id, a); });
-  clientAc.forEach(a => { if (a && a.id) acMap.set(a.id, a); });
-  result.abonosCompras = Array.from(acMap.values());
+  serverAc.forEach(a => {
+    if (a && a.id && !deletedAbonosCompras.has(a.id)) {
+      acMap.set(a.id, a);
+    }
+  });
+  clientAc.forEach(a => {
+    if (a && a.id && !deletedAbonosCompras.has(a.id)) {
+      acMap.set(a.id, a);
+    }
+  });
+  result.abonosCompras = Array.from(acMap.values()).filter(a => a && a.id && !deletedAbonosCompras.has(a.id));
 
   // 4. MERGE cashShiftsHistory (Keyed by shiftId or id)
   const serverHist = Array.isArray(serverData.cashShiftsHistory) ? serverData.cashShiftsHistory : [];

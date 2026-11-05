@@ -932,6 +932,12 @@ class NexusApp {
     if (!this.data.abonosCompras || !Array.isArray(this.data.abonosCompras)) {
       this.data.abonosCompras = [];
     }
+    if (!this.data.deletedAbonosCompras || !Array.isArray(this.data.deletedAbonosCompras)) {
+      this.data.deletedAbonosCompras = [];
+    } else if (this.data.deletedAbonosCompras.length > 0) {
+      const delAcSet = new Set(this.data.deletedAbonosCompras);
+      this.data.abonosCompras = (this.data.abonosCompras || []).filter(a => a && a.id && !delAcSet.has(a.id));
+    }
     if (!this.data.financialLedger || !Array.isArray(this.data.financialLedger)) {
       this.data.financialLedger = [];
     }
@@ -968,6 +974,23 @@ class NexusApp {
           const dbTime = new Date(dbData.updatedAt || 0).getTime();
           const localTime = new Date(localData?.updatedAt || 0).getTime();
 
+          // Preserve any local deletion blacklists so an immediate page refresh after deleting never resurrects records
+          let hasPendingLocalDeletions = false;
+          if (localData) {
+            ['deletedExpenses', 'deletedPurchases', 'deletedProducts', 'deletedAbonosCompras'].forEach(delKey => {
+              const localDel = Array.isArray(localData[delKey]) ? localData[delKey] : [];
+              const dbDel = Array.isArray(dbData[delKey]) ? dbData[delKey] : [];
+              const dbDelSet = new Set(dbDel);
+              localDel.forEach(id => {
+                if (id && !dbDelSet.has(id)) {
+                  dbDelSet.add(id);
+                  hasPendingLocalDeletions = true;
+                }
+              });
+              dbData[delKey] = Array.from(dbDelSet);
+            });
+          }
+
           // If local data is strictly newer by more than 2s (e.g. user created entities while DB was syncing), preserve local data and re-sync
           if (localData && localData.products && localTime > dbTime + 2000) {
             console.log('[NexusApp] LocalStorage tiene datos más recientes que el servidor. Preservando estado local y re-sincronizando...');
@@ -991,6 +1014,9 @@ class NexusApp {
           this.data.stockRadarData = Object.assign({}, INITIAL_DATA.stockRadarData, dbData.stockRadarData || {});
           this.sanitizeLoadedData();
           try { SafeStorage.setItem(storeKey, JSON.stringify(this.data)); } catch(_) {}
+          if (hasPendingLocalDeletions) {
+            this.savePersistence();
+          }
           console.log(`[NexusApp] Persistencia cargada exitosamente para ${this.currentStoreId} desde Backend/MongoDB.`);
           return;
         }
@@ -1373,6 +1399,15 @@ class NexusApp {
         if (result && Array.isArray(result.mergedTransactions)) {
           this.data.recentTransactions = result.mergedTransactions;
         }
+        if (result && result.updatedAt) {
+          this.data.updatedAt = result.updatedAt;
+          try {
+            SafeStorage.setItem(storeKey, JSON.stringify(this.data));
+            if (this.currentStoreId === 'store_1') {
+              SafeStorage.setItem('nexus_pos_data', JSON.stringify(this.data));
+            }
+          } catch (_) {}
+        }
       } else if (res && !res.ok) {
         console.error('[NexusApp] Error en guardado en servidor:', res.status);
       }
@@ -1460,6 +1495,7 @@ class NexusApp {
       });
       if (res.ok) {
         const remote = await res.json();
+        if (this._isSaving || this._pendingSave) return;
         if (remote && remote.products && Array.isArray(remote.products)) {
           // If remote has identical timestamp, no changes occurred
           if (remote.updatedAt && this.data.updatedAt && remote.updatedAt === this.data.updatedAt) {
@@ -1484,8 +1520,9 @@ class NexusApp {
             const txCount = d.recentTransactions?.length || 0;
             const poCount = d.purchases?.length || 0;
             const expCount = d.expenses?.length || 0;
+            const acCount = d.abonosCompras?.length || 0;
             const storeName = d.store?.name || '';
-            return `${pFp};${cFp};${sFp};${uFp};${prfFp};${cashFp};${txCount};${poCount};${expCount};${storeName}`;
+            return `${pFp};${cFp};${sFp};${uFp};${prfFp};${cashFp};${txCount};${poCount};${expCount};${acCount};${storeName}`;
           };
 
           const localFp = buildFingerprint(this.data);
@@ -1532,6 +1569,16 @@ class NexusApp {
               }
             });
             remote.expenses = Array.from(expMap.values()).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+
+            // Smart local preservation: merge deletedAbonosCompras
+            const localDelAc = Array.isArray(this.data.deletedAbonosCompras) ? this.data.deletedAbonosCompras : [];
+            const remoteDelAc = Array.isArray(remote.deletedAbonosCompras) ? remote.deletedAbonosCompras : [];
+            const combinedDelAc = Array.from(new Set([...localDelAc, ...remoteDelAc]));
+            remote.deletedAbonosCompras = combinedDelAc;
+            if (combinedDelAc.length > 0 && Array.isArray(remote.abonosCompras)) {
+              const delAcSet = new Set(combinedDelAc);
+              remote.abonosCompras = remote.abonosCompras.filter(a => a && a.id && !delAcSet.has(a.id));
+            }
 
             // Smart local preservation: merge deletedPurchases
             const localDel = Array.isArray(this.data.deletedPurchases) ? this.data.deletedPurchases : [];
@@ -2118,7 +2165,7 @@ class NexusApp {
       };
       const requiredMod = entityModuleMap[entity];
       if (requiredMod && perms.includes(requiredMod)) {
-        if (action === 'edit' || action === 'create' || (action === 'delete' && !role.includes('cajer'))) return true;
+        if (action === 'edit' || action === 'create' || action === 'delete' && (!role.includes('cajer') || entity === 'expense')) return true;
       }
     }
 
@@ -2127,7 +2174,10 @@ class NexusApp {
 
     // Cashier restrictions
     if (isCajero) {
-      // Cashiers can NEVER delete any database entity
+      if (action === 'delete' && entity === 'expense' && this.hasPermission(null, 'gastos')) {
+        return true;
+      }
+      // Cashiers can NEVER delete any other database entity
       if (action === 'delete') return false;
       // Cashiers can only perform sales and abonos; cannot create or edit catalog, suppliers, assets, payment methods, categories, etc.
       if (action === 'edit' || action === 'create') {
@@ -6160,6 +6210,8 @@ class NexusApp {
     const cleanId = String(id || '').trim();
     if (!cleanId) return;
 
+    const expToDelete = (this.data.expenses || []).find(e => e && String(e.id).trim() === cleanId);
+
     if (!Array.isArray(this.data.deletedExpenses)) {
       this.data.deletedExpenses = [];
     }
@@ -6167,11 +6219,29 @@ class NexusApp {
       this.data.deletedExpenses.push(cleanId);
     }
     this.data.expenses = (this.data.expenses || []).filter(e => e && String(e.id).trim() !== cleanId);
+
+    // Si el gasto pertenecía a un turno cerrado y era en efectivo, actualizar también el historial del turno cerrado
+    if (expToDelete && expToDelete.closedShiftId && Array.isArray(this.data.cashShiftsHistory)) {
+      const m = (expToDelete.method || 'Efectivo').toLowerCase();
+      const isCash = m.includes('efectivo') || m.includes('caja') || m.includes('gaveta') || m.includes('cash');
+      const amt = Math.round(Number(expToDelete.amount) || 0);
+      if (isCash && amt > 0) {
+        const histShift = this.data.cashShiftsHistory.find(s => s && (s.shiftId === expToDelete.closedShiftId || s.id === expToDelete.closedShiftId));
+        if (histShift) {
+          histShift.cashExpenses = Math.round(Math.max(0, (Number(histShift.cashExpenses) || 0) - amt));
+          histShift.expectedCashInDrawer = Math.round((Number(histShift.openingCash) || 0) + (Number(histShift.cashSales) || 0) - histShift.cashExpenses);
+          if (histShift.closingCash !== undefined) {
+            histShift.difference = Math.round((Number(histShift.closingCash) || 0) - histShift.expectedCashInDrawer);
+          }
+        }
+      }
+    }
+
     this.calculateShiftTotals();
-    await this.savePersistence();
     this.syncAllModules();
     this.renderExpensesTable();
     this.showToast(`Gasto ${cleanId} eliminado y recalculado en caja`, 'warning');
+    await this.savePersistence();
   }
 
   async deleteService(id) {
@@ -6257,6 +6327,14 @@ class NexusApp {
 
     if (relatedAbonos.length > 0) {
       cashToRefund = cashFromAbonos;
+      if (!Array.isArray(this.data.deletedAbonosCompras)) {
+        this.data.deletedAbonosCompras = [];
+      }
+      relatedAbonos.forEach(ab => {
+        if (ab && ab.id && !this.data.deletedAbonosCompras.includes(ab.id)) {
+          this.data.deletedAbonosCompras.push(ab.id);
+        }
+      });
       // Eliminar abonos vinculados a esta orden de compra
       this.data.abonosCompras = (this.data.abonosCompras || []).filter(ab => ab.poId !== po.id);
     } else {
@@ -6451,13 +6529,30 @@ class NexusApp {
       }
     }
 
+    if (!Array.isArray(this.data.deletedAbonosCompras)) {
+      this.data.deletedAbonosCompras = [];
+    }
+    if (!this.data.deletedAbonosCompras.includes(id)) {
+      this.data.deletedAbonosCompras.push(id);
+    }
     this.data.abonosCompras = (this.data.abonosCompras || []).filter(a => a.id !== id);
-    await this.savePersistence();
+    if (isCash && amt > 0 && ab.closedShiftId && Array.isArray(this.data.cashShiftsHistory)) {
+      const closedHist = this.data.cashShiftsHistory.find(s => s && (s.shiftId === ab.closedShiftId || s.id === ab.closedShiftId));
+      if (closedHist) {
+        closedHist.cashExpenses = Math.round(Math.max(0, (Number(closedHist.cashExpenses) || 0) - amt));
+        closedHist.expectedCashInDrawer = Math.round((Number(closedHist.openingCash) || 0) + (Number(closedHist.cashSales) || 0) - closedHist.cashExpenses);
+        if (closedHist.closingCash !== undefined) {
+          closedHist.difference = Math.round((Number(closedHist.closingCash) || 0) - closedHist.expectedCashInDrawer);
+        }
+      }
+    }
+    this.calculateShiftTotals();
     this.syncAllModules();
     this.renderAbonosComprasTable();
     this.renderCuadreCajaCard();
     this.renderCashStatusIndicator();
     this.showToast(`Abono #${id} anulado y dinero reintegrado a caja`, 'warning');
+    await this.savePersistence();
   }
 
   openAbonoModal(type, id) {
@@ -12618,7 +12713,19 @@ class NexusApp {
     const countAbonos = expensesList.filter(e => e.typeKey === 'abonos').length;
     const countCompras = expensesList.filter(e => e.typeKey === 'compras').length;
 
-    let rowsHtml = expensesList.map(e => `
+    const canDeleteExpense = this.canPerformAction('delete', 'expense');
+    const canDeletePurchase = this.canPerformAction('delete', 'purchase');
+
+    let rowsHtml = expensesList.map(e => {
+      let actionBtn = '';
+      if (e.typeKey === 'gastos' && canDeleteExpense) {
+        actionBtn = `<button class="btn-action-delete" style="padding:3px 8px; font-size:0.75rem;" onclick="app.deleteExpense('${this.escapeHtml(e.id)}')">Eliminar</button>`;
+      } else if (e.typeKey === 'abonos' && (canDeletePurchase || canDeleteExpense)) {
+        actionBtn = `<button class="btn-action-delete" style="padding:3px 8px; font-size:0.75rem;" onclick="app.deleteAbonoCompra('${this.escapeHtml(e.id)}')">Anular</button>`;
+      } else if (e.typeKey === 'compras' && canDeletePurchase) {
+        actionBtn = `<button class="btn-action-delete" style="padding:3px 8px; font-size:0.75rem;" onclick="app.deletePurchaseOrder('${this.escapeHtml(e.id)}')">Eliminar</button>`;
+      }
+      return `
       <tr class="cash-expense-row cash-expense-${e.typeKey} cash-channel-${e.isCash ? 'cash' : 'bank'}" style="border-bottom:1px solid var(--border-color); transition:background 0.15s ease;">
         <td style="padding:8px 10px; font-size:0.82rem; font-family:monospace; font-weight:700; color:var(--text-main);">
           ${this.escapeHtml(e.id)}
@@ -12645,8 +12752,12 @@ class NexusApp {
         <td style="padding:8px 10px; font-size:0.9rem; font-weight:800; color:var(--rose-text); text-align:right; white-space:nowrap;">
           -${this.formatCurrency(e.amount)}
         </td>
+        <td style="padding:8px 10px; text-align:center; white-space:nowrap;">
+          ${actionBtn || '<span style="font-size:0.72rem; color:var(--text-muted);">—</span>'}
+        </td>
       </tr>
-    `).join('');
+    `;
+    }).join('');
 
     return `
       <!-- MINI-TARJETAS DE RESUMEN POR CANAL Y CATEGORÍA DE SALIDA -->
@@ -12707,6 +12818,7 @@ class NexusApp {
               <th style="padding:7px 10px; font-size:0.75rem;">Tipo de Egreso</th>
               <th style="padding:7px 10px; font-size:0.75rem;">Responsable</th>
               <th style="padding:7px 10px; font-size:0.75rem; text-align:right;">Monto Registrado</th>
+              <th style="padding:7px 10px; font-size:0.75rem; text-align:center;">Acción</th>
             </tr>
           </thead>
           <tbody id="cash-shift-expenses-tbody">
