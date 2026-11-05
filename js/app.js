@@ -6548,6 +6548,7 @@ class NexusApp {
     }
     this.calculateShiftTotals();
     this.syncAllModules();
+    this.renderExpensesTable();
     this.renderAbonosComprasTable();
     this.renderCuadreCajaCard();
     this.renderCashStatusIndicator();
@@ -7013,12 +7014,15 @@ class NexusApp {
       });
 
       this.closeModal('abono-modal');
-      await this.savePersistence();
+      this.calculateShiftTotals();
       this.syncAllModules();
+      this.renderExpensesTable();
+      this.renderAbonosComprasTable();
       this.renderCuadreCajaCard();
       this.renderCashStatusIndicator();
       const deductMsg = shouldDeductFromCash ? ' y descontado de caja' : '';
       this.showToast(`Pago de ${this.formatCurrency(actualPay)} registrado a ${cp.supplier}${deductMsg}`, 'success');
+      await this.savePersistence();
     }
   }
 
@@ -8924,20 +8928,59 @@ class NexusApp {
     }).join('');
   }
 
+  getCombinedExpensesAndSupplierPayments() {
+    const expItems = (this.data.expenses || []).map(e => ({
+      ...e,
+      _isSupplierAbono: false
+    }));
+    const expIds = new Set(expItems.map(e => e.id));
+    const abonoItems = (this.data.abonosCompras || [])
+      .filter(a => a && a.id && !expIds.has(a.id))
+      .map(a => ({
+        id: a.id,
+        date: a.date || '',
+        time: a.time || '',
+        timestamp: a.timestamp || (a.date ? new Date(a.date).getTime() : 0),
+        description: `Abono a Proveedor: ${a.supplier || 'Proveedor'}${a.poId ? ` (${a.poId})` : ''}`,
+        category: 'Abono a Proveedor',
+        method: a.method || 'Efectivo',
+        amount: Number(a.amount) || 0,
+        status: a.status === 'Confirmado' ? 'Pagado' : (a.status || 'Pagado'),
+        cashier: a.cashier || 'Cajero',
+        shiftId: a.shiftId || null,
+        closedShiftId: a.closedShiftId || null,
+        _isSupplierAbono: true
+      }));
+    return [...expItems, ...abonoItems].sort((a, b) => {
+      const tA = a.timestamp || (a.date ? new Date(a.date).getTime() : 0) || 0;
+      const tB = b.timestamp || (b.date ? new Date(b.date).getTime() : 0) || 0;
+      return tB - tA;
+    });
+  }
+
   renderExpensesTable() {
     const tbody = document.getElementById('expenses-tbody');
     if (!tbody) return;
-    if (!this.data.expenses || this.data.expenses.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:2.5rem 1rem; color:var(--text-muted);"><div style="font-size:1.5rem; margin-bottom:0.5rem;">💸</div><div style="font-weight:600;">No hay gastos operativos registrados</div><div style="font-size:0.8rem; margin-top:0.25rem;">Haga clic en "+ Registrar Gasto" para ingresar un nuevo gasto.</div></td></tr>`;
+    const allExpenses = this.getCombinedExpensesAndSupplierPayments();
+    if (!allExpenses || allExpenses.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:2.5rem 1rem; color:var(--text-muted);"><div style="font-size:1.5rem; margin-bottom:0.5rem;">💸</div><div style="font-weight:600;">No hay gastos operativos ni abonos registrados</div><div style="font-size:0.8rem; margin-top:0.25rem;">Haga clic en "+ Registrar Gasto" para ingresar un nuevo gasto.</div></td></tr>`;
       return;
     }
     const canEditExp = this.canPerformAction('edit', 'expense');
     const canDeleteExp = this.canPerformAction('delete', 'expense');
+    const canDeletePurchase = this.canPerformAction('delete', 'purchase');
 
-    tbody.innerHTML = this.data.expenses.map(e => {
-      const editBtn = canEditExp ? `<button class="btn-action-edit" onclick="app.openEditExpenseModal('${e.id}')">Editar</button>` : '';
-      const deleteBtn = canDeleteExp ? `<button class="btn-action-delete" onclick="app.deleteExpense('${e.id}')">Eliminar</button>` : '';
-      const actions = `${editBtn}${deleteBtn}`;
+    tbody.innerHTML = allExpenses.map(e => {
+      let actions = '';
+      if (e._isSupplierAbono) {
+        actions = (canDeleteExp || canDeletePurchase)
+          ? `<button class="btn-action-delete" onclick="app.deleteAbonoCompra('${this.escapeHtml(e.id)}')">Eliminar</button>`
+          : '';
+      } else {
+        const editBtn = canEditExp ? `<button class="btn-action-edit" onclick="app.openEditExpenseModal('${this.escapeHtml(e.id)}')">Editar</button>` : '';
+        const deleteBtn = canDeleteExp ? `<button class="btn-action-delete" onclick="app.deleteExpense('${this.escapeHtml(e.id)}')">Eliminar</button>` : '';
+        actions = `${editBtn}${deleteBtn}`;
+      }
       const actionHtml = actions ? `<div class="action-btn-group">${actions}</div>` : `<span class="badge badge-inactive" style="font-size:0.75rem;">Solo Lectura</span>`;
 
       return `
@@ -8956,7 +8999,7 @@ class NexusApp {
   }
 
   exportExpensesExcel() {
-    const expenses = this.data.expenses || [];
+    const expenses = this.getCombinedExpensesAndSupplierPayments();
     if (expenses.length === 0) {
       this.showToast('No hay gastos operativos registrados para exportar', 'warning');
       return;
@@ -13818,10 +13861,11 @@ class NexusApp {
       return tx.date === datePattern || tx.date.includes(datePattern) || (shift.date && tx.date.includes(shift.date)) || (ddMm && tx.date.includes(ddMm));
     });
 
-    const dayExpenses = (this.data.expenses || []).filter(e => {
+    const dayExpenses = this.getCombinedExpensesAndSupplierPayments().filter(e => {
       if (!e.date) return false;
       const isDay = e.date.includes(datePattern) || (shift.date && e.date.includes(shift.date)) || (ddMm && e.date.includes(ddMm));
-      return isDay && (e.method || '').toLowerCase().includes('efectivo');
+      const m = (e.method || '').toLowerCase();
+      return isDay && (m.includes('efectivo') || m.includes('caja'));
     });
 
     modalBody.innerHTML = `
@@ -14194,10 +14238,11 @@ class NexusApp {
       return tx.date === datePattern || tx.date.includes(datePattern) || (shift.date && tx.date.includes(shift.date)) || (ddMm && tx.date.includes(ddMm));
     });
 
-    const dayExpenses = (this.data.expenses || []).filter(ex => {
+    const dayExpenses = this.getCombinedExpensesAndSupplierPayments().filter(ex => {
       if (!ex.date) return false;
       const isDay = ex.date.includes(datePattern) || (shift.date && ex.date.includes(shift.date)) || (ddMm && ex.date.includes(ddMm));
-      return isDay && (ex.method || '').toLowerCase().includes('efectivo');
+      const m = (ex.method || '').toLowerCase();
+      return isDay && (m.includes('efectivo') || m.includes('caja'));
     });
 
     let txRowsXml = '';
