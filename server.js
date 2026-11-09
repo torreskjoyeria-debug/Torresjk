@@ -453,8 +453,9 @@ function mergeStoreState(serverData, clientData, isAdmin = false) {
 
     const getProductDeductFromTxs = (prod, txList) => {
       if (!prod || !Array.isArray(txList) || txList.length === 0) return 0;
-      const isPesaje = (prod.measureType || 'Pesaje') === 'Pesaje';
       const pWeight = parseFloat(String(prod.pieceWeight !== undefined && prod.pieceWeight !== null ? prod.pieceWeight : (prod.weight || 0)).replace(',', '.')) || 0;
+      const stockNum = parseFloat(String(prod.stock || 0).replace(',', '.')) || 0;
+      const isPesaje = (prod.measureType || 'Pesaje') === 'Pesaje' || (pWeight <= 0 && stockNum > 0 && (stockNum % 1 !== 0));
       const isUnitWithWeight = !isPesaje && pWeight > 0;
       let totalDeduct = 0;
 
