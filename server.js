@@ -443,22 +443,10 @@ function mergeStoreState(serverData, clientData, isAdmin = false) {
       .map(clientProd => {
         const serverProd = clientProd && clientProd.id ? serverProdMap.get(clientProd.id) : null;
         if (!serverProd) return clientProd;
-        const serverSold = Number(serverProd.sold30d) || 0;
-        const clientSold = Number(clientProd.sold30d) || 0;
         const mergedProd = Object.assign({}, clientProd);
         // Preserve product SKU/code integrity if missing on client
         if (!mergedProd.sku && serverProd.sku) mergedProd.sku = serverProd.sku;
         if (!mergedProd.code && serverProd.code) mergedProd.code = serverProd.code;
-        if (serverSold > clientSold) {
-          const deltaSold = serverSold - clientSold;
-          mergedProd.sold30d = serverSold;
-          const currentClientStock = Number(clientProd.stock) || 0;
-          mergedProd.stock = Math.max(0, Math.round((currentClientStock - deltaSold) * 10000) / 10000);
-          if (mergedProd.stock <= 0) {
-            mergedProd.stock = 0;
-            mergedProd.status = 'out_of_stock';
-          }
-        }
         return mergedProd;
       });
 
@@ -747,6 +735,7 @@ app.post('/api/data', async (req, res) => {
       mode: mongoConnected ? 'MongoDB (torreskjoyeria_pos)' : 'Local JSON', 
       recentTransactionsCount: (mergedData.recentTransactions || []).length,
       mergedTransactions: mergedData.recentTransactions,
+      mergedProducts: mergedData.products,
       updatedAt: mergedData.updatedAt,
       timestamp: new Date() 
     });

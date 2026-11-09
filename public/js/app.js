@@ -807,12 +807,6 @@ class NexusApp {
           }
         }
         // SAFEGUARD: Never force existing products into categories[0] ('cajasdelujo')!
-
-        if (p.id === 'PRD-1867' || p.sku === '5415' || (p.name && p.name.toLowerCase().includes('letra a casting'))) {
-          if (p.stock === 205) {
-            p.stock = 2.05;
-          }
-        }
       });
       // NOTE: Empty array is valid for clean production data
     } else {
@@ -1043,8 +1037,14 @@ class NexusApp {
     this.syncAllCategoryGrams();
     this.renderAllTables();
     this.renderCategoryPills();
-    this.populateProductCategorySelect('new-prod-cat');
-    this.populateProductCategorySelect('edit-prod-cat');
+    const prodModalOpen = document.getElementById('product-modal')?.classList.contains('open');
+    const editProdModalOpen = document.getElementById('edit-product-modal')?.classList.contains('open');
+    if (!prodModalOpen) {
+      this.populateProductCategorySelect('new-prod-cat', document.getElementById('new-prod-cat')?.value || '');
+    }
+    if (!editProdModalOpen) {
+      this.populateProductCategorySelect('edit-prod-cat', document.getElementById('edit-prod-cat')?.value || '');
+    }
     this.renderPOSProducts();
     this.renderPosMetalRates();
     if (typeof this.renderCarteraMorosidadTable === 'function') this.renderCarteraMorosidadTable();
@@ -1158,8 +1158,22 @@ class NexusApp {
           if (totalUnits > 0 && totalCost > 0) {
             cat.cost = Math.round((totalCost / totalUnits) * 100) / 100;
           }
-        } else if (cat.availableGrams > 0 && totalCost > 0) {
-          cat.cost = Math.round((totalCost / cat.availableGrams) * 100) / 100;
+        } else {
+          // Calcular costo promedio por gramo usando únicamente los productos con gramos > 0
+          // para que productos mal categorizados o sin gramaje nunca inflen ni distorsionen el costo de la categoría
+          let gramsWithCost = 0;
+          let costOfGramsProds = 0;
+          prodsInCat.forEach(p => {
+            const g = this.getGramsFromProduct(p) || 0;
+            const c = parseFloat(String(p.cost || 0).replace(',', '.')) || 0;
+            if (g > 0 && c > 0) {
+              gramsWithCost += g;
+              costOfGramsProds += (g * c);
+            }
+          });
+          if (gramsWithCost > 0 && costOfGramsProds > 0) {
+            cat.cost = Math.round((costOfGramsProds / gramsWithCost) * 100) / 100;
+          }
         }
       }
     });
@@ -1398,6 +1412,9 @@ class NexusApp {
         const result = await res.json().catch(() => null);
         if (result && Array.isArray(result.mergedTransactions)) {
           this.data.recentTransactions = result.mergedTransactions;
+        }
+        if (result && Array.isArray(result.mergedProducts) && !this._pendingSave) {
+          this.data.products = result.mergedProducts;
         }
         if (result && result.updatedAt) {
           this.data.updatedAt = result.updatedAt;
@@ -3640,13 +3657,24 @@ class NexusApp {
           // NO se debe secuestrar ni sumarle el stock a otro producto existente que tenga diferente SKU
           // solo porque coincida el nombre o el ID oculto sugerido por el autocompletado.
           if (!targetProd && !prodSku) {
-            // Prioridad 2: ID del producto si no hubo SKU
+            // Prioridad 2: ID del producto explícitamente seleccionado del autocompletado
             if (prodId) {
               targetProd = (this.data.products || []).find(p => p.id === prodId);
             }
-            // Prioridad 3: Nombre exacto si no hubo SKU
+            // Prioridad 3: Solo vincular por nombre si existe un único producto con ese nombre exacto
             if (!targetProd && prodName) {
-              targetProd = (this.data.products || []).find(p => p.name && p.name.toLowerCase().trim() === prodName.toLowerCase().trim());
+              const nameMatches = (this.data.products || []).filter(p => p.name && p.name.toLowerCase().trim() === prodName.toLowerCase().trim());
+              if (nameMatches.length === 1) {
+                targetProd = nameMatches[0];
+              }
+            }
+          }
+
+          if (targetProd && (Number(targetProd.stock) || 0) > 0) {
+            const existingMeasure = targetProd.measureType || 'Pesaje';
+            if (existingMeasure !== measureType) {
+              this.showToast(`El producto existente "${targetProd.name}" (SKU: ${targetProd.sku || targetProd.id}) está configurado en ${existingMeasure}. No se pueden mezclar ${existingMeasure} con ${measureType}. Cambia el Tipo de Medida o ingresa un SKU nuevo.`, 'warning');
+              return;
             }
           }
 
@@ -3674,10 +3702,16 @@ class NexusApp {
             };
             this.data.products.push(targetProd);
           } else {
-            targetProd.measureType = measureType;
-            targetProd.category = catObj.id;
-            targetProd.categoryName = catObj.name;
-            if (isExtras) targetProd.isExtra = true;
+            // Si el producto existente estaba agotado (stock <= 0), permitir actualizar su configuración;
+            // si ya tiene existencias, preservar estrictamente su categoría y unidad de medida para no alterar el inventario
+            if ((Number(targetProd.stock) || 0) <= 0) {
+              targetProd.measureType = measureType;
+              targetProd.weightUnit = isPesaje ? 'g' : 'u.';
+              targetProd.unit = isPesaje ? 'g' : 'u.';
+              targetProd.category = catObj.id;
+              targetProd.categoryName = catObj.name;
+              targetProd.isExtra = isExtras;
+            }
             if (supp && supp !== 'Proveedor General') {
               targetProd.supplier = supp;
             } else if (!targetProd.supplier) {
@@ -4278,13 +4312,6 @@ class NexusApp {
 
     const valLower = rawVal.toLowerCase();
 
-    // Coincidencia exacta por nombre, SKU o ID
-    let targetProd = (this.data.products || []).find(p => 
-      p.name.toLowerCase().trim() === valLower ||
-      (p.sku && p.sku.toLowerCase().trim() === valLower) ||
-      p.id.toLowerCase().trim() === valLower
-    );
-
     const hiddenId = document.getElementById('po-product-id');
     const skuInput = document.getElementById('po-product-sku');
     const unitCostInput = document.getElementById('po-unit-cost');
@@ -4293,10 +4320,30 @@ class NexusApp {
     const catSelect = document.getElementById('po-category-select');
     const catInfo = document.getElementById('po-preview-cat-info');
 
+    const currentSkuVal = (skuInput?.value || '').trim().toLowerCase();
+
+    // Coincidencia segura: primero por SKU/ID exacto; por nombre solo si es único y el usuario no ha escrito otro SKU distinto
+    let targetProd = (this.data.products || []).find(p => 
+      (p.sku && p.sku.toLowerCase().trim() === valLower) ||
+      p.id.toLowerCase().trim() === valLower
+    );
+    if (!targetProd) {
+      const byName = (this.data.products || []).filter(p => p.name && p.name.toLowerCase().trim() === valLower);
+      if (byName.length === 1) {
+        const candidate = byName[0];
+        const candSku = String(candidate.sku || candidate.id || '').toLowerCase().trim();
+        if (!currentSkuVal || currentSkuVal === candSku) {
+          targetProd = candidate;
+        }
+      }
+    }
+
     if (targetProd) {
       if (hiddenId) hiddenId.value = targetProd.id;
-      if (skuInput) skuInput.value = targetProd.sku || targetProd.id;
-      if (unitCostInput) unitCostInput.value = this.formatNumberWithCommas(targetProd.cost || 0);
+      if (skuInput && !currentSkuVal) skuInput.value = targetProd.sku || targetProd.id;
+      if (unitCostInput && (!unitCostInput.value || unitCostInput.value === '0')) {
+        unitCostInput.value = this.formatNumberWithCommas(targetProd.cost || 0);
+      }
 
       if (catSelect && targetProd.category) {
         catSelect.value = targetProd.category;
@@ -5302,10 +5349,6 @@ class NexusApp {
     const p = this.data.products.find(item => String(item.id) === String(id));
     if (!p) return;
 
-    if ((p.id === 'PRD-1867' || p.sku === '5415') && p.stock === 205) {
-      p.stock = 2.05;
-    }
-
     document.getElementById('edit-prod-id').value = p.id;
     document.getElementById('edit-prod-sku').value = p.sku || '001';
     document.getElementById('edit-prod-name').value = p.name;
@@ -5469,8 +5512,20 @@ class NexusApp {
       let calculatedAvgCost = Number(cat.cost) || 0;
       if (isUnidades) {
         if (totalUnitsInProds > 0) calculatedAvgCost = Math.round((totalCostInProds / totalUnitsInProds) * 100) / 100;
-      } else if (availableGrams > 0 && totalCostInProds > 0) {
-        calculatedAvgCost = Math.round((totalCostInProds / availableGrams) * 100) / 100;
+      } else {
+        let gramsWithCost = 0;
+        let costOfGramsProds = 0;
+        prodsInCat.forEach(p => {
+          const g = this.getGramsFromProduct(p) || 0;
+          const c = parseFloat(String(p.cost || 0).replace(',', '.')) || 0;
+          if (g > 0 && c > 0) {
+            gramsWithCost += g;
+            costOfGramsProds += (g * c);
+          }
+        });
+        if (gramsWithCost > 0 && costOfGramsProds > 0) {
+          calculatedAvgCost = Math.round((costOfGramsProds / gramsWithCost) * 100) / 100;
+        }
       }
       cat.cost = calculatedAvgCost;
 
@@ -6345,23 +6400,16 @@ class NexusApp {
     }
     const cat = (this.data.categories || []).find(c => c.id === id);
     const catName = cat ? cat.name : id;
-    if (!confirm(`¿Estás seguro de eliminar la categoría "${catName}"? Los productos asociados se reasignarán a la categoría principal.`)) return;
 
-    // Reasignar productos asociados a la categoría fallback principal para no perder existencias ni trazabilidad de gramos
-    const isExtras = cat && (cat.type === 'extras' || cat.isExtra);
-    const fallbackCat = isExtras
-      ? ((this.data.categories || []).find(c => c.id !== id && (c.type === 'extras' || c.isExtra)) || (this.data.categories || []).find(c => c.id !== id))
-      : ((this.data.categories || []).find(c => c.id !== id && (c.id === 'oro18k' || c.name.toLowerCase().includes('oro'))) || (this.data.categories || []).find(c => c.id !== id));
-    if (fallbackCat) {
-      const prodsToReassign = this.getProductsForCategory(cat || { id, name: catName });
-      if (prodsToReassign.length > 0) {
-        prodsToReassign.forEach(p => {
-          p.category = fallbackCat.id;
-          p.categoryName = fallbackCat.name;
-        });
-        this.showToast(`${prodsToReassign.length} productos reasignados a "${fallbackCat.name}"`, 'info');
-      }
+    // Protección estricta: no permitir eliminar una categoría que tenga productos asociados
+    // para evitar que los productos se reasignen o mezclen en otra categoría por accidente
+    const prodsInCat = this.getProductsForCategory(cat || { id, name: catName });
+    if (prodsInCat.length > 0) {
+      this.showToast(`No se puede eliminar la categoría "${catName}" porque tiene ${prodsInCat.length} producto(s) registrado(s). Reasigna o elimina primero esos productos para proteger el inventario.`, 'warning');
+      return;
     }
+
+    if (!confirm(`¿Estás seguro de eliminar la categoría vacía "${catName}"?`)) return;
 
     this.data.categories = (this.data.categories || []).filter(c => c.id !== id);
     if (this.selectedCategory === id) this.selectedCategory = 'all';
@@ -11070,7 +11118,17 @@ class NexusApp {
         totalValuation = Math.round((prodsTotalCost > 0 ? prodsTotalCost : (formattedGrams * avgCost)) * 100) / 100;
         cat.totalValuation = totalValuation;
       } else {
-        avgCost = formattedGrams > 0 ? (prodsTotalCost / formattedGrams) : (Number(cat.cost) || 0);
+        let gramsWithCost = 0;
+        let costOfGramsProds = 0;
+        prodsInCat.forEach(p => {
+          const g = this.getGramsFromProduct(p) || 0;
+          const c = parseFloat(String(p.cost || 0).replace(',', '.')) || 0;
+          if (g > 0 && c > 0) {
+            gramsWithCost += g;
+            costOfGramsProds += (g * c);
+          }
+        });
+        avgCost = (gramsWithCost > 0 && costOfGramsProds > 0) ? (costOfGramsProds / gramsWithCost) : (Number(cat.cost) || 0);
         avgCost = Math.round(avgCost * 100) / 100;
         cat.cost = avgCost;
         totalValuation = Math.round((prodsTotalCost > 0 ? prodsTotalCost : (formattedGrams * avgCost)) * 100) / 100;
