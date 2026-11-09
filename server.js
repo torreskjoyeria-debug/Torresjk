@@ -58,6 +58,9 @@ app.use(express.static(__dirname));
 
 // Explicit frontend route handler for root requests
 app.get(['/', '/index.html'], (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
   const publicIndex = path.join(__dirname, 'public', 'index.html');
   if (fs.existsSync(publicIndex)) {
     return res.sendFile(publicIndex);
@@ -438,15 +441,126 @@ function mergeStoreState(serverData, clientData, isAdmin = false) {
       if (p && p.id && !deletedProducts.has(p.id)) serverProdMap.set(p.id, p); 
     });
 
+    const nowMs = Date.now();
+    const serverTxIds = new Set(serverTxs.map(t => t && t.id).filter(Boolean));
+    const clientTxIds = new Set(clientTxs.map(t => t && t.id).filter(Boolean));
+    const newClientTxs = deduplicatedTxs.filter(tx => {
+      if (!tx || !tx.id || serverTxIds.has(tx.id)) return false;
+      const ts = tx.timestamp || (tx.createdAt ? new Date(tx.createdAt).getTime() : nowMs);
+      return Math.abs(nowMs - ts) < 15 * 60 * 1000;
+    });
+    const missedServerTxs = serverTxs.filter(tx => tx && tx.id && !clientTxIds.has(tx.id));
+
+    const getProductDeductFromTxs = (prod, txList) => {
+      if (!prod || !Array.isArray(txList) || txList.length === 0) return 0;
+      const isPesaje = (prod.measureType || 'Pesaje') === 'Pesaje';
+      const pWeight = parseFloat(String(prod.pieceWeight !== undefined && prod.pieceWeight !== null ? prod.pieceWeight : (prod.weight || 0)).replace(',', '.')) || 0;
+      const isUnitWithWeight = !isPesaje && pWeight > 0;
+      let totalDeduct = 0;
+
+      txList.forEach(tx => {
+        if (!tx || !Array.isArray(tx.items)) return;
+        tx.items.forEach(it => {
+          if (!it) return;
+          const matchesId = it.id && prod.id && it.id === prod.id;
+          if (!matchesId) return;
+
+          const rawQty = Number(it.qty) || 0;
+          if (rawQty <= 0) return;
+
+          if (isPesaje) {
+            totalDeduct += rawQty;
+          } else if (isUnitWithWeight) {
+            if (it.unitsCount !== undefined && it.unitsCount !== null && Number(it.unitsCount) > 0) {
+              totalDeduct += Math.max(1, Math.round(Number(it.unitsCount)));
+            } else if (rawQty >= 1 && (rawQty % 1 === 0) && (pWeight % 1 !== 0)) {
+              // Safeguard for legacy un-refreshed tabs where cashier typed integer units (e.g. 2) into the gram input
+              totalDeduct += Math.round(rawQty);
+            } else {
+              const rawUnits = rawQty / pWeight;
+              totalDeduct += Math.max(1, Math.round(rawUnits));
+            }
+          } else {
+            const u = (it.unitsCount !== undefined && it.unitsCount !== null && Number(it.unitsCount) > 0)
+              ? Number(it.unitsCount)
+              : rawQty;
+            totalDeduct += Math.max(1, Math.round(u));
+          }
+        });
+      });
+
+      return Math.round(totalDeduct * 10000) / 10000;
+    };
+
     const mergedProducts = clientData.products
       .filter(p => p && p.id && !deletedProducts.has(p.id))
       .map(clientProd => {
         const serverProd = clientProd && clientProd.id ? serverProdMap.get(clientProd.id) : null;
-        if (!serverProd) return clientProd;
+        if (!serverProd) {
+          const freshProd = Object.assign({}, clientProd);
+          delete freshProd._explicitStockEdit;
+          if (!freshProd.stockUpdatedAt) freshProd.stockUpdatedAt = nowMs;
+          return freshProd;
+        }
+
+        // 1. Explicit product edit or purchase update from client
+        if (clientProd._explicitStockEdit) {
+          const mergedProd = Object.assign({}, clientProd);
+          delete mergedProd._explicitStockEdit;
+          mergedProd.stockUpdatedAt = nowMs;
+          if (!mergedProd.sku && serverProd.sku) mergedProd.sku = serverProd.sku;
+          if (!mergedProd.code && serverProd.code) mergedProd.code = serverProd.code;
+          return mergedProd;
+        }
+
+        // 2. POS Sale submission: deduct only the exact sold units from serverProd.stock
+        // and preserve serverProd for all products not involved in this sale
+        if (newClientTxs.length > 0) {
+          const soldInNewTx = getProductDeductFromTxs(serverProd, newClientTxs);
+          if (soldInNewTx > 0) {
+            const mergedProd = Object.assign({}, serverProd);
+            mergedProd.stock = Math.max(0, Math.round(((Number(serverProd.stock) || 0) - soldInNewTx) * 10000) / 10000);
+            if (mergedProd.stock <= 0) {
+              mergedProd.stock = 0;
+              mergedProd.status = 'out_of_stock';
+            } else if (mergedProd.stock <= (Number(mergedProd.minStock) || 0)) {
+              mergedProd.status = 'low_stock';
+            } else {
+              mergedProd.status = 'active';
+            }
+            mergedProd.sold30d = Math.round(((Number(serverProd.sold30d) || 0) + soldInNewTx) * 10000) / 10000;
+            if (clientProd.monthlySales) {
+              mergedProd.monthlySales = clientProd.monthlySales;
+            }
+            mergedProd.stockUpdatedAt = nowMs;
+            return mergedProd;
+          }
+          return Object.assign({}, serverProd);
+        }
+
+        // 3. Non-sale submission without _explicitStockEdit:
+        // Protect serverProd if it was updated more recently or sold in missedServerTxs
+        const serverStockTs = Number(serverProd.stockUpdatedAt) || 0;
+        const clientStockTs = Number(clientProd.stockUpdatedAt) || 0;
+        if (serverStockTs > clientStockTs || getProductDeductFromTxs(serverProd, missedServerTxs) > 0) {
+          return Object.assign({}, serverProd);
+        }
+
         const mergedProd = Object.assign({}, clientProd);
+        delete mergedProd._explicitStockEdit;
         // Preserve product SKU/code integrity if missing on client
         if (!mergedProd.sku && serverProd.sku) mergedProd.sku = serverProd.sku;
         if (!mergedProd.code && serverProd.code) mergedProd.code = serverProd.code;
+        if (
+          mergedProd.stock !== serverProd.stock ||
+          mergedProd.price !== serverProd.price ||
+          mergedProd.cost !== serverProd.cost ||
+          mergedProd.measureType !== serverProd.measureType ||
+          mergedProd.pieceWeight !== serverProd.pieceWeight ||
+          mergedProd.category !== serverProd.category
+        ) {
+          mergedProd.stockUpdatedAt = nowMs;
+        }
         return mergedProd;
       });
 

@@ -1415,6 +1415,12 @@ class NexusApp {
         }
         if (result && Array.isArray(result.mergedProducts) && !this._pendingSave) {
           this.data.products = result.mergedProducts;
+          this.syncAllCategoryGrams();
+          this.renderPOSProducts();
+          if (typeof this.renderInventoryTable === 'function') this.renderInventoryTable();
+          if (typeof this.renderInvCategoriasTable === 'function') this.renderInvCategoriasTable();
+        } else if (Array.isArray(this.data.products)) {
+          this.data.products.forEach(p => { if (p && p._explicitStockEdit) delete p._explicitStockEdit; });
         }
         if (result && result.updatedAt) {
           this.data.updatedAt = result.updatedAt;
@@ -1519,16 +1525,9 @@ class NexusApp {
             return;
           }
 
-          const remoteTime = new Date(remote.updatedAt || 0).getTime();
-          const localTime = new Date(this.data.updatedAt || 0).getTime();
-          // If local data has changes fresher than or equal to remote, preserve local state
-          if (localTime >= remoteTime) {
-            return;
-          }
-
           // Structural fingerprint to detect real stock, price, debt, cash register, users and configuration updates
           const buildFingerprint = (d) => {
-            const pFp = (d.products || []).map(p => `${p.id}:${p.name}:${p.category}:${p.cost}:${p.price}:${p.stock}:${p.status}`).join('|');
+            const pFp = (d.products || []).map(p => `${p.id}:${p.name}:${p.category}:${p.measureType || 'Pesaje'}:${p.pieceWeight || 0}:${p.cost}:${p.price}:${p.stock}:${p.status}`).join('|');
             const cFp = (d.customers || []).map(c => `${c.id}:${c.creditBalance}`).join('|');
             const sFp = (d.suppliers || []).map(s => `${s.id}:${s.creditBalance}`).join('|');
             const uFp = (d.users || []).map(u => `${u.id}:${u.status}:${u.role}`).join('|');
@@ -3526,6 +3525,8 @@ class NexusApp {
             if (pCat === cId || pCat === oName || pCatName === oName || pCatName === cId) {
               p.category = cat.id;
               p.categoryName = newName;
+              p.stockUpdatedAt = Date.now();
+              p._explicitStockEdit = true;
             }
           });
 
@@ -3742,6 +3743,8 @@ class NexusApp {
 
           const minStock = targetProd.minStock !== undefined ? targetProd.minStock : (isUnidades ? 2 : 0.5);
           targetProd.status = targetProd.stock > minStock ? 'active' : (targetProd.stock > 0 ? 'low_stock' : 'out_of_stock');
+          targetProd.stockUpdatedAt = Date.now();
+          targetProd._explicitStockEdit = true;
 
           // 2. Sincronizar disponibilidad de gramos y valuación de categorías & KPIs
           if (!this.data.kpis) this.data.kpis = {};
@@ -3985,7 +3988,9 @@ class NexusApp {
           stock,
           isExtra: isExtraCat ? true : false,
           minStock: measureType === 'Pesaje' ? (weightUnit === 'kg' ? 0.001 : (weightUnit === 'mg' ? 500 : 0.5)) : 2,
-          status: !active ? 'inactive' : (stock > 0 ? 'active' : 'out_of_stock')
+          status: !active ? 'inactive' : (stock > 0 ? 'active' : 'out_of_stock'),
+          stockUpdatedAt: Date.now(),
+          _explicitStockEdit: true
         };
 
         this.data.products.unshift(newP);
@@ -4101,6 +4106,8 @@ class NexusApp {
 
           // GRAMAJE / CANTIDAD TOTAL DEL ARTÍCULO
           p.stock = parsedStock;
+          p.stockUpdatedAt = Date.now();
+          p._explicitStockEdit = true;
 
           const active = document.getElementById('edit-prod-active')?.checked !== false;
           if (!active) {
@@ -4143,12 +4150,19 @@ class NexusApp {
           // Cart synchronization: if product is in cart and stock is 0, update cart
           const cartItem = this.cart.find(c => String(c.product?.id) === String(p.id));
           if (cartItem) {
+            const isPesajeCart = (p.measureType || 'Pesaje') === 'Pesaje';
+            const pWeightCart = parseFloat(String(p.pieceWeight !== undefined && p.pieceWeight !== null ? p.pieceWeight : (p.weight || 0)).replace(',', '.')) || 0;
+            const isUnitWithWeightCart = !isPesajeCart && pWeightCart > 0;
+            const maxCartGramsOrUnits = isUnitWithWeightCart ? Math.round(p.stock * pWeightCart * 10000) / 10000 : p.stock;
             if (p.stock <= 0) {
               this.cart = this.cart.filter(c => String(c.product?.id) !== String(p.id));
               this.renderCart();
               this.showToast(`"${p.name}" se retiró del carrito porque se marcó como agotado`, 'warning');
-            } else if (cartItem.qty > p.stock) {
-              cartItem.qty = p.stock;
+            } else if (cartItem.qty > maxCartGramsOrUnits) {
+              cartItem.qty = maxCartGramsOrUnits;
+              if (!isPesajeCart) {
+                cartItem.unitsCount = Math.max(1, Math.round(p.stock));
+              }
               this.renderCart();
               this.showToast(`Cantidad de "${p.name}" en carrito ajustada al stock actual (${p.stock})`, 'warning');
             }
@@ -6524,6 +6538,8 @@ class NexusApp {
         targetProd.stock = Math.round(Math.max(0, currentStock - qtyToRevert) * 10000) / 10000;
         const minStock = targetProd.minStock !== undefined ? targetProd.minStock : 1;
         targetProd.status = targetProd.stock > minStock ? 'active' : (targetProd.stock > 0 ? 'low_stock' : 'out_of_stock');
+        targetProd.stockUpdatedAt = Date.now();
+        targetProd._explicitStockEdit = true;
         revertedStock = true;
       }
     }
@@ -25542,8 +25558,7 @@ class NexusApp {
           );
 
           if (exactCodeMatches.length === 1) {
-            this.addToCart(exactCodeMatches[0].id);
-            this.showToast(`Producto agregado: "${exactCodeMatches[0].name}" [${exactCodeMatches[0].sku || exactCodeMatches[0].code || exactCodeMatches[0].id}]`, 'success');
+            this.openAddToCartModal(exactCodeMatches[0].id);
             searchInput.value = '';
             this.renderPOSProducts();
             return;
@@ -25556,8 +25571,7 @@ class NexusApp {
           // Priority 2: Exactly 1 matching product for current search term
           const filtered = (this.data.products || []).filter(p => this.matchesProductSearch(p, term));
           if (filtered.length === 1) {
-            this.addToCart(filtered[0].id);
-            this.showToast(`Producto agregado: "${filtered[0].name}" [${filtered[0].sku || filtered[0].id}]`, 'success');
+            this.openAddToCartModal(filtered[0].id);
             searchInput.value = '';
             this.renderPOSProducts();
           } else if (filtered.length > 1) {
@@ -25907,7 +25921,7 @@ class NexusApp {
 
     if (elQtyLabel) {
       if (isUnitWithWeight) {
-        elQtyLabel.textContent = `⚖️ Gramaje Total a Vender (${pWeight} g/u) *`;
+        elQtyLabel.textContent = `📦 Cantidad de Unidades a Vender (${pWeight} g/u) *`;
       } else if (isPesaje) {
         elQtyLabel.textContent = '⚖️ Cantidad / Gramos a Vender *';
       } else {
@@ -25961,26 +25975,29 @@ class NexusApp {
     const existing = this.cart.find(i => i.product.id === p.id);
     let defaultQty = 1;
     if (existing) {
-      defaultQty = existing.qty;
+      if (isUnitWithWeight) {
+        defaultQty = existing.unitsCount || Math.max(1, Math.round(existing.qty / pWeight));
+      } else {
+        defaultQty = existing.qty;
+      }
     } else {
       if (isPesaje) {
         defaultQty = stockNum <= 10 ? stockNum : 1;
-      } else if (isUnitWithWeight) {
-        defaultQty = (stockNum === 1 && pWeight > 0) ? pWeight : (pWeight > 0 ? pWeight : 1);
       } else {
         defaultQty = 1;
       }
     }
 
+    const qtyInputUnit = isPesaje ? (p.weightUnit || 'g') : 'u.';
     if (elQtyInput) {
-      elQtyInput.value = this.formatNumberWithCommas(defaultQty, isPesaje || isUnitWithWeight);
-      elQtyInput.max = maxAvailableQty;
+      elQtyInput.value = this.formatNumberWithCommas(defaultQty, isPesaje);
+      elQtyInput.max = stockNum;
     }
-    if (elUnitBadge) elUnitBadge.textContent = unit;
+    if (elUnitBadge) elUnitBadge.textContent = qtyInputUnit;
     if (elMaxStockHint) {
       elMaxStockHint.textContent = isUnitWithWeight
-        ? `Máx: ${this.formatNumberWithCommas(maxAvailableQty, true)} g (${stockNum} u.)`
-        : `Máx: ${stockNum} ${unit}`;
+        ? `Máx: ${stockNum} u. (${this.formatNumberWithCommas(maxAvailableQty, true)} g)`
+        : `Máx: ${stockNum} ${qtyInputUnit}`;
     }
 
     let initialPrice = 0;
@@ -25995,15 +26012,16 @@ class NexusApp {
     this._lastAddToCartSource = 'unit';
     this._isSyncingAddToCartFields = false;
 
+    const effectiveModalQty = isUnitWithWeight ? Math.round(defaultQty * pWeight * 10000) / 10000 : defaultQty;
     if (elPriceInput) {
       elPriceInput.value = initialPrice > 0 ? this.formatNumberWithCommas(initialPrice) : '';
     }
-    const initialTotal = Math.round(defaultQty * initialPrice);
+    const initialTotal = Math.round(effectiveModalQty * initialPrice);
     if (elTotalPriceInput) {
       elTotalPriceInput.value = initialTotal > 0 ? this.formatNumberWithCommas(initialTotal) : '';
     }
 
-    this.updateAddToCartModalProfitability(defaultQty, initialPrice, initialTotal);
+    this.updateAddToCartModalProfitability(effectiveModalQty, initialPrice, initialTotal);
     this.openModal('pos-add-to-cart-modal');
 
     setTimeout(() => {
@@ -26014,10 +26032,21 @@ class NexusApp {
     }, 150);
   }
 
+  getAddToCartEffectiveQty() {
+    const pId = document.getElementById('pos-add-product-id')?.value;
+    const p = this.data.products.find(item => item.id === pId);
+    const rawQty = this.parseCleanNumber(document.getElementById('pos-add-qty-input')?.value, true) || 0;
+    if (!p) return rawQty;
+    const isPesaje = (p.measureType || 'Pesaje') === 'Pesaje';
+    const pWeight = parseFloat(String(p.pieceWeight !== undefined && p.pieceWeight !== null ? p.pieceWeight : (p.weight || 0)).replace(',', '.')) || 0;
+    const isUnitWithWeight = !isPesaje && pWeight > 0;
+    return isUnitWithWeight ? Math.round(rawQty * pWeight * 10000) / 10000 : rawQty;
+  }
+
   onAddToCartFieldAChange() {
     if (this._isSyncingAddToCartFields) return;
     this._lastAddToCartSource = 'unit';
-    const qty = this.parseCleanNumber(document.getElementById('pos-add-qty-input')?.value, true) || 0;
+    const qty = this.getAddToCartEffectiveQty();
     const unitPrice = this.parseCleanNumber(document.getElementById('pos-add-custom-price-input')?.value, false) || 0;
     const totalPrice = Math.round(qty * unitPrice);
 
@@ -26034,7 +26063,7 @@ class NexusApp {
   onAddToCartFieldBChange() {
     if (this._isSyncingAddToCartFields) return;
     this._lastAddToCartSource = 'total';
-    const qty = this.parseCleanNumber(document.getElementById('pos-add-qty-input')?.value, true) || 0;
+    const qty = this.getAddToCartEffectiveQty();
     const totalPrice = this.parseCleanNumber(document.getElementById('pos-add-total-price-input')?.value, false) || 0;
     const unitPrice = qty > 0 ? Math.round(totalPrice / qty) : 0;
 
@@ -26050,25 +26079,25 @@ class NexusApp {
 
   onAddToCartQtyChange() {
     if (this._isSyncingAddToCartFields) return;
-    const qty = this.parseCleanNumber(document.getElementById('pos-add-qty-input')?.value, true) || 0;
+    const qty = this.getAddToCartEffectiveQty();
     const elPrice = document.getElementById('pos-add-custom-price-input');
     const elTotal = document.getElementById('pos-add-total-price-input');
 
     let unitPrice = this.parseCleanNumber(elPrice?.value, false) || 0;
     let totalPrice = this.parseCleanNumber(elTotal?.value, false) || 0;
 
-    if (this._lastAddToCartSource === 'total' && totalPrice > 0) {
-      unitPrice = qty > 0 ? Math.round(totalPrice / qty) : 0;
-      if (elPrice) {
-        this._isSyncingAddToCartFields = true;
-        elPrice.value = unitPrice > 0 ? this.formatNumberWithCommas(unitPrice) : '';
-        this._isSyncingAddToCartFields = false;
-      }
-    } else {
+    if (unitPrice > 0) {
       totalPrice = Math.round(qty * unitPrice);
       if (elTotal) {
         this._isSyncingAddToCartFields = true;
         elTotal.value = totalPrice > 0 ? this.formatNumberWithCommas(totalPrice) : '';
+        this._isSyncingAddToCartFields = false;
+      }
+    } else if (totalPrice > 0) {
+      unitPrice = qty > 0 ? Math.round(totalPrice / qty) : 0;
+      if (elPrice) {
+        this._isSyncingAddToCartFields = true;
+        elPrice.value = unitPrice > 0 ? this.formatNumberWithCommas(unitPrice) : '';
         this._isSyncingAddToCartFields = false;
       }
     }
@@ -26238,25 +26267,18 @@ class NexusApp {
     if (!input || !p) return;
 
     const isPesaje = (p.measureType || 'Pesaje') === 'Pesaje';
-    const pWeight = parseFloat(String(p.pieceWeight !== undefined && p.pieceWeight !== null ? p.pieceWeight : (p.weight || 0)).replace(',', '.')) || 0;
-    const isUnitWithWeight = !isPesaje && pWeight > 0;
     const stockUnits = parseFloat(String(p.stock || 0).replace(',', '.')) || 0;
-    const maxStock = isUnitWithWeight ? Math.round(stockUnits * pWeight * 10000) / 10000 : stockUnits;
+    const maxStock = isPesaje ? stockUnits : Math.max(1, Math.floor(stockUnits));
 
-    let step = 1;
-    if (isPesaje) {
-      step = (p.stock < 1 ? 0.05 : 0.10);
-    } else if (isUnitWithWeight) {
-      step = pWeight;
-    }
+    const step = isPesaje ? (p.stock < 1 ? 0.05 : 0.10) : 1;
     const deltaStep = delta > 0 ? step : -step;
 
-    let cur = this.parseCleanNumber(input.value, isPesaje || isUnitWithWeight);
-    let next = Math.round((cur + deltaStep) * 10000) / 10000;
-    const minVal = isUnitWithWeight ? pWeight : (isPesaje ? 0.001 : 1);
+    let cur = this.parseCleanNumber(input.value, isPesaje);
+    let next = isPesaje ? Math.round((cur + deltaStep) * 10000) / 10000 : Math.round(cur + deltaStep);
+    const minVal = isPesaje ? 0.001 : 1;
     if (next < minVal) next = minVal;
     if (next > maxStock) next = maxStock;
-    input.value = this.formatNumberWithCommas(next, isPesaje || isUnitWithWeight);
+    input.value = this.formatNumberWithCommas(next, isPesaje);
     this.onAddToCartQtyChange();
   }
 
@@ -26306,10 +26328,23 @@ class NexusApp {
     const isPesaje = (p.measureType || 'Pesaje') === 'Pesaje';
     const pWeight = parseFloat(String(p.pieceWeight !== undefined && p.pieceWeight !== null ? p.pieceWeight : (p.weight || 0)).replace(',', '.')) || 0;
     const isUnitWithWeight = !isPesaje && pWeight > 0;
-    const maxStock = isUnitWithWeight ? Math.round(stockNum * pWeight * 10000) / 10000 : stockNum;
     const unit = (isPesaje || isUnitWithWeight) ? 'g' : 'u.';
 
-    const qty = this.parseCleanNumber(qtyInput?.value, isPesaje || isUnitWithWeight);
+    const rawQty = this.parseCleanNumber(qtyInput?.value, true);
+    if (!isPesaje && rawQty > 0 && (rawQty % 1 !== 0)) {
+      this.showToast(`Este producto se vende por Unidades. Ingresa la cantidad de unidades enteras a vender (ej. 1, 2, 3), no los gramos.`, 'warning');
+      if (qtyInput) qtyInput.focus();
+      return;
+    }
+
+    const unitsCount = isPesaje ? 1 : Math.round(rawQty);
+    const qty = isPesaje
+      ? rawQty
+      : (isUnitWithWeight ? Math.round(unitsCount * pWeight * 10000) / 10000 : unitsCount);
+    const maxInputStock = stockNum;
+    const inputUnitLabel = isPesaje ? 'g' : 'u.';
+    const inputValToCheck = isPesaje ? qty : unitsCount;
+
     let price = this.parseCleanNumber(priceInput?.value, false);
     const totalPrice = this.parseCleanNumber(totalPriceInput?.value, false);
 
@@ -26317,12 +26352,12 @@ class NexusApp {
       price = Math.round(totalPrice / qty);
     }
 
-    if (qty <= 0) {
+    if (inputValToCheck <= 0) {
       this.showToast('Ingrese una cantidad válida mayor a 0', 'warning');
       return;
     }
-    if (qty > maxStock) {
-      this.showToast(`La cantidad supera el stock disponible (${maxStock} ${unit})`, 'warning');
+    if (inputValToCheck > maxInputStock) {
+      this.showToast(`La cantidad (${inputValToCheck} ${inputUnitLabel}) supera el stock disponible (${maxInputStock} ${inputUnitLabel})`, 'warning');
       return;
     }
     if (isNaN(price) || price < 0) {
@@ -26339,9 +26374,13 @@ class NexusApp {
       this.showToast(`⚠️ Venta por debajo del costo: pérdida de ${this.formatCurrency(totalCost - totalSale)} COP`, 'warning');
     }
 
-    this.addToCart(p.id, qty, price);
+    this.addToCart(p.id, qty, price, unitsCount);
     this.closeModal('pos-add-to-cart-modal');
-    this.showToast(`Agregado: ${p.name} (${this.formatNumberWithCommas(qty, isPesaje || isUnitWithWeight)} ${unit} a ${this.formatCurrency(price)})`, 'success');
+    if (isUnitWithWeight) {
+      this.showToast(`Agregado: ${p.name} (${unitsCount} u. / ${this.formatNumberWithCommas(qty, true)} g a ${this.formatCurrency(price)}/g)`, 'success');
+    } else {
+      this.showToast(`Agregado: ${p.name} (${this.formatNumberWithCommas(qty, isPesaje)} ${unit} a ${this.formatCurrency(price)})`, 'success');
+    }
   }
 
   setCartItemPrice(productId, rawValue) {
@@ -26356,7 +26395,7 @@ class NexusApp {
     this.showToast(`Precio actualizado: ${item.product.name} a ${this.formatCurrency(item.customPrice)}`, 'info');
   }
 
-  addToCart(productId, qty = null, customPrice = null) {
+  addToCart(productId, qty = null, customPrice = null, explicitUnitsCount = null) {
     const product = this.data.products.find(p => p.id === productId);
     if (!product) return;
     const stockNum = parseFloat(String(product.stock || 0).replace(',', '.')) || 0;
@@ -26379,8 +26418,22 @@ class NexusApp {
     if (existing) {
       if (qty !== null) {
         existing.qty = qty;
+        if (!isPesaje) {
+          existing.unitsCount = explicitUnitsCount !== null
+            ? Math.max(1, Math.round(explicitUnitsCount))
+            : (isUnitWithWeight ? Math.max(1, Math.round(qty / pWeight)) : Math.max(1, Math.round(qty)));
+        }
+      } else if (!isPesaje) {
+        const curUnits = existing.unitsCount || (isUnitWithWeight ? Math.max(1, Math.round(existing.qty / pWeight)) : Math.max(1, Math.round(existing.qty)));
+        const nextUnits = curUnits + 1;
+        if (nextUnits > stockNum) {
+          this.showToast(`Alcanzado límite de stock disponible (${stockNum} u.)`, 'warning');
+          return;
+        }
+        existing.unitsCount = nextUnits;
+        existing.qty = isUnitWithWeight ? Math.round(nextUnits * pWeight * 10000) / 10000 : nextUnits;
       } else {
-        const step = isPesaje ? (stockNum < 1 ? 0.05 : 0.10) : (isUnitWithWeight ? pWeight : 1);
+        const step = stockNum < 1 ? 0.05 : 0.10;
         const nextQty = Math.round((existing.qty + step) * 100) / 100;
         if (nextQty > maxStock) {
           this.showToast(`Alcanzado límite de stock disponible (${maxStock} ${unit})`, 'warning');
@@ -26393,10 +26446,18 @@ class NexusApp {
       }
     } else {
       const defaultPesajeQty = (stockNum > 0 && stockNum <= 10) ? stockNum : 1;
-      const initialQty = qty !== null ? qty : (isPesaje ? defaultPesajeQty : (isUnitWithWeight ? pWeight : 1));
+      const initialUnits = !isPesaje
+        ? (explicitUnitsCount !== null
+            ? Math.max(1, Math.round(explicitUnitsCount))
+            : (qty !== null ? (isUnitWithWeight ? Math.max(1, Math.round(qty / pWeight)) : Math.max(1, Math.round(qty))) : 1))
+        : 1;
+      const initialQty = qty !== null
+        ? qty
+        : (isPesaje ? defaultPesajeQty : (isUnitWithWeight ? Math.round(initialUnits * pWeight * 10000) / 10000 : initialUnits));
       this.cart.push({
         product,
         qty: initialQty,
+        unitsCount: initialUnits,
         customPrice: resolvedPrice,
         basePrice: product.price || 0
       });
@@ -26411,24 +26472,34 @@ class NexusApp {
     const isPesaje = (cartItem.product.measureType || 'Pesaje') === 'Pesaje';
     const pWeight = parseFloat(String(cartItem.product.pieceWeight !== undefined && cartItem.product.pieceWeight !== null ? cartItem.product.pieceWeight : (cartItem.product.weight || 0)).replace(',', '.')) || 0;
     const isUnitWithWeight = !isPesaje && pWeight > 0;
-    const unit = (isPesaje || isUnitWithWeight) ? (cartItem.product.weightUnit || 'g') : 'u.';
     const maxStockUnits = parseFloat(String(cartItem.product.stock || 0).replace(',', '.')) || 0;
-    const maxStock = isUnitWithWeight ? Math.round(maxStockUnits * pWeight * 10000) / 10000 : maxStockUnits;
 
-    let step = 1;
-    if (isPesaje) {
-      step = (cartItem.product.stock < 1 ? 0.05 : 0.10);
-    } else if (isUnitWithWeight) {
-      step = pWeight;
+    if (!isPesaje) {
+      const curUnits = cartItem.unitsCount || (isUnitWithWeight ? Math.max(1, Math.round(cartItem.qty / pWeight)) : Math.max(1, Math.round(cartItem.qty)));
+      const newUnits = curUnits + (delta > 0 ? 1 : -1);
+      if (newUnits <= 0) {
+        this.cart.splice(itemIndex, 1);
+      } else {
+        if (newUnits > maxStockUnits) {
+          this.showToast(`Stock máximo disponible: ${maxStockUnits} u.`, 'warning');
+          return;
+        }
+        cartItem.unitsCount = newUnits;
+        cartItem.qty = isUnitWithWeight ? Math.round(newUnits * pWeight * 10000) / 10000 : newUnits;
+      }
+      this.renderCart();
+      return;
     }
-    const deltaStep = delta > 0 ? step : -step;
 
+    const unit = cartItem.product.weightUnit || 'g';
+    const step = cartItem.product.stock < 1 ? 0.05 : 0.10;
+    const deltaStep = delta > 0 ? step : -step;
     const newQty = Math.round((Number(cartItem.qty) + Number(deltaStep)) * 10000) / 10000;
     if (newQty <= 0) {
       this.cart.splice(itemIndex, 1);
     } else {
-      if (newQty > maxStock) {
-        this.showToast(`Stock máximo disponible: ${maxStock} ${unit}`, 'warning');
+      if (newQty > maxStockUnits) {
+        this.showToast(`Stock máximo disponible: ${maxStockUnits} ${unit}`, 'warning');
         return;
       }
       cartItem.qty = newQty;
@@ -26443,18 +26514,31 @@ class NexusApp {
     const isPesaje = (cartItem.product.measureType || 'Pesaje') === 'Pesaje';
     const pWeight = parseFloat(String(cartItem.product.pieceWeight !== undefined && cartItem.product.pieceWeight !== null ? cartItem.product.pieceWeight : (cartItem.product.weight || 0)).replace(',', '.')) || 0;
     const isUnitWithWeight = !isPesaje && pWeight > 0;
-    const unit = (isPesaje || isUnitWithWeight) ? (cartItem.product.weightUnit || 'g') : 'u.';
     const maxStockUnits = parseFloat(String(cartItem.product.stock || 0).replace(',', '.')) || 0;
-    const maxStock = isUnitWithWeight ? Math.round(maxStockUnits * pWeight * 10000) / 10000 : maxStockUnits;
 
-    let val = this.parseCleanNumber(rawValue, isPesaje || isUnitWithWeight);
+    if (!isPesaje) {
+      const val = this.parseCleanNumber(rawValue, true);
+      if (isNaN(val) || val <= 0) {
+        this.cart.splice(itemIndex, 1);
+      } else if (val % 1 !== 0) {
+        this.showToast('La cantidad de Unidades debe ser un número entero (ej. 1, 2, 3).', 'warning');
+      } else if (val > maxStockUnits) {
+        this.showToast(`La cantidad (${val} u.) supera el stock disponible (${maxStockUnits} u.).`, 'warning');
+      } else {
+        cartItem.unitsCount = Math.round(val);
+        cartItem.qty = isUnitWithWeight ? Math.round(cartItem.unitsCount * pWeight * 10000) / 10000 : cartItem.unitsCount;
+      }
+      this.renderCart();
+      return;
+    }
+
+    const unit = cartItem.product.weightUnit || 'g';
+    let val = this.parseCleanNumber(rawValue, true);
     if (isNaN(val) || val <= 0) {
       this.cart.splice(itemIndex, 1);
+    } else if (val > maxStockUnits) {
+      this.showToast(`La cantidad (${val} ${unit}) supera el stock disponible (${maxStockUnits} ${unit}).`, 'warning');
     } else {
-      if (val > maxStock) {
-        this.showToast(`Ajustado al máximo disponible: ${maxStock} ${unit}`, 'warning');
-        val = maxStock;
-      }
       cartItem.qty = Math.round(val * 10000) / 10000;
     }
     this.renderCart();
@@ -26503,9 +26587,13 @@ class NexusApp {
       const effectivePrice = this.getCartItemPrice(item);
       const itemTotal = effectivePrice * item.qty;
       subtotal += itemTotal;
-      const step = isPesaje ? (item.product.stock < 1 ? 0.05 : 0.10) : (isUnitWithWeight ? pWeight : 1);
+      const step = isPesaje ? (item.product.stock < 1 ? 0.05 : 0.10) : 1;
       const basePrice = Number(item.basePrice !== undefined ? item.basePrice : item.product.price) || 0;
-      const unitsCount = isUnitWithWeight ? Math.round((item.qty / pWeight) * 100) / 100 : item.qty;
+      const unitsCount = !isPesaje
+        ? (item.unitsCount || (isUnitWithWeight ? Math.max(1, Math.round(item.qty / pWeight)) : Math.max(1, Math.round(item.qty))))
+        : item.qty;
+      const qtyDisplayVal = isPesaje ? item.qty : unitsCount;
+      const qtyDisplayUnit = isPesaje ? unit : 'u.';
 
       return `
         <div class="cart-item">
@@ -26519,7 +26607,7 @@ class NexusApp {
                 <span>Código: ${this.escapeHtml(item.product.sku || item.product.code || item.product.id)}</span>
                 ${isUnitWithWeight ? `
                   <span class="badge" style="background:#FEF3C7; color:#B45309; font-size:0.68rem; font-weight:700; padding:1px 5px; margin-left:4px;" title="Peso: ${pWeight} g/u (${unitsCount} u. = ${(Math.round(item.qty * 100) / 100)} g)">
-                    ⚖️ ${pWeight} g/u. (${unitsCount} u.)
+                    ⚖️ ${pWeight} g/u. (${(Math.round(item.qty * 100) / 100)} g)
                   </span>
                 ` : ''}
               </div>
@@ -26567,11 +26655,11 @@ class NexusApp {
               <button type="button" class="qty-btn" onclick="app.updateCartQty('${item.product.id}', -${step})" title="Restar">-</button>
               <div class="cart-qty-input-wrap">
                 <input type="text" inputmode="decimal"
-                       value="${this.formatNumberWithCommas(item.qty, isPesaje || isUnitWithWeight)}"
+                       value="${this.formatNumberWithCommas(qtyDisplayVal, isPesaje)}"
                        class="cart-qty-input"
                        onchange="app.setCartQty('${item.product.id}', this.value)"
-                       title="Cantidad en ${unit} a vender">
-                <span class="cart-unit-label" style="color:${isPesaje ? '#D97706' : '#4F46E5'};">${unit}</span>
+                       title="Cantidad en ${qtyDisplayUnit} a vender">
+                <span class="cart-unit-label" style="color:${isPesaje ? '#D97706' : '#4F46E5'};">${qtyDisplayUnit}</span>
               </div>
               <button type="button" class="qty-btn" onclick="app.updateCartQty('${item.product.id}', ${step})" title="Sumar">+</button>
             </div>
@@ -26628,7 +26716,9 @@ class NexusApp {
       }
       const pPrice = this.getCartItemPrice(item);
       const itemSubtotal = pPrice * item.qty;
-      const unitsCount = isUnitWithWeight ? Math.round((qtyNum / pWeight) * 100) / 100 : qtyNum;
+      const unitsCount = !isPesaje
+        ? (item.unitsCount || (isUnitWithWeight ? Math.max(1, Math.round(qtyNum / pWeight)) : Math.max(1, Math.round(qtyNum))))
+        : qtyNum;
 
       return `
         <div class="checkout-item-row" style="display:flex; justify-content:space-between; align-items:center; background:var(--card-bg); padding:0.55rem 0.75rem; border-radius:6px; border:1px solid var(--border-color);">
@@ -27488,14 +27578,18 @@ class NexusApp {
           const isUnitWithWeight = !isPesaje && pWeight > 0;
           
           let unitsToDeduct = soldQty;
-          if (isUnitWithWeight && pWeight > 0) {
-            const rawUnits = soldQty / pWeight;
-            unitsToDeduct = Math.abs(rawUnits - Math.round(rawUnits)) < 0.005
-              ? Math.round(rawUnits)
-              : Math.round(rawUnits * 10000) / 10000;
+          if (!isPesaje) {
+            if (cartItem.unitsCount !== undefined && cartItem.unitsCount !== null && Number(cartItem.unitsCount) > 0) {
+              unitsToDeduct = Math.max(1, Math.round(Number(cartItem.unitsCount)));
+            } else if (isUnitWithWeight && pWeight > 0) {
+              unitsToDeduct = Math.max(1, Math.round(soldQty / pWeight));
+            } else {
+              unitsToDeduct = Math.max(1, Math.round(soldQty));
+            }
           }
 
           p.stock = Math.max(0, Math.round(((Number(p.stock) || 0) - unitsToDeduct) * 10000) / 10000);
+          p.stockUpdatedAt = Date.now();
           if (p.stock <= 0) {
             p.stock = 0;
             p.status = 'out_of_stock';
@@ -27624,7 +27718,11 @@ class NexusApp {
           const isPesaje = (i.product?.measureType || 'Pesaje') === 'Pesaje';
           const pWeight = parseFloat(String(i.product?.pieceWeight !== undefined && i.product?.pieceWeight !== null ? i.product.pieceWeight : (i.product?.weight || 0)).replace(',', '.')) || 0;
           const isUnitWithWeight = !isPesaje && pWeight > 0;
-          const unitsSold = isUnitWithWeight ? Math.max(1, Math.round((i.qty / pWeight) * 100) / 100) : (isPesaje ? 1 : i.qty);
+          const unitsSold = !isPesaje
+            ? (i.unitsCount !== undefined && i.unitsCount !== null && Number(i.unitsCount) > 0
+                ? Math.max(1, Math.round(Number(i.unitsCount)))
+                : (isUnitWithWeight ? Math.max(1, Math.round(i.qty / pWeight)) : Math.max(1, Math.round(i.qty))))
+            : 1;
           const unit = (isPesaje || isUnitWithWeight) ? (i.product?.weightUnit || 'g') : 'u.';
           return {
             id: i.product.id,
@@ -27940,7 +28038,7 @@ class NexusApp {
     const modal = document.getElementById('search-modal');
     if (modal) modal.classList.remove('open');
     this.switchView('pos');
-    this.addToCart(productId);
+    this.openAddToCartModal(productId);
   }
 
   setupKeyboardShortcuts() {
