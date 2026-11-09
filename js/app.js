@@ -3611,9 +3611,22 @@ class NexusApp {
           }
 
           const catObj = (this.data.categories || []).find(c => c.id === selectedCatId) || 
-            (this.data.categories || []).find(c => c.id === 'oro18k') || 
-            { id: 'oro18k', name: 'Oro 18K Italiano & Ley' };
+            (this.data.categories || []).find(c => !c.isExtra && c.type !== 'extras') || 
+            (this.data.categories || [])[0] ||
+            { id: 'oronacional', name: 'Oro Nacional' };
           const isExtras = catObj.type === 'extras' || catObj.isExtra;
+
+          if (!isExtras && isUnidades && productGrams <= 0) {
+            this.showToast('Para compras por Unidades en categorías de joyería/metal, ingresa los Gramos por pieza, o cambia el Tipo de Medida a Pesaje (Gramos).', 'warning');
+            const gramsEl = document.getElementById('po-product-grams');
+            if (gramsEl) gramsEl.focus();
+            return;
+          }
+
+          if (isUnidades && (quantity % 1 !== 0)) {
+            this.showToast(`La cantidad de Unidades debe ser un número entero. Si deseas registrar ${quantity} g en gramos, selecciona Tipo de Medida: Pesaje (Gramos).`, 'warning');
+            return;
+          }
 
           let targetProd = null;
           // Prioridad 1: Coincidencia exacta por SKU/código especificado por el usuario
@@ -3904,6 +3917,20 @@ class NexusApp {
         const stock = this.parseCleanNumber(document.getElementById('new-prod-stock')?.value, true);
         const active = document.getElementById('new-prod-active')?.checked !== false;
 
+        if (!isExtraCat && measureType === 'Unidades' && pieceWeight <= 0) {
+          this.showToast('Para productos por Unidades en categorías de joyería/metal, debes ingresar el Peso por pieza (g), o seleccionar Tipo de Medida: Pesaje (Gramos).', 'warning');
+          const pwInput = document.getElementById('new-prod-piece-weight');
+          if (pwInput) pwInput.focus();
+          return;
+        }
+
+        if ((isExtraCat || measureType === 'Unidades') && stock > 0 && (stock % 1 !== 0)) {
+          this.showToast(`La cantidad de Unidades debe ser un número entero (ej. 1, 2, 3). Si deseas registrar ${stock} g en gramos, selecciona una categoría de metal y Tipo de Medida: Pesaje (Gramos).`, 'warning');
+          const stInput = document.getElementById('new-prod-stock');
+          if (stInput) stInput.focus();
+          return;
+        }
+
         const categoryName = catObj ? catObj.name : 'General';
 
         const newProdUniqueId = this.generateUniqueProductId();
@@ -3983,12 +4010,9 @@ class NexusApp {
               return;
             }
           }
-          p.sku = newSku;
-          p.name = document.getElementById('edit-prod-name').value.trim();
-          p.measureType = document.getElementById('edit-prod-measure-type').value;
-          p.weightUnit = p.measureType === 'Pesaje' ? (document.getElementById('edit-prod-weight-unit')?.value || 'g') : 'u.';
-          p.unit = p.weightUnit;
-          const pieceWeight = p.measureType === 'Unidades'
+
+          const editMeasureType = document.getElementById('edit-prod-measure-type').value;
+          const pieceWeight = editMeasureType === 'Unidades'
             ? this.parseCleanNumber(document.getElementById('edit-prod-piece-weight')?.value, true)
             : 0;
 
@@ -3998,6 +4022,31 @@ class NexusApp {
             String(c.name).toLowerCase().trim() === String(editCatId).toLowerCase().trim()
           );
           const isExtraCat = catObj && (catObj.type === 'extras' || catObj.isExtra);
+          const effectiveMeasureType = isExtraCat ? 'Unidades' : editMeasureType;
+
+          let rawStock = document.getElementById('edit-prod-stock')?.value;
+          let newStock = this.parseCleanNumber(rawStock, true);
+          const parsedStock = isNaN(newStock) || newStock < 0 ? 0 : Math.round(newStock * 10000) / 10000;
+
+          if (!isExtraCat && effectiveMeasureType === 'Unidades' && pieceWeight <= 0) {
+            this.showToast('Para productos por Unidades en categorías de joyería/metal, debes ingresar el Peso por pieza (g), o seleccionar Tipo de Medida: Pesaje (Gramos).', 'warning');
+            const pwInput = document.getElementById('edit-prod-piece-weight');
+            if (pwInput) pwInput.focus();
+            return;
+          }
+
+          if (effectiveMeasureType === 'Unidades' && parsedStock > 0 && (parsedStock % 1 !== 0)) {
+            this.showToast(`La cantidad de Unidades debe ser un número entero (ej. 1, 2, 3). Si deseas registrar ${parsedStock} g en gramos, selecciona una categoría de metal y Tipo de Medida: Pesaje (Gramos).`, 'warning');
+            const stInput = document.getElementById('edit-prod-stock');
+            if (stInput) stInput.focus();
+            return;
+          }
+
+          p.sku = newSku;
+          p.name = document.getElementById('edit-prod-name').value.trim();
+          p.measureType = effectiveMeasureType;
+          p.weightUnit = p.measureType === 'Pesaje' ? (document.getElementById('edit-prod-weight-unit')?.value || 'g') : 'u.';
+          p.unit = p.weightUnit;
 
           p.pieceWeight = isExtraCat ? 0 : (pieceWeight > 0 ? pieceWeight : 0);
           p.weight = isExtraCat ? 0 : (pieceWeight > 0 ? pieceWeight : 0);
@@ -4017,9 +4066,7 @@ class NexusApp {
           }
 
           // GRAMAJE / CANTIDAD TOTAL DEL ARTÍCULO
-          let rawStock = document.getElementById('edit-prod-stock')?.value;
-          let newStock = this.parseCleanNumber(rawStock, true);
-          p.stock = isNaN(newStock) || newStock < 0 ? 0 : Math.round(newStock * 10000) / 10000;
+          p.stock = parsedStock;
 
           const active = document.getElementById('edit-prod-active')?.checked !== false;
           if (!active) {
@@ -4094,10 +4141,16 @@ class NexusApp {
     const catSelect = document.getElementById('po-category-select');
 
     if (catSelect && this.data.categories) {
-      catSelect.innerHTML = this.data.categories.map(c => 
-        `<option value="${this.escapeHtml(c.id)}">${this.escapeHtml(c.name)}</option>`
+      const sortedCats = [...this.data.categories].sort((a, b) => {
+        const aExtra = (a.type === 'extras' || a.isExtra) ? 1 : 0;
+        const bExtra = (b.type === 'extras' || b.isExtra) ? 1 : 0;
+        return aExtra - bExtra;
+      });
+      const defaultCat = sortedCats.find(c => !c.isExtra && c.type !== 'extras') || sortedCats[0];
+      catSelect.innerHTML = sortedCats.map(c => 
+        `<option value="${this.escapeHtml(c.id)}" ${defaultCat && c.id === defaultCat.id ? 'selected' : ''}>${this.escapeHtml(c.name)}</option>`
       ).join('');
-      if (!catSelect.value) catSelect.value = 'oro18k';
+      if (defaultCat) catSelect.value = defaultCat.id;
     }
 
     if (suppSelect) {
@@ -4147,12 +4200,15 @@ class NexusApp {
     if (!catSelect) return;
     const catId = catSelect.value;
     const catObj = (this.data.categories || []).find(c => c.id === catId);
+    const measureSelect = document.getElementById('po-measure-type');
     if (catObj && (catObj.type === 'extras' || catObj.isExtra || catObj.measureType === 'Unidades' || catId === 'relojes' || catId === 'accesorios')) {
-      const measureSelect = document.getElementById('po-measure-type');
       if (measureSelect) {
         measureSelect.value = 'Unidades';
         this.onPurchaseMeasureTypeChange();
       }
+    } else if (catObj && measureSelect) {
+      measureSelect.value = catObj.measureType || 'Pesaje';
+      this.onPurchaseMeasureTypeChange();
     }
     const catInfo = document.getElementById('po-preview-cat-info');
     if (catInfo && catObj) {
@@ -4308,7 +4364,7 @@ class NexusApp {
         gramsInput.value = val > 0 ? this.formatNumberWithCommas(val, true) : '';
       }
       if (catInfo) catInfo.textContent = `Categoría: ${matchedProd.categoryName || matchedProd.category || 'General'}`;
-      this.updatePurchaseCalculations();
+      this.onPurchaseMeasureTypeChange();
     } else {
       const hiddenId = document.getElementById('po-product-id');
       if (hiddenId) hiddenId.value = '';
@@ -5123,15 +5179,30 @@ class NexusApp {
     const select = document.getElementById(selectId);
     if (!select) return;
     const sVal = String(selectedVal || '').toLowerCase().trim();
-    select.innerHTML = (this.data.categories || []).map(cat => {
+    const sortedCats = [...(this.data.categories || [])].sort((a, b) => {
+      const aExtra = (a.type === 'extras' || a.isExtra) ? 1 : 0;
+      const bExtra = (b.type === 'extras' || b.isExtra) ? 1 : 0;
+      return aExtra - bExtra;
+    });
+    const defaultCat = sortedCats.find(cat => !cat.isExtra && cat.type !== 'extras') || sortedCats[0];
+    let matchedId = '';
+    select.innerHTML = sortedCats.map(cat => {
       const cId = String(cat.id || '').toLowerCase().trim();
       const cName = String(cat.name || '').toLowerCase().trim();
-      const isSelected = sVal !== '' && (cId === sVal || cName === sVal);
+      const isSelected = sVal !== ''
+        ? (cId === sVal || cName === sVal)
+        : (defaultCat && cat.id === defaultCat.id);
+      if (isSelected) matchedId = cat.id;
       return `<option value="${this.escapeHtml(cat.id)}" ${isSelected ? 'selected' : ''}>${this.escapeHtml(cat.name)}</option>`;
     }).join('');
+    if (matchedId) {
+      select.value = matchedId;
+    } else if (defaultCat) {
+      select.value = defaultCat.id;
+    }
   }
 
-  onProductCategoryChange(prefix = 'new') {
+  onProductCategoryChange(prefix = 'new', isInitialLoad = false) {
     const catSelect = document.getElementById(`${prefix}-prod-cat`);
     const costInput = document.getElementById(`${prefix}-prod-cost`);
     const hintEl = document.getElementById(`${prefix}-prod-cat-cost-hint`);
@@ -5171,8 +5242,19 @@ class NexusApp {
       return;
     }
 
+    // Categoría de joyería / metal precioso (no extra): restaurar tipo de medida y campos de gramaje
+    if (pieceWeightInput && pieceWeightInput.value === '0') {
+      pieceWeightInput.value = '';
+    }
+    if (measureSelect) {
+      if (prefix === 'new' || !isInitialLoad) {
+        measureSelect.value = cat.measureType === 'Unidades' ? 'Unidades' : 'Pesaje';
+      }
+      this.onMeasureTypeChange(prefix);
+    }
+
     if (cat.cost) {
-      if (costInput && (!costInput.value || this.parseCleanNumber(costInput.value) === 0)) {
+      if (costInput && (prefix === 'new' || !costInput.value || this.parseCleanNumber(costInput.value) === 0)) {
         costInput.value = this.formatNumberWithCommas(cat.cost);
         this.updateProductCostProfitPreview(prefix);
       }
@@ -5245,12 +5327,12 @@ class NexusApp {
     const pieceWeightInput = document.getElementById('edit-prod-piece-weight');
     if (pieceWeightInput) {
       const pW = p.pieceWeight !== undefined && p.pieceWeight !== null ? p.pieceWeight : (p.weight || '');
-      pieceWeightInput.value = pW !== '' ? this.formatNumberWithCommas(pW, true) : '';
+      pieceWeightInput.value = (pW !== '' && Number(pW) > 0) ? this.formatNumberWithCommas(pW, true) : '';
     }
 
     this.populateProductCategorySelect('edit-prod-cat', p.category);
     this.populateProductSupplierSelect('edit-prod-supplier', p.supplier || 'ANONIMO');
-    this.onProductCategoryChange('edit');
+    this.onProductCategoryChange('edit', true);
 
     const activeCb = document.getElementById('edit-prod-active');
     if (activeCb) activeCb.checked = p.status !== 'inactive';
@@ -9653,20 +9735,23 @@ class NexusApp {
 
     items.forEach(it => {
       const p = products.find(x => x.id === it.id || x.sku === it.sku);
-      const isPesaje = it.measureType 
-        ? (it.measureType === 'Pesaje') 
-        : (p ? (p.measureType || 'Pesaje') === 'Pesaje' : (Number(it.qty) % 1 !== 0));
+      const pWeight = Number(it.pieceWeight || p?.pieceWeight || p?.weight) || 0;
       const qty = Number(it.qty) || 0;
+      const isDecimalWithoutPieceWeight = pWeight === 0 && qty > 0 && (qty % 1 !== 0);
+      const isPesaje = isDecimalWithoutPieceWeight || (it.measureType 
+        ? (it.measureType === 'Pesaje') 
+        : (p ? (p.measureType || 'Pesaje') === 'Pesaje' : (qty % 1 !== 0)));
 
       if (isPesaje) {
         pesajeItemCount++;
         pesajeGrams += qty;
       } else {
         unidadesItemCount++;
-        const pWeight = Number(it.pieceWeight || p?.pieceWeight || p?.weight) || 0;
-        const u = (pWeight > 0 && qty >= pWeight) 
-          ? Math.round((qty / pWeight) * 100) / 100 
-          : (qty || 1);
+        const u = (it.unitsCount !== undefined && it.unitsCount !== null && Number(it.unitsCount) > 0)
+          ? Number(it.unitsCount)
+          : ((pWeight > 0 && qty >= pWeight) 
+              ? Math.round((qty / pWeight) * 100) / 100 
+              : (qty || 1));
         unidadesCount += u;
         if (pWeight > 0) {
           unidadesGrams += (u * pWeight);
@@ -20203,14 +20288,14 @@ class NexusApp {
     const ticketItems = (tx.items && Array.isArray(tx.items) && tx.items.length > 0)
       ? tx.items.map(i => {
           const p = this.data.products?.find(prod => (i.id && prod.id === i.id) || (i.sku && prod.sku === i.sku));
-          const pWeight = p ? parseFloat(String(p.pieceWeight !== undefined && p.pieceWeight !== null ? p.pieceWeight : (p.weight || 0)).replace(',', '.')) || 0 : 0;
+          const pWeight = Number(i.pieceWeight || (p ? (p.pieceWeight !== undefined && p.pieceWeight !== null ? p.pieceWeight : (p.weight || 0)) : 0)) || 0;
           
           let unitsCount = 1;
-          if (i.unitsCount !== undefined && i.unitsCount !== null) {
+          if (i.unitsCount !== undefined && i.unitsCount !== null && Number(i.unitsCount) > 0) {
             unitsCount = Number(i.unitsCount) || 1;
           } else if (pWeight > 0 && i.qty >= pWeight) {
             unitsCount = Math.round((i.qty / pWeight) * 100) / 100;
-          } else if (i.measureType === 'Pesaje' || !i.measureType) {
+          } else if (i.measureType === 'Pesaje' || !i.measureType || (pWeight === 0 && Number(i.qty) % 1 !== 0)) {
             unitsCount = 1;
           } else {
             unitsCount = Math.round(Number(i.qty || 1) * 100) / 100;
@@ -27479,16 +27564,21 @@ class NexusApp {
         items: soldCart.map(i => {
           const pPrice = this.getCartItemPrice(i);
           const isPesaje = (i.product?.measureType || 'Pesaje') === 'Pesaje';
-          const unit = isPesaje ? (i.product?.weightUnit || 'g') : 'u.';
+          const pWeight = parseFloat(String(i.product?.pieceWeight !== undefined && i.product?.pieceWeight !== null ? i.product.pieceWeight : (i.product?.weight || 0)).replace(',', '.')) || 0;
+          const isUnitWithWeight = !isPesaje && pWeight > 0;
+          const unitsSold = isUnitWithWeight ? Math.max(1, Math.round((i.qty / pWeight) * 100) / 100) : (isPesaje ? 1 : i.qty);
+          const unit = (isPesaje || isUnitWithWeight) ? (i.product?.weightUnit || 'g') : 'u.';
           return {
             id: i.product.id,
             sku: i.product.sku || i.product.code || i.product.id || '',
             name: i.product.name,
             qty: i.qty,
-            quantity: i.qty,
+            quantity: isPesaje ? i.qty : unitsSold,
+            unitsCount: unitsSold,
+            grams: (isPesaje || isUnitWithWeight) ? i.qty : 0,
             unit: unit,
             measureType: i.product?.measureType || 'Pesaje',
-            pieceWeight: Number(i.product?.pieceWeight || i.product?.weight) || 0,
+            pieceWeight: pWeight,
             price: pPrice,
             total: Math.round(pPrice * i.qty)
           };
