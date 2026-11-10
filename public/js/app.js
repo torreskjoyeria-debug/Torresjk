@@ -512,6 +512,27 @@ class NexusApp {
   async init() {
     const setup = async () => {
       try {
+        // Fast Auth & Screen Protection: Prevent unauthenticated interface flash
+        const preAuthStored = SafeStorage.getItem('nexus_pos_user');
+        const loginOverlay = document.getElementById('login-screen');
+        if (!preAuthStored) {
+          document.body.classList.add('not-authenticated');
+          if (loginOverlay) {
+            loginOverlay.classList.add('active');
+            loginOverlay.style.display = 'flex';
+          }
+        } else {
+          try {
+            const preUser = JSON.parse(preAuthStored);
+            if (preUser && preUser.name) {
+              const nameEl = document.getElementById('sidebar-user-name');
+              const roleEl = document.getElementById('sidebar-user-role');
+              if (nameEl) nameEl.textContent = preUser.name;
+              if (roleEl) roleEl.textContent = preUser.role || 'Usuario';
+            }
+          } catch (_) {}
+        }
+
         this.checkTheme();
         await this.loadStoresList();
         try {
@@ -1834,6 +1855,31 @@ class NexusApp {
     };
   }
 
+  _updateSessionLastActive() {
+    try {
+      const stored = SafeStorage.getItem('nexus_pos_user');
+      if (stored) {
+        const u = JSON.parse(stored);
+        u._sessionLastActive = Date.now();
+        SafeStorage.setItem('nexus_pos_user', JSON.stringify(u));
+      }
+    } catch (_) {}
+  }
+
+  clearLoginInputs() {
+    try {
+      const emailEl = document.getElementById('login-email');
+      const pwdEl = document.getElementById('login-password');
+      if (emailEl) emailEl.value = '';
+      if (pwdEl) pwdEl.value = '';
+      const errBox = document.getElementById('login-error-alert');
+      if (errBox) {
+        errBox.style.display = 'none';
+        errBox.textContent = '';
+      }
+    } catch (_) {}
+  }
+
   checkAuth() {
     const stored = SafeStorage.getItem('nexus_pos_user');
     const loginOverlay = document.getElementById('login-screen');
@@ -1853,6 +1899,29 @@ class NexusApp {
           this.attachGlobalNumberMasks();
           return;
         }
+
+        // Automatic expiration for Admin and Super Admin sessions after 60 min inactivity on store terminals
+        const isAdminRole = parsed.role === 'Super Admin' || parsed.role === 'Administrador';
+        if (isAdminRole && parsed._sessionLastActive) {
+          const MAX_ADMIN_INACTIVITY_MS = 60 * 60 * 1000;
+          if (Date.now() - parsed._sessionLastActive > MAX_ADMIN_INACTIVITY_MS) {
+            SafeStorage.removeItem('nexus_pos_user');
+            this.currentUser = null;
+            document.body.classList.add('not-authenticated');
+            if (loginOverlay) {
+              loginOverlay.classList.add('active');
+              loginOverlay.style.display = 'flex';
+            }
+            this.clearLoginInputs();
+            const nameEl = document.getElementById('sidebar-user-name');
+            const roleEl = document.getElementById('sidebar-user-role');
+            if (nameEl) nameEl.textContent = 'Usuario';
+            if (roleEl) roleEl.textContent = 'Sesión expirada';
+            this.showToast('La sesión de Administrador finalizó por inactividad. Ingresa tus credenciales.', 'info');
+            return;
+          }
+        }
+
         const user = this.data.users.find(u => u.email?.toLowerCase() === parsed.email?.toLowerCase() || u.id === parsed.id);
         if (user) {
           if (user.status !== 'Active') {
@@ -1863,10 +1932,12 @@ class NexusApp {
               loginOverlay.classList.add('active');
               loginOverlay.style.display = 'flex';
             }
+            this.clearLoginInputs();
             this.showToast('Tu cuenta ha sido desactivada. Comunícate con el Super Administrador.', 'danger');
             return;
           }
           this.currentUser = user;
+          this._updateSessionLastActive();
           document.body.classList.remove('not-authenticated');
           if (loginOverlay) {
             loginOverlay.classList.remove('active');
@@ -1880,11 +1951,17 @@ class NexusApp {
       } catch(e) {}
     }
 
+    this.currentUser = null;
     document.body.classList.add('not-authenticated');
     if (loginOverlay) {
       loginOverlay.classList.add('active');
       loginOverlay.style.display = 'flex';
     }
+    this.clearLoginInputs();
+    const nameEl = document.getElementById('sidebar-user-name');
+    const roleEl = document.getElementById('sidebar-user-role');
+    if (nameEl) nameEl.textContent = 'Usuario';
+    if (roleEl) roleEl.textContent = 'No autenticado';
   }
 
   switchAuthTab(mode) {
@@ -1945,7 +2022,7 @@ class NexusApp {
 
     // Ghost SuperAdmin (Nexus Owner - Never visible in data.users)
     const isOwnerEmail = cleanEmail === 'owner@nexuspos.io' || cleanEmail === 'nexusowner@nexuspos.io' || cleanEmail === 'nexusowner' || cleanEmail === 'nexus.owner@pro.io';
-    const isOwnerPass = cleanPass === 'admin123' || cleanPass === '123456' || cleanPass === 'Owner2026*' || cleanPass === 'NxPr025@SaaS';
+    const isOwnerPass = cleanPass === 'Owner2026*' || cleanPass === 'NxPr025@SaaS';
     if (isOwnerEmail && isOwnerPass) {
       this.loginUser(this._ghostUserObj());
       return;
@@ -1954,13 +2031,13 @@ class NexusApp {
     const user = (this.data.users || []).find(u => {
       const uEmail = (u.email || '').trim().toLowerCase();
       const uName = (u.name || '').trim().toLowerCase();
+      const uId = (u.id || '').trim().toLowerCase();
       const isMatch = uEmail === cleanEmail || 
                       uName === cleanEmail || 
-                      (cleanEmail.includes('jojan') && (uEmail.includes('jojan') || uName.includes('jojan')));
+                      uId === cleanEmail;
       if (!isMatch) return false;
 
-      // Allow admin123 or 123456 for Jojan Torres
-      if (cleanPass === 'admin123' || cleanPass === '123456') return true;
+      // Strict credential matching against registered password
       return String(u.password || '').trim() === cleanPass;
     });
 
@@ -2018,7 +2095,12 @@ class NexusApp {
 
   async loginUser(user) {
     this.currentUser = user;
-    SafeStorage.setItem('nexus_pos_user', JSON.stringify(user));
+    const sessionUser = {
+      ...user,
+      _sessionCreatedAt: Date.now(),
+      _sessionLastActive: Date.now()
+    };
+    SafeStorage.setItem('nexus_pos_user', JSON.stringify(sessionUser));
     document.body.classList.remove('not-authenticated');
 
     if (user.storeId && user.storeId !== '*' && user.role !== 'Super Admin') {
@@ -2036,6 +2118,7 @@ class NexusApp {
       loginOverlay.style.display = 'none';
     }
 
+    this.clearLoginInputs();
     this.updateUIForRole();
     this.renderCashStatusIndicator();
     this.attachGlobalNumberMasks();
@@ -2072,7 +2155,12 @@ class NexusApp {
       loginOverlay.classList.add('active');
       loginOverlay.style.display = 'flex';
     }
-    this.showToast('Sesión cerrada correctamente', 'info');
+    this.clearLoginInputs();
+    const nameEl = document.getElementById('sidebar-user-name');
+    const roleEl = document.getElementById('sidebar-user-role');
+    if (nameEl) nameEl.textContent = 'Usuario';
+    if (roleEl) roleEl.textContent = 'Sesión cerrada';
+    this.showToast('Sesión cerrada correctamente. Ingresa tus credenciales de cajero.', 'info');
   }
 
   hasPermission(parentViewId, subViewId) {
@@ -28354,6 +28442,18 @@ class NexusApp {
   }
 
   setupKeyboardShortcuts() {
+    // Session activity tracker (throttled to at most once every 60 seconds)
+    let lastSessionAct = 0;
+    const trackActivity = () => {
+      const now = Date.now();
+      if (now - lastSessionAct > 60000) {
+        lastSessionAct = now;
+        this._updateSessionLastActive();
+      }
+    };
+    window.addEventListener('pointerdown', trackActivity, { passive: true });
+    window.addEventListener('keydown', trackActivity, { passive: true });
+
     document.addEventListener('keydown', (e) => {
       const loginOverlay = document.getElementById('login-screen');
       if (loginOverlay && loginOverlay.classList.contains('active')) return;
