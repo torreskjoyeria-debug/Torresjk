@@ -3780,6 +3780,14 @@ class NexusApp {
     if (poForm) {
       poForm.addEventListener('submit', async (e) => {
         e.preventDefault();
+        if (this._isSubmittingPO) return;
+        this._isSubmittingPO = true;
+        const submitBtn = poForm.querySelector('button[type="submit"]');
+        const origBtnText = submitBtn ? submitBtn.innerHTML : '';
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.innerHTML = '<span>⏳ Guardando orden...</span>';
+        }
         try {
           if (!this.canPerformAction('create', 'purchase')) {
             this.showToast('Acceso Denegado: Tu rol no tiene permisos para crear órdenes de compra.', 'danger');
@@ -3885,13 +3893,15 @@ class NexusApp {
             this.data.products.push(targetProd);
           } else {
             // Si el producto existente estaba agotado (stock <= 0), permitir actualizar su configuración;
-            // si ya tiene existencias, preservar estrictamente su categoría y unidad de medida para no alterar el inventario
+            // si ya tiene existencias o tenía categoría asignada, preservarla estrictamente para no alterar el catálogo
             if ((Number(targetProd.stock) || 0) <= 0) {
+              if (!targetProd.category) {
+                targetProd.category = catObj.id;
+                targetProd.categoryName = catObj.name;
+              }
               targetProd.measureType = measureType;
               targetProd.weightUnit = isPesaje ? 'g' : 'u.';
               targetProd.unit = isPesaje ? 'g' : 'u.';
-              targetProd.category = catObj.id;
-              targetProd.categoryName = catObj.name;
               targetProd.isExtra = isExtras;
             }
             if (supp && supp !== 'Proveedor General') {
@@ -3911,6 +3921,7 @@ class NexusApp {
           // 1. Actualizar producto en inventario numéricamente seguro
           const currentStock = this.parseCleanNumber(targetProd.stock, true) || 0;
           targetProd.stock = Math.round((currentStock + quantity) * 10000) / 10000;
+          const previousCost = targetProd.cost !== undefined ? targetProd.cost : unitCost;
           if (unitCost > 0) {
             targetProd.cost = unitCost;
           }
@@ -3960,6 +3971,7 @@ class NexusApp {
             quantity: quantity,
             itemsCount: isUnidades ? quantity : 1,
             unitCost: unitCost,
+            previousProductCost: previousCost,
             productGrams: productGrams,
             totalGrams: totalGramsAdded,
             total: totalCost,
@@ -4080,6 +4092,12 @@ class NexusApp {
         } catch(err) {
           console.error('[NexusApp] Error creando orden de compra:', err);
           this.showToast(`Error al procesar orden de compra: ${err.message}`, 'danger');
+        } finally {
+          this._isSubmittingPO = false;
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = origBtnText;
+          }
         }
       });
     }
@@ -4458,8 +4476,14 @@ class NexusApp {
     const qtyLabel = document.getElementById('po-quantity-label');
     const qtyUnit = document.getElementById('po-quantity-unit');
     const costLabel = document.getElementById('po-unit-cost-label');
+    const costHint = document.getElementById('po-unit-cost-hint');
     const gramsGroup = document.getElementById('po-grams-group');
     const gramsInput = document.getElementById('po-product-grams');
+
+    const catSelect = document.getElementById('po-category-select');
+    const catId = catSelect?.value;
+    const catObj = (this.data.categories || []).find(c => c.id === catId);
+    const isExtras = catObj && (catObj.type === 'extras' || catObj.isExtra);
 
     if (isPesaje) {
       if (qtyLabel) qtyLabel.textContent = 'Cantidad en gramos *';
@@ -4467,7 +4491,8 @@ class NexusApp {
         qtyUnit.textContent = 'g';
         qtyUnit.style.color = '#D97706';
       }
-      if (costLabel) costLabel.textContent = 'Costo por gramo ($) *';
+      if (costLabel) costLabel.innerHTML = 'Costo de compra por gramo ($/g) *';
+      if (costHint) costHint.textContent = 'Costo de compra pactado por cada gramo de metal.';
       if (gramsGroup) gramsGroup.style.display = 'none';
       if (gramsInput) {
         gramsInput.required = false;
@@ -4479,7 +4504,16 @@ class NexusApp {
         qtyUnit.textContent = 'u.';
         qtyUnit.style.color = '#4F46E5';
       }
-      if (costLabel) costLabel.textContent = 'Costo unitario ($) *';
+      if (costLabel) {
+        costLabel.innerHTML = isExtras 
+          ? 'Costo unitario por pieza ($) *'
+          : 'Costo por gramo del metal ($/g) * <span style="font-size:0.75rem; color:#b45309; font-weight:normal;">(en joyas con peso, ingresa $/g)</span>';
+      }
+      if (costHint) {
+        costHint.textContent = isExtras
+          ? 'Costo de adquisición por cada pieza/unidad terminada.'
+          : 'En joyas finas por unidades con peso, ingresa el costo por gramo ($/g). El total se calcula: peso × unidades × $/g.';
+      }
       if (gramsGroup) gramsGroup.style.display = 'block';
       if (gramsInput) gramsInput.required = false;
     }
@@ -4610,15 +4644,20 @@ class NexusApp {
     const measureSelect = document.getElementById('po-measure-type');
     const isPesaje = (measureSelect?.value || 'Pesaje') === 'Pesaje';
 
-    const quantity = this.parseCleanNumber(document.getElementById('po-quantity')?.value, true);
-    const unitCost = this.parseCleanNumber(document.getElementById('po-unit-cost')?.value);
-    const pieceGrams = this.parseCleanNumber(document.getElementById('po-product-grams')?.value, true);
+    const quantity = this.parseCleanNumber(document.getElementById('po-quantity')?.value, true) || 0;
+    const unitCost = this.parseCleanNumber(document.getElementById('po-unit-cost')?.value) || 0;
+    const pieceGrams = this.parseCleanNumber(document.getElementById('po-product-grams')?.value, true) || 0;
+
+    const catSelect = document.getElementById('po-category-select');
+    const catId = catSelect?.value;
+    const catObj = (this.data.categories || []).find(c => c.id === catId);
+    const isExtras = catObj && (catObj.type === 'extras' || catObj.isExtra);
 
     let totalGrams = 0;
     if (isPesaje) {
       totalGrams = quantity;
     } else {
-      totalGrams = pieceGrams > 0 ? Math.round(quantity * pieceGrams * 100) / 100 : 0;
+      totalGrams = (!isExtras && pieceGrams > 0) ? Math.round(quantity * pieceGrams * 100) / 100 : 0;
     }
 
     const totalCost = totalGrams > 0 ? Math.round(totalGrams * unitCost) : Math.round(quantity * unitCost);
@@ -4627,13 +4666,19 @@ class NexusApp {
     const gramsPreview = document.getElementById('po-preview-grams');
 
     if (totalPreview) {
-      totalPreview.textContent = this.formatCurrency(totalCost);
+      let formulaText = '';
+      if (totalGrams > 0 && unitCost > 0) {
+        formulaText = ` <span style="font-size:0.75rem; font-weight:normal; color:var(--text-muted); display:inline-block; margin-left:4px;">(${this.formatNumberWithCommas(totalGrams, true)} g × ${this.formatCurrency(unitCost)}/g)</span>`;
+      } else if (quantity > 0 && unitCost > 0) {
+        formulaText = ` <span style="font-size:0.75rem; font-weight:normal; color:var(--text-muted); display:inline-block; margin-left:4px;">(${this.formatNumberWithCommas(quantity)} u. × ${this.formatCurrency(unitCost)}/u.)</span>`;
+      }
+      totalPreview.innerHTML = `${this.formatCurrency(totalCost)}${formulaText}`;
     }
     if (gramsPreview) {
       if (isPesaje) {
         gramsPreview.textContent = `${this.formatNumberWithCommas(totalGrams, true)} g`;
       } else {
-        gramsPreview.textContent = pieceGrams > 0 
+        gramsPreview.textContent = (!isExtras && pieceGrams > 0)
           ? `${this.formatNumberWithCommas(totalGrams, true)} g (${this.formatNumberWithCommas(quantity)} u.)`
           : `${this.formatNumberWithCommas(quantity)} u.`;
       }
@@ -6710,6 +6755,9 @@ class NexusApp {
       if (shouldRevert) {
         const currentStock = this.parseCleanNumber(targetProd.stock, true) || 0;
         targetProd.stock = Math.round(Math.max(0, currentStock - qtyToRevert) * 10000) / 10000;
+        if (po.previousProductCost !== undefined && Number(po.previousProductCost) > 0) {
+          targetProd.cost = Number(po.previousProductCost);
+        }
         const minStock = targetProd.minStock !== undefined ? targetProd.minStock : 1;
         targetProd.status = targetProd.stock > minStock ? 'active' : (targetProd.stock > 0 ? 'low_stock' : 'out_of_stock');
         targetProd.stockUpdatedAt = Date.now();
