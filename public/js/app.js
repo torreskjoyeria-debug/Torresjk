@@ -567,7 +567,7 @@ class NexusApp {
         const pView = urlParams.get('view');
         const sView = urlParams.get('sub');
         const qParam = urlParams.get('q');
-        if (pView && sView) {
+        if (pView && sView && this.hasPermission(pView, sView)) {
           this.switchSubView(pView, sView);
           if (sView === 'inf_tendencia') {
             if (qParam) {
@@ -576,6 +576,8 @@ class NexusApp {
               this.consultarTendencia(qParam);
             }
           }
+        } else {
+          this.ensureUserOnAllowedView();
         }
       } catch (err) {
         console.error('[NexusApp] Startup error:', err);
@@ -1897,6 +1899,7 @@ class NexusApp {
           this.updateUIForRole();
           this.renderCashStatusIndicator();
           this.attachGlobalNumberMasks();
+          this.ensureUserOnAllowedView();
           return;
         }
 
@@ -1946,6 +1949,7 @@ class NexusApp {
           this.updateUIForRole();
           this.renderCashStatusIndicator();
           this.attachGlobalNumberMasks();
+          this.ensureUserOnAllowedView();
           return;
         }
       } catch(e) {}
@@ -2128,12 +2132,79 @@ class NexusApp {
     await this.syncRemoteDataIfChanged();
     this.syncAllModules();
 
-    const isCajero = user.role?.toLowerCase().includes('cajero');
-    if (isCajero) {
-      this.switchView('pos');
-    } else {
-      this.switchSubView('dashboard', 'inicio');
+    this.ensureUserOnAllowedView();
+  }
+
+  ensureUserOnAllowedView() {
+    if (!this.currentUser) return;
+
+    const canDashboard = this.hasPermission('dashboard', 'inicio');
+    const canPOS = this.hasPermission('pos', null);
+    const isCajero = Boolean(this.currentUser.role?.toLowerCase().includes('cajero'));
+
+    // If current view is dashboard/inicio (or not set yet):
+    const isTargetingDashboard = !this.currentParentView || (this.currentParentView === 'dashboard' && (!this.currentSubView || this.currentSubView === 'inicio'));
+
+    if (isTargetingDashboard) {
+      if (!canDashboard || isCajero) {
+        if (canPOS) {
+          this.switchView('pos');
+          return;
+        }
+        this.navigateToFirstAllowedModule();
+        return;
+      } else {
+        this.switchSubView('dashboard', 'inicio');
+        return;
+      }
     }
+
+    // If already on another subview or parent view, verify permission
+    if (this.currentSubView) {
+      if (!this.hasPermission(this.currentParentView, this.currentSubView)) {
+        if (canPOS) {
+          this.switchView('pos');
+        } else {
+          this.navigateToFirstAllowedModule();
+        }
+      }
+    } else if (this.currentParentView) {
+      if (!this.hasPermission(this.currentParentView, null)) {
+        if (canPOS) {
+          this.switchView('pos');
+        } else {
+          this.navigateToFirstAllowedModule();
+        }
+      }
+    }
+  }
+
+  navigateToFirstAllowedModule() {
+    if (!this.currentUser) return;
+    if (this.hasPermission('dashboard', 'inicio')) {
+      this.switchSubView('dashboard', 'inicio');
+      return;
+    }
+    if (this.hasPermission('pos', null)) {
+      this.switchView('pos');
+      return;
+    }
+    const candidates = [
+      ['inventory', 'productos'],
+      ['finance', 'ventas'],
+      ['reports', 'cuadre_caja'],
+      ['dashboard', 'clientes'],
+      ['inventory', 'categorias'],
+      ['reports', 'rep_finanzas'],
+      ['informes', 'inf_balance']
+    ];
+    for (const [p, s] of candidates) {
+      if (this.hasPermission(p, s)) {
+        this.switchSubView(p, s);
+        return;
+      }
+    }
+    this.switchView('pos');
   }
 
   async switchUser(idOrRole) {
@@ -2473,6 +2544,9 @@ class NexusApp {
     if (btnMultistore) {
       btnMultistore.style.display = (this.currentUser?.role === 'Super Admin') ? 'inline-block' : 'none';
     }
+
+    // Auto-redirection guard: if current view is blocked (e.g. dashboard for cashiers), redirect to POS
+    this.ensureUserOnAllowedView();
   }
 
   /* --------------------------------------------------------------------------
@@ -2495,11 +2569,24 @@ class NexusApp {
     if (contentBody) contentBody.scrollTop = 0;
 
     this.currentParentView = parentViewId;
+    this.currentSubView = null;
     document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
     document.querySelectorAll('.view-container').forEach(el => el.classList.remove('active'));
     
     const target = document.getElementById(`view-${parentViewId}`);
     if (target) target.classList.add('active');
+
+    // Sincronizar estado visual de los items de navegación
+    document.querySelectorAll('.nav-item').forEach(navItem => {
+      const itemOnClick = navItem.getAttribute('onclick') || '';
+      const isMatch = itemOnClick.includes(`switchView('${parentViewId}')`);
+      navItem.classList.toggle('active', isMatch);
+    });
+
+    if (parentViewId === 'pos') {
+      this.renderPOSProducts();
+      this.renderCart();
+    }
 
     setTimeout(() => {
       if (contentBody) contentBody.scrollTop = 0;
@@ -2536,6 +2623,10 @@ class NexusApp {
       return;
     }
     if (!this.hasPermission(parentViewId, subViewId)) {
+      if ((parentViewId === 'dashboard' && (!subViewId || subViewId === 'inicio')) && this.hasPermission('pos', null)) {
+        this.switchView('pos');
+        return;
+      }
       this.showToast(`Acceso Restringido: Tu rol de ${this.currentUser.role} no tiene acceso a esta sección.`, 'warning');
       return;
     }
