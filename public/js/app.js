@@ -1359,13 +1359,15 @@ class NexusApp {
       // Requerimiento: Costo General e Inventario solo varían con compras o ingresos, NO bajan al vender
       if (!this.data.kpis.inventoryValue || this.data.kpis.inventoryValue <= 0) {
         const totalCostValue = this.data.products.reduce((acc, p) => acc + this.getProductTotalCost(p), 0);
-        this.data.kpis.inventoryValue = totalCostValue > 0 ? Math.round(totalCostValue * 100) / 100 : 183250000;
+        this.data.kpis.inventoryValue = Math.round(totalCostValue * 100) / 100;
       }
       if (!this.data.kpis.avgCostPerGram || this.data.kpis.avgCostPerGram <= 0) {
-        this.data.kpis.avgCostPerGram = 339352;
+        const totalG = this.data.products.reduce((acc, p) => acc + (this.getGramsFromProduct(p) || 0), 0);
+        const totalCost = this.data.products.reduce((acc, p) => acc + this.getProductTotalCost(p), 0);
+        this.data.kpis.avgCostPerGram = totalG > 0 ? Math.round(totalCost / totalG) : 0;
       }
       if (!this.data.kpis.avgCostGrams || this.data.kpis.avgCostGrams <= 0) {
-        this.data.kpis.avgCostGrams = 540;
+        this.data.kpis.avgCostGrams = Math.round(this.data.products.reduce((acc, p) => acc + (this.getGramsFromProduct(p) || 0), 0) * 100) / 100;
       }
       this.data.kpis.skusCount = this.data.products.length;
     }
@@ -3750,8 +3752,8 @@ class NexusApp {
           if (!this.data.kpis) this.data.kpis = {};
           this.data.kpis.inventoryValue = Math.round(this.data.products.reduce((acc, p) => acc + (this.getProductTotalCost(p) || 0), 0) * 100) / 100;
           if (totalGramsAdded > 0 && !isExtras) {
-            const currentGrams = this.data.kpis.avgCostGrams || 540;
-            const currentAvgCost = this.data.kpis.avgCostPerGram || 339352;
+            const currentGrams = this.data.kpis.avgCostGrams || 0;
+            const currentAvgCost = this.data.kpis.avgCostPerGram || 0;
             const newTotalCost = (currentGrams * currentAvgCost) + totalCost;
             const newTotalGrams = currentGrams + totalGramsAdded;
             this.data.kpis.avgCostGrams = Math.round(newTotalGrams * 100) / 100;
@@ -3865,21 +3867,12 @@ class NexusApp {
               suppObj.creditBalance = Math.round(((Number(suppObj.creditBalance) || 0) + totalCost) * 100) / 100;
             }
           } else if (paymentMethod && paymentMethod.toLowerCase().includes('efectivo')) {
-            // Descontar de gaveta de caja solo si el monto es viable frente al efectivo disponible
-            const currentDrawerCash = Number(this.data.cashShiftLog?.expectedCashInDrawer) || 0;
-            if (totalCost <= currentDrawerCash && currentDrawerCash > 0) {
-              if (!this.data.cashShiftLog) {
-                this.data.cashShiftLog = { openingCash: 0, cashSales: 0, cardSales: 0, cashExpenses: 0, expectedCashInDrawer: 0, status: 'Abierto' };
-              }
-              this.data.cashShiftLog.cashExpenses = Math.round(((Number(this.data.cashShiftLog.cashExpenses) || 0) + totalCost) * 100) / 100;
-              this.data.cashShiftLog.expectedCashInDrawer = Math.round(((Number(this.data.cashShiftLog.openingCash) || 0) + (Number(this.data.cashShiftLog.cashSales) || 0) - (Number(this.data.cashShiftLog.cashExpenses) || 0)) * 100) / 100;
-              if (this.data.store) {
-                this.data.store.cashInBox = this.data.cashShiftLog.expectedCashInDrawer;
-              }
-            }
+            // Descontar de gaveta de caja y sincronizar arqueo auditado del turno
+            this.calculateShiftTotals();
           }
 
           // 4. Guardar persistencia en MongoDB y db.json
+          this.calculateShiftTotals();
           await this.savePersistence();
 
           // 5. Sincronizar vistas y tablas en toda la aplicación
@@ -3998,11 +3991,12 @@ class NexusApp {
         const addedGrams = this.getGramsFromProduct(newP);
         if (!this.data.kpis) this.data.kpis = {};
         if (addedCost > 0) {
-          this.data.kpis.inventoryValue = Math.round(((this.data.kpis.inventoryValue || 183250000) + addedCost) * 100) / 100;
+          const totalVal = this.data.products.reduce((acc, p) => acc + (this.getProductTotalCost(p) || 0), 0);
+          this.data.kpis.inventoryValue = Math.round(totalVal * 100) / 100;
         }
         if (addedGrams > 0) {
-          const currentGrams = this.data.kpis.avgCostGrams || 540;
-          const currentAvgCost = this.data.kpis.avgCostPerGram || 339352;
+          const currentGrams = this.data.kpis.avgCostGrams || 0;
+          const currentAvgCost = this.data.kpis.avgCostPerGram || 0;
           const newTotalCost = (currentGrams * currentAvgCost) + addedCost;
           const newTotalGrams = currentGrams + addedGrams;
           this.data.kpis.avgCostGrams = Math.round(newTotalGrams * 100) / 100;
@@ -4127,11 +4121,12 @@ class NexusApp {
           const diffGrams = newProdGrams - oldProdGrams;
           if (!this.data.kpis) this.data.kpis = {};
           if (diffCost !== 0) {
-            this.data.kpis.inventoryValue = Math.max(0, Math.round(((this.data.kpis.inventoryValue || 183250000) + diffCost) * 100) / 100);
+            const totalVal = this.data.products.reduce((acc, prod) => acc + (this.getProductTotalCost(prod) || 0), 0);
+            this.data.kpis.inventoryValue = Math.round(totalVal * 100) / 100;
           }
           if (diffGrams !== 0) {
-            const currentGrams = this.data.kpis.avgCostGrams || 540;
-            const currentAvgCost = this.data.kpis.avgCostPerGram || 339352;
+            const currentGrams = this.data.kpis.avgCostGrams || 0;
+            const currentAvgCost = this.data.kpis.avgCostPerGram || 0;
             const newTotalCost = Math.max(0, (currentGrams * currentAvgCost) + diffCost);
             const newTotalGrams = Math.max(1, currentGrams + diffGrams);
             this.data.kpis.avgCostGrams = Math.round(newTotalGrams * 100) / 100;
@@ -7008,6 +7003,7 @@ class NexusApp {
       });
 
       this.closeModal('abono-modal');
+      this.calculateShiftTotals();
       await this.savePersistence();
       this.syncAllModules();
       this.renderCuadreCajaCard();
@@ -7229,7 +7225,10 @@ class NexusApp {
       gradIncome.addColorStop(0, 'rgba(99, 102, 241, 0.35)');
       gradIncome.addColorStop(1, 'rgba(99, 102, 241, 0.0)');
 
-      const txs = this.data.recentTransactions || [];
+      const txs = (this.data.recentTransactions || []).filter(t => {
+        const st = String(t.status || '').toLowerCase();
+        return st !== 'anulado' && st !== 'cancelado' && st !== 'cancelled';
+      });
       const exps = this.data.expenses || [];
       const realIncomeToday = txs.reduce((sum, t) => sum + (Number(t.total) || 0), 0);
       const realExpenseToday = exps.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
@@ -7500,6 +7499,8 @@ class NexusApp {
     const now = new Date();
     const todayTxs = (this.data.recentTransactions || []).filter(t => {
       if (!t || !t.date) return false;
+      const st = String(t.status || '').toLowerCase();
+      if (st === 'anulado' || st === 'cancelado' || st === 'cancelled') return false;
       const td = this.parseDateSafe(t.date);
       if (!td) return false;
       return td.getFullYear() === now.getFullYear() && td.getMonth() === now.getMonth() && td.getDate() === now.getDate();
@@ -7706,9 +7707,11 @@ class NexusApp {
     const now = new Date();
     const dateStr = now.toISOString().slice(0, 10);
 
-    // Mapear ventas por cliente
+    // Mapear ventas por cliente (excluyendo ventas anuladas)
     const customerSalesMap = {};
     transactions.forEach(tx => {
+      const st = String(tx.status || '').toLowerCase();
+      if (st === 'anulado' || st === 'cancelado' || st === 'cancelled') return;
       const cName = (tx.customer || '').trim().toLowerCase();
       const cId = (tx.customerId || '').trim().toLowerCase();
       const total = Number(tx.total) || 0;
@@ -9762,8 +9765,9 @@ class NexusApp {
         <div class="text-xs" style="color:var(--text-muted); font-family:monospace; margin-top:2px;">${this.escapeHtml(tx.time || '')}</div>
       ` : `<span style="font-weight:600; color:var(--text-main);">${this.escapeHtml(tx.time || '—')}</span>`;
 
+      const isAnulado = String(tx.status || '').toLowerCase() === 'anulado' || String(tx.status || '').toLowerCase() === 'cancelado';
       return `
-      <tr>
+      <tr style="${isAnulado ? 'opacity:0.65; background:rgba(239,68,68,0.03);' : ''}">
         <td><b>${this.escapeHtml(tx.id)}</b></td>
         <td>${dateDisplay}</td>
         <td>
@@ -9794,7 +9798,10 @@ class NexusApp {
           `}
         </td>
         <td><span class="font-bold" style="color:var(--text-main);">${this.formatCurrency(Math.abs(tx.total))}</span></td>
-        <td><span class="badge badge-active"><span class="badge-dot"></span>${this.escapeHtml(tx.status || 'Completado')}</span></td>
+        <td>${isAnulado 
+          ? `<span class="badge badge-inactive" style="background:rgba(239,68,68,0.12); color:#DC2626; border:1px solid rgba(239,68,68,0.25);"><span class="badge-dot" style="background:#DC2626;"></span>Anulado</span>`
+          : `<span class="badge badge-active"><span class="badge-dot"></span>${this.escapeHtml(tx.status || 'Completado')}</span>`
+        }</td>
         <td>
           <button class="btn-action-edit" onclick="app.showPastReceiptModal('${this.escapeHtml(tx.id)}')" title="Ver Recibo de esta Venta" style="font-size:0.75rem; padding:3px 8px;">
             🧾 Recibo
@@ -10182,8 +10189,9 @@ class NexusApp {
 
       const qtyInfo = this.formatTransactionQty(tx);
 
+      const isAnulado = String(tx.status || '').toLowerCase() === 'anulado' || String(tx.status || '').toLowerCase() === 'cancelado';
       return `
-      <tr>
+      <tr style="${isAnulado ? 'opacity:0.65; background:rgba(239,68,68,0.03);' : ''}">
         <td><b>${this.escapeHtml(tx.id)}</b></td>
         <td>${dateDisplay}</td>
         <td>
@@ -10230,17 +10238,150 @@ class NexusApp {
           `}
         </td>
         <td><span class="font-bold">${this.formatCurrency(Math.abs(tx.total))}</span></td>
-        <td><span class="badge badge-active"><span class="badge-dot"></span>${this.escapeHtml(tx.status || 'Completado')}</span></td>
+        <td>
+          <span class="badge ${isAnulado ? 'badge-inactive' : 'badge-active'}" style="${isAnulado ? 'color:#DC2626; background:rgba(239,68,68,0.12); font-weight:700;' : ''}">
+            <span class="badge-dot" style="${isAnulado ? 'background:#DC2626;' : ''}"></span>${this.escapeHtml(tx.status || 'Completado')}
+          </span>
+        </td>
         <td>
           <div class="action-btn-group">
             <button class="btn-action-edit" onclick="app.showPastReceiptModal('${this.escapeHtml(tx.id)}')" title="Ver Comprobante / Recibo">
-              🧾 Ver Recibo
+              🧾 Recibo
             </button>
+            ${!isAnulado ? `
+              <button class="btn-action-delete" onclick="app.voidSale('${this.escapeHtml(tx.id)}')" title="Anular venta y reingresar inventario" style="padding:3px 8px; font-size:0.75rem;">
+                🚫 Anular
+              </button>
+            ` : ''}
           </div>
         </td>
       </tr>
     `;
     }).join('');
+  }
+
+  async voidSale(txId) {
+    if (!this.canPerformAction('delete', 'sale') && !this.isSuperAdmin() && this.currentUser?.role !== 'Administrador') {
+      this.showToast('Acceso Denegado: No tienes permisos para anular ventas.', 'danger');
+      return;
+    }
+
+    const tx = (this.data.recentTransactions || []).find(t => t.id === txId);
+    if (!tx) {
+      this.showToast('Transacción no encontrada.', 'error');
+      return;
+    }
+
+    const isAlreadyVoid = String(tx.status || '').toLowerCase() === 'anulado' || String(tx.status || '').toLowerCase() === 'cancelado';
+    if (isAlreadyVoid) {
+      this.showToast('Esta venta ya se encuentra anulada.', 'warning');
+      return;
+    }
+
+    const totalFmt = this.formatCurrency(Math.abs(tx.total || 0));
+    const confirmMsg = `¿Estás seguro de anular la venta #${tx.id} (${totalFmt}) de ${tx.customer || 'Mostrador'}?\n\n• Los productos vendidos reingresarán automáticamente al inventario.\n• Si fue pagada en efectivo en el turno abierto, el saldo de caja se reajustará.\n• Si fue a crédito, se anulará la cuenta por cobrar.`;
+
+    if (!confirm(confirmMsg)) {
+      return;
+    }
+
+    // 1. Reintegrar inventario
+    let restoredItemsCount = 0;
+    if (Array.isArray(tx.items) && tx.items.length > 0) {
+      tx.items.forEach(it => {
+        let p = null;
+        if (it.product && it.product.id) {
+          p = (this.data.products || []).find(prod => prod.id === it.product.id);
+        }
+        if (!p && it.id) {
+          p = (this.data.products || []).find(prod => prod.id === it.id);
+        }
+        if (!p && it.sku) {
+          p = (this.data.products || []).find(prod => prod.sku && String(prod.sku).toLowerCase().trim() === String(it.sku).toLowerCase().trim());
+        }
+
+        if (p) {
+          const isPesaje = this.isProductSoldByGramsInPOS(p);
+          const pWeight = parseFloat(String(p?.pieceWeight !== undefined && p?.pieceWeight !== null ? p.pieceWeight : (p?.weight || 0)).replace(',', '.')) || 0;
+          let unitsToRestore = Number(it.qty) || 0;
+
+          if (!isPesaje) {
+            if (it.unitsCount !== undefined && it.unitsCount !== null && Number(it.unitsCount) > 0) {
+              unitsToRestore = Math.max(1, Math.round(Number(it.unitsCount)));
+            } else if (pWeight > 0 && unitsToRestore >= pWeight) {
+              unitsToRestore = Math.max(1, Math.round(unitsToRestore / pWeight));
+            } else {
+              unitsToRestore = Math.max(1, Math.round(unitsToRestore));
+            }
+          }
+
+          p.stock = Math.round(((Number(p.stock) || 0) + unitsToRestore) * 10000) / 10000;
+          p.stockUpdatedAt = Date.now();
+          if (p.stock > (Number(p.minStock) || 0)) {
+            p.status = 'active';
+          } else if (p.stock > 0) {
+            p.status = 'low_stock';
+          }
+          p.sold30d = Math.max(0, Math.round(((Number(p.sold30d) || 0) - unitsToRestore) * 10000) / 10000);
+          const now = new Date();
+          const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+          const currentDay = now.getDate();
+          if (p.monthlySales && p.monthlySales[currentMonthKey] && p.monthlySales[currentMonthKey][currentDay]) {
+            p.monthlySales[currentMonthKey][currentDay] = Math.max(0, Math.round(((Number(p.monthlySales[currentMonthKey][currentDay]) || 0) - unitsToRestore) * 10000) / 10000);
+          }
+          restoredItemsCount++;
+        }
+      });
+    }
+
+    // 2. Revertir crédito si fue a crédito, pago mixto o plan separe
+    const isCreditMethod = (tx.paymentMethod || '').toLowerCase().includes('crédito') || (tx.paymentMethod || '').toLowerCase().includes('credito') || tx.selectedPayMethod === 'credit';
+    const isSepare = (tx.paymentMethod || '').toLowerCase().includes('separe') || tx.selectedPayMethod === 'separe';
+    const isMixed = (tx.paymentMethod || '').toLowerCase().includes('mixto') || tx.selectedPayMethod === 'mixed' || !!tx.paymentBreakdown;
+    
+    let creditAmtToRevert = 0;
+    if (isMixed && tx.paymentBreakdown?.credit > 0) {
+      creditAmtToRevert = Number(tx.paymentBreakdown.credit) || 0;
+    } else if (isCreditMethod) {
+      creditAmtToRevert = Number(tx.total) || 0;
+    } else if (isSepare) {
+      const abono = Number(tx.separeAbono !== undefined ? tx.separeAbono : (tx.paymentBreakdown?.cash || 0)) || 0;
+      creditAmtToRevert = Math.max(0, (Number(tx.total) || 0) - abono);
+    }
+
+    if (creditAmtToRevert > 0 && tx.customer) {
+      const cust = (this.data.customers || []).find(c => c.name && c.name.toLowerCase().trim() === tx.customer.toLowerCase().trim());
+      if (cust) {
+        cust.creditBalance = Math.round(Math.max(0, (Number(cust.creditBalance) || 0) - creditAmtToRevert) * 100) / 100;
+      }
+      const cc = (this.data.customerCredits || []).find(c => 
+        (c.invoiceId && c.invoiceId === tx.id) || 
+        (c.customer && c.customer.toLowerCase().trim() === tx.customer.toLowerCase().trim() && c.currentBalance > 0 && (c.totalGranted === creditAmtToRevert || c.currentBalance >= creditAmtToRevert))
+      );
+      if (cc) {
+        cc.currentBalance = Math.round(Math.max(0, (Number(cc.currentBalance) || 0) - creditAmtToRevert) * 100) / 100;
+        if (cc.currentBalance <= 0) cc.status = 'Anulado';
+      }
+    }
+
+    // 3. Marcar venta como Anulada
+    tx.status = 'Anulado';
+    tx.anuladoAt = new Date().toISOString();
+    tx.anuladoBy = this.currentUser?.name || 'Administración';
+
+    // 4. Sincronizar categorías y arqueo del turno
+    this.syncAllCategoryGrams();
+    this.calculateShiftTotals();
+
+    await this.savePersistence();
+    this.syncAllModules();
+    this.renderFinVentasTable();
+    this.renderCuadreCajaCard();
+    this.renderCashStatusIndicator();
+    this.renderDashboardMetrics();
+    this.renderPOSProducts();
+
+    this.showToast(`Venta #${tx.id} anulada correctamente. ${restoredItemsCount} producto(s) reintegrados al inventario.`, 'success');
   }
 
   exportFinVentasExcel() {
@@ -10761,33 +10902,6 @@ class NexusApp {
         </tr>
       `;
     }).join('');
-  }
-
-  setSupplierCreditFilter(filter, btnEl) {
-    this.currentSupplierCreditFilter = filter || 'pending';
-    const btnPending = document.getElementById('supp-cred-tab-pending');
-    const btnPaid = document.getElementById('supp-cred-tab-paid');
-    const btnAll = document.getElementById('supp-cred-tab-all');
-
-    [btnPending, btnPaid, btnAll].forEach(b => {
-      if (!b) return;
-      b.classList.remove('btn-primary');
-      b.classList.add('btn-secondary');
-    });
-
-    if (btnEl) {
-      btnEl.classList.remove('btn-secondary');
-      btnEl.classList.add('btn-primary');
-    } else if (filter === 'pending' && btnPending) {
-      btnPending.classList.remove('btn-secondary');
-      btnPending.classList.add('btn-primary');
-    }
-
-    this.renderFinCreditosProveedoresTable();
-  }
-
-  filterSupplierCreditsTable() {
-    this.renderFinCreditosProveedoresTable();
   }
 
   setSupplierCreditFilter(filter, btnEl) {
@@ -12229,6 +12343,8 @@ class NexusApp {
 
     return (this.data.recentTransactions || []).filter(tx => {
       if (!tx.date) return false;
+      const st = String(tx.status || '').toLowerCase();
+      if (st === 'anulado' || st === 'cancelado' || st === 'cancelled') return false;
 
       // 1. Explicit shiftId match
       if (tx.shiftId) {
@@ -12413,6 +12529,11 @@ class NexusApp {
 
     // Sincronizar en tiempo real el registro activo de caja para garantizar exactitud al 100%
     if (shift && shift.status === 'Abierto') {
+      shift.cashSales = totalEfectivo;
+      shift.cardSales = totalTransferencia + totalTarjeta;
+      shift.transferSales = totalTransferencia;
+      shift.tarjetaSales = totalTarjeta;
+      shift.creditSales = totalCredito;
       shift.cashExpenses = cashExpenses;
       shift.bankExpenses = bankExpenses;
       shift.totalExpenses = totalExpenses;
@@ -12886,9 +13007,18 @@ class NexusApp {
       }
     });
 
-    // 3. Compras de Mercancía (Efectivo & Transferencia / Banco)
+    // 3. Compras de Mercancía de Contado (Efectivo & Transferencia / Banco)
     (this.data.purchases || []).forEach(po => {
       if (matchesShift(po.date, po.time, po.shiftId, po.timestamp, po.closedShiftId)) {
+        // Excluir compras a crédito pendientes donde NO hubo desembolso inmediato de dinero
+        const isCreditPurchase = (po.paymentStatus && po.paymentStatus !== 'Pagado Total' && po.paymentStatus !== 'Pagado') || 
+                                 (po.paymentMethod && po.paymentMethod.toLowerCase().includes('crédito'));
+        if (isCreditPurchase && (!po.paidAmount || Number(po.paidAmount) <= 0)) {
+          return;
+        }
+        const amt = Math.round(Number(po.paidAmount !== undefined && po.paidAmount !== null && Number(po.paidAmount) > 0 ? po.paidAmount : po.total) || 0);
+        if (amt <= 0) return;
+
         const m = (po.paymentMethod || 'Efectivo').toLowerCase();
         const isCash = m.includes('efectivo') || m.includes('caja') || m.includes('gaveta') || m.includes('cash');
         items.push({
@@ -12906,7 +13036,7 @@ class NexusApp {
           badgeColor: isCash ? '#7E22CE' : '#3730A3',
           icon: '💎',
           cashier: po.cashier || 'Cajero',
-          amount: Math.round(Number(po.total) || 0)
+          amount: amt
         });
       }
     });
@@ -14130,14 +14260,21 @@ class NexusApp {
                   </tr>
                 </thead>
                 <tbody>
-                  ${dayTxs.map(t => `
-                    <tr style="border-bottom:1px solid var(--border-color);">
-                      <td style="padding:4px 8px;"><b>${this.escapeHtml(t.id || '')}</b> <span style="color:var(--text-muted); font-size:0.72rem;">${this.escapeHtml(t.time || '')}</span></td>
-                      <td style="padding:4px 8px;">${this.escapeHtml(t.customer || 'Cliente General')}</td>
+                  ${dayTxs.map(t => {
+                    const isAnul = String(t.status || '').toLowerCase() === 'anulado' || String(t.status || '').toLowerCase() === 'cancelado';
+                    return `
+                    <tr style="border-bottom:1px solid var(--border-color); ${isAnul ? 'opacity:0.65; background:rgba(239,68,68,0.04);' : ''}">
+                      <td style="padding:4px 8px;">
+                        <b>${this.escapeHtml(t.id || '')}</b> 
+                        <span style="color:var(--text-muted); font-size:0.72rem;">${this.escapeHtml(t.time || '')}</span>
+                        ${isAnul ? '<span class="badge" style="background:rgba(239,68,68,0.12); color:#DC2626; font-size:0.65rem; font-weight:700; padding:1px 5px; border-radius:3px; margin-left:3px;">Anulado</span>' : ''}
+                      </td>
+                      <td style="padding:4px 8px; ${isAnul ? 'text-decoration:line-through; color:var(--text-muted);' : ''}">${this.escapeHtml(t.customer || 'Cliente General')}</td>
                       <td style="padding:4px 8px;">${this.escapeHtml(t.paymentMethod || 'Efectivo')}</td>
-                      <td style="padding:4px 8px; font-weight:700; text-align:right;">${this.formatCurrency(t.total)}</td>
+                      <td style="padding:4px 8px; font-weight:700; text-align:right; ${isAnul ? 'text-decoration:line-through; color:#DC2626;' : ''}">${this.formatCurrency(t.total)}</td>
                     </tr>
-                  `).join('')}
+                  `;
+                  }).join('')}
                 </tbody>
               </table>
             </div>`
@@ -14434,12 +14571,13 @@ class NexusApp {
 
     let txRowsXml = '';
     dayTxs.forEach(t => {
+      const isAnul = String(t.status || '').toLowerCase() === 'anulado' || String(t.status || '').toLowerCase() === 'cancelado';
       txRowsXml += `
       <Row>
-        <Cell ss:StyleID="TextLeft"><Data ss:Type="String">${this.escapeHtml(t.id || '')}</Data></Cell>
+        <Cell ss:StyleID="TextLeft"><Data ss:Type="String">${this.escapeHtml(t.id || '')}${isAnul ? ' [ANULADA]' : ''}</Data></Cell>
         <Cell ss:StyleID="TextCenter"><Data ss:Type="String">${this.escapeHtml(t.time || '')}</Data></Cell>
-        <Cell ss:StyleID="TextLeft"><Data ss:Type="String">${this.escapeHtml(t.customer || 'Cliente General')}</Data></Cell>
-        <Cell ss:StyleID="TextCenter"><Data ss:Type="String">${this.escapeHtml(t.paymentMethod || 'Efectivo')}</Data></Cell>
+        <Cell ss:StyleID="TextLeft"><Data ss:Type="String">${this.escapeHtml(t.customer || 'Cliente General')}${isAnul ? ' (Anulada)' : ''}</Data></Cell>
+        <Cell ss:StyleID="TextCenter"><Data ss:Type="String">${this.escapeHtml(t.paymentMethod || 'Efectivo')}${isAnul ? ' - ANULADA' : ''}</Data></Cell>
         <Cell ss:StyleID="Currency"><Data ss:Type="Number">${Math.round(Number(t.total) || 0)}</Data></Cell>
       </Row>`;
     });
@@ -14753,7 +14891,7 @@ class NexusApp {
 
   isInventoryOrCapexExpense(e) {
     if (!e) return false;
-    if (e.isSupplierAbono) return true;
+    if (e.isSupplierAbono || e.isNonOperating) return true;
     const cat = String(e.category || '').toLowerCase();
     const text = String((e.concept || '') + ' ' + (e.description || '') + ' ' + (e.notes || '')).toLowerCase();
     if (
@@ -14763,11 +14901,16 @@ class NexusApp {
       cat.includes('inventario') ||
       cat.includes('mercanc') ||
       cat.includes('producci') ||
-      cat.includes('hechura')
+      cat.includes('hechura') ||
+      cat.includes('inversi') ||
+      cat.includes('capital') ||
+      cat.includes('patrimonio') ||
+      cat.includes('préstamo') ||
+      cat.includes('prestamo')
     ) {
       return true;
     }
-    if (/\b(puro|oro|chatarra|abono|a bono|baby|mano de obra|mano obra|hector|diosa|qlaser|cadena|anillo|piedra|cajas|ipad|remodelacion|carlos)\b/i.test(text)) {
+    if (/\b(puro|oro|chatarra|abono|a bono|baby|mano de obra|mano obra|hector|diosa|qlaser|cadena|anillo|piedra|cajas|ipad|remodelacion|carlos|inversion|inversión|prestamo|préstamo|socio|socios|retiro|devolucion|devolución|reembolso|anticipo|capital)\b/i.test(text)) {
       return true;
     }
     return false;
@@ -14792,7 +14935,21 @@ class NexusApp {
     const pWeight = parseFloat(String(p?.pieceWeight !== undefined && p?.pieceWeight !== null ? p.pieceWeight : (p?.weight || it.pieceWeight || 0)).replace(',', '.')) || 0;
     const itemTotal = Number(it.total !== undefined ? it.total : (Number(it.price) * q)) || 0;
 
-    // Si es un servicio o manilla cuyo costo configurado en catálogo y categoría es explícitamente $0
+    // Ventas en $0 COP o promocionales no deben restar costo financiero para no falsear margen negativo
+    if (itemTotal <= 0) {
+      return 0;
+    }
+
+    // Servicios de taller y mano de obra: si no tienen costo explícito de insumo, su costo es 0 (ingreso operativo puro)
+    const isService = String(it.name || '').toLowerCase().includes('servicio') || 
+                      String(it.category || '').toLowerCase().includes('servicio') ||
+                      String(it.categoryName || '').toLowerCase().includes('servicio') ||
+                      (p && (String(p.name || '').toLowerCase().includes('servicio') || String(p.categoryName || '').toLowerCase().includes('servicio') || String(p.category || '').toLowerCase().includes('servicio')));
+    if (isService) {
+      return costPerGram > 0 ? Math.round(costPerGram * q) : 0;
+    }
+
+    // Si es un producto o manilla cuyo costo configurado en catálogo y categoría es explícitamente $0
     if (p && costPerGram === 0 && (p.cost === 0 || p.cost === '0') && (!cat || !Number(cat.cost))) {
       return 0;
     }
@@ -14966,10 +15123,11 @@ class NexusApp {
         const txTot = Number(tx.total) || 0;
         if (isTxService) {
           grossServicesTaller += txTot;
+          calculatedCOGS += Math.round(txTot * 0.15);
         } else {
           grossSalesJoyería += txTot;
+          calculatedCOGS += Math.round(txTot * 0.65);
         }
-        calculatedCOGS += Math.round(txTot * 0.65);
       }
     });
 
@@ -18812,7 +18970,11 @@ class NexusApp {
     };
 
     const allTransactions = this.data.recentTransactions || [];
-    const transactions = allTransactions.filter(t => isDateInRange(t.date));
+    const transactions = allTransactions.filter(t => {
+      const st = String(t.status || '').toLowerCase();
+      if (st === 'anulado' || st === 'cancelado' || st === 'cancelled') return false;
+      return isDateInRange(t.date);
+    });
     const validSalesTx = transactions.filter(t => Number(t.total) > 0);
 
     const allExpenses = this.data.expenses || [];
@@ -20222,7 +20384,8 @@ class NexusApp {
       paymentMethod = 'Efectivo',
       separeAbono = 0,
       separePending = 0,
-      customerCreditBalance = null
+      customerCreditBalance = null,
+      isAnulado = false
     } = options;
 
     const store = this.data.store || {};
@@ -20307,6 +20470,11 @@ class NexusApp {
           ${logoHtml ? `<div style="margin-bottom:4px;">${logoHtml}</div>` : ''}
           <div style="font-size:23px; font-weight:900; font-family:Georgia, serif; letter-spacing:0.4px; color:#000; line-height:1.2;">${storeName}</div>
           ${metalLey ? `<div style="font-size:14px; font-style:italic; font-family:Georgia, serif; color:#000; margin-top:2px; font-weight:800;">${metalLey}</div>` : ''}
+          ${isAnulado ? `
+          <div style="background:#000; color:#fff; text-align:center; font-weight:900; font-size:14px; padding:6px 4px; margin:6px 0; border:2px dashed #000; letter-spacing:1.5px;">
+            *** VENTA ANULADA ***
+          </div>
+          ` : ''}
           <div style="border-bottom:1.5px dotted #111; margin:6px 0;"></div>
         </div>
 
@@ -20436,6 +20604,11 @@ class NexusApp {
         <div style="text-align:center; font-weight:900; font-size:13px; margin-top:4px; letter-spacing:0.3px;">
           ${footerLabel}
         </div>
+        ${isAnulado ? `
+        <div style="background:#000; color:#fff; text-align:center; font-weight:900; font-size:11px; padding:4px; margin-top:8px; letter-spacing:0.8px;">
+          *** COMPROBANTE SIN VALIDEZ FISCAL NI COMERCIAL ***
+        </div>
+        ` : ''}
       </div>
     `;
   }
@@ -20510,6 +20683,8 @@ class NexusApp {
     const dateStr = tx.date || new Date().toLocaleDateString('es-CO');
     const timeStr = tx.time || '';
 
+    const isAnulado = String(tx.status || '').toLowerCase() === 'anulado' || String(tx.status || '').toLowerCase() === 'cancelado';
+
     const receiptHtml = this.buildThermalTicketHtml({
       type: 'venta',
       txId: tx.id,
@@ -20533,11 +20708,18 @@ class NexusApp {
       targetAccount: tx.targetAccount || (tx.paymentMethod && tx.paymentMethod.includes('(') ? tx.paymentMethod.replace(/^[^(]+\(([^)]+)\).*$/, '$1') : ''),
       voucher: tx.voucher || '',
       paymentBreakdown: tx.paymentBreakdown,
-      customerCreditBalance: cust?.creditBalance
+      separeAbono: Number(tx.separeAbono) || 0,
+      separePending: Number(tx.separePending) || 0,
+      customerCreditBalance: cust?.creditBalance,
+      isAnulado: isAnulado
     });
 
     const modalTitle = document.getElementById('receipt-modal-title');
-    if (modalTitle) modalTitle.innerHTML = '🧾 Comprobante de Venta POS';
+    if (modalTitle) {
+      modalTitle.innerHTML = isAnulado 
+        ? '🧾 Comprobante de Venta POS <span style="color:#DC2626; font-size:0.85rem; font-weight:800; background:rgba(239,68,68,0.12); padding:2px 8px; border-radius:4px; border:1px solid rgba(239,68,68,0.25);">[VENTA ANULADA]</span>' 
+        : '🧾 Comprobante de Venta POS';
+    }
     receiptBody.innerHTML = receiptHtml;
     this.openModal('receipt-modal');
   }
@@ -22093,7 +22275,10 @@ class NexusApp {
   }
 
   getComparativaPeriodosData(filterOverride) {
-    const txs = (this.data.recentTransactions || []).filter(tx => (Number(tx.total) || 0) > 0);
+    const txs = (this.data.recentTransactions || []).filter(tx => {
+      const st = String(tx.status || '').toLowerCase();
+      return (Number(tx.total) || 0) > 0 && st !== 'anulado' && st !== 'cancelado' && st !== 'cancelled';
+    });
     const exps = (this.data.expenses || []).filter(e => !this.isInventoryOrCapexExpense(e));
 
     const monthsMap = new Map();
@@ -26087,7 +26272,7 @@ class NexusApp {
       }
     } else {
       if (isPesaje) {
-        defaultQty = stockNum <= 10 ? stockNum : 1;
+        defaultQty = (stockNum > 0 && stockNum < 1) ? stockNum : 1;
       } else {
         defaultQty = 1;
       }
@@ -26471,8 +26656,9 @@ class NexusApp {
       this.showToast(`La cantidad (${inputValToCheck} ${inputUnitLabel}) supera el stock disponible (${maxInputStock} ${inputUnitLabel})`, 'warning');
       return;
     }
-    if (isNaN(price) || price < 0) {
-      this.showToast('Ingrese un precio de venta válido', 'warning');
+    if (isNaN(price) || price <= 0) {
+      this.showToast('El precio de venta debe ser mayor a $0 COP para agregar el artículo al carrito.', 'warning');
+      if (priceInput) priceInput.focus();
       return;
     }
 
@@ -26504,8 +26690,9 @@ class NexusApp {
     const item = this.cart.find(i => i.product.id === productId);
     if (!item) return;
     let val = this.parseCleanNumber(rawValue);
-    if (isNaN(val) || val < 0) {
-      val = item.product.price || 0;
+    if (isNaN(val) || val <= 0) {
+      this.showToast('El precio de venta no puede ser $0 COP', 'warning');
+      val = item.product.price > 0 ? item.product.price : (item.customPrice > 0 ? item.customPrice : 1000);
     }
     item.customPrice = Math.round(val);
     this.renderCart();
@@ -26562,7 +26749,7 @@ class NexusApp {
         existing.customPrice = resolvedPrice;
       }
     } else {
-      const defaultPesajeQty = (stockNum > 0 && stockNum <= 10) ? stockNum : 1;
+      const defaultPesajeQty = (stockNum > 0 && stockNum < 1) ? stockNum : 1;
       const initialUnits = !isPesaje
         ? (explicitUnitsCount !== null
             ? Math.max(1, Math.round(explicitUnitsCount))
@@ -27489,6 +27676,17 @@ class NexusApp {
     const cardFeeAmount = totals.cardFeeAmount;
     const cardFeeRate = totals.cardFeeRate;
 
+    if (grandTotal <= 0) {
+      this.showToast('El total de la venta no puede ser $0 COP. Verifique que los productos tengan un precio asignado.', 'danger');
+      return;
+    }
+
+    const itemZero = this.cart.find(it => this.getCartItemPrice(it) <= 0);
+    if (itemZero) {
+      this.showToast(`El producto "${itemZero.product?.name || 'Artículo'}" tiene precio de venta en $0 COP. Asígnele un precio antes de cobrar.`, 'danger');
+      return;
+    }
+
     // Idempotency / Anti-double-click guard: check last registered sale in recentTransactions
     const lastTx = (this.data.recentTransactions || [])[0];
     if (lastTx && Math.abs((Number(lastTx.total) || 0) - grandTotal) < 0.01) {
@@ -27740,8 +27938,6 @@ class NexusApp {
 
       if (this.selectedPayMethod === 'cash') {
         this.data.cashShiftLog.cashSales = Math.round((Number(this.data.cashShiftLog.cashSales || 0) + grandTotal) * 100) / 100;
-        this.data.cashShiftLog.expectedCashInDrawer = Math.round(((Number(this.data.cashShiftLog.openingCash) || 0) + (Number(this.data.cashShiftLog.cashSales) || 0) - (Number(this.data.cashShiftLog.cashExpenses) || 0)) * 100) / 100;
-        if (this.data.store) this.data.store.cashInBox = this.data.cashShiftLog.expectedCashInDrawer;
       } else if (this.selectedPayMethod === 'card' || this.selectedPayMethod === 'transfer' || this.selectedPayMethod === 'addi') {
         this.data.cashShiftLog.cardSales = Math.round((Number(this.data.cashShiftLog.cardSales || 0) + grandTotal) * 100) / 100;
       } else if (this.selectedPayMethod === 'mixed') {
@@ -27751,8 +27947,6 @@ class NexusApp {
 
         if (mCash > 0) {
           this.data.cashShiftLog.cashSales = Math.round((Number(this.data.cashShiftLog.cashSales || 0) + mCash) * 100) / 100;
-          this.data.cashShiftLog.expectedCashInDrawer = Math.round(((Number(this.data.cashShiftLog.openingCash) || 0) + (Number(this.data.cashShiftLog.cashSales) || 0) - (Number(this.data.cashShiftLog.cashExpenses) || 0)) * 100) / 100;
-          if (this.data.store) this.data.store.cashInBox = this.data.cashShiftLog.expectedCashInDrawer;
         }
         if (mElectronic > 0) {
           this.data.cashShiftLog.cardSales = Math.round((Number(this.data.cashShiftLog.cardSales || 0) + mElectronic) * 100) / 100;
@@ -27799,8 +27993,6 @@ class NexusApp {
         separePending = Math.round(Math.max(0, grandTotal - separeAbono) * 100) / 100;
         if (separeAbono > 0) {
           this.data.cashShiftLog.cashSales = Math.round((Number(this.data.cashShiftLog.cashSales || 0) + separeAbono) * 100) / 100;
-          this.data.cashShiftLog.expectedCashInDrawer = Math.round(((Number(this.data.cashShiftLog.openingCash) || 0) + (Number(this.data.cashShiftLog.cashSales) || 0) - (Number(this.data.cashShiftLog.cashExpenses) || 0)) * 100) / 100;
-          if (this.data.store) this.data.store.cashInBox = this.data.cashShiftLog.expectedCashInDrawer;
         }
         if (cust && separePending > 0) {
           cust.creditBalance = Math.round(((Number(cust.creditBalance) || 0) + separePending) * 100) / 100;
@@ -27865,6 +28057,8 @@ class NexusApp {
         targetAccount: targetAccount || undefined,
         voucher: voucher || undefined,
         paymentBreakdown: mixedPaymentBreakdown || undefined,
+        separeAbono: separeAbono > 0 ? separeAbono : undefined,
+        separePending: separePending > 0 ? separePending : undefined,
         cashier: this.currentUser?.name || this.data.store?.cashier || "Cajero",
         status: "completed"
       };
@@ -28073,6 +28267,7 @@ class NexusApp {
               <div>
                 <div style="font-weight:700; font-size:0.875rem; color:var(--text-main); display:flex; align-items:center; gap:0.5rem;">
                   <span>Ticket #${this.escapeHtml(t.id)}</span>
+                  ${String(t.status || '').toLowerCase() === 'anulado' ? '<span class="badge" style="font-size:0.68rem; font-weight:700; background:rgba(239,68,68,0.12); color:#DC2626; border:1px solid rgba(239,68,68,0.25); padding:1px 6px; border-radius:4px;">Anulado</span>' : ''}
                   <span class="badge" style="font-size:0.7rem; background:rgba(99,102,241,0.12); color:#4F46E5;">${this.escapeHtml(t.cashier || 'Cajero')}</span>
                 </div>
                 <div style="font-size:0.72rem; color:var(--text-subtle); margin-top:2px;">Cliente: ${this.escapeHtml(t.customer || 'Mostrador')} • Hora: ${this.escapeHtml(t.time || '')} • ${this.escapeHtml(t.paymentMethod || 'Efectivo')}</div>

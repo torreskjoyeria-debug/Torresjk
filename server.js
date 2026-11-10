@@ -589,6 +589,8 @@ function mergeStoreState(serverData, clientData, isAdmin = false) {
     let totalCardSales = 0;
 
     result.recentTransactions.forEach(tx => {
+      const st = String(tx.status || '').toLowerCase();
+      if (st === 'anulado' || st === 'cancelado' || st === 'cancelled') return;
       const belongs = tx.shiftId ? (tx.shiftId === shiftId) : (!tx.closedShiftId && (tx.date && tx.date.includes(shiftOpenedDate.split('-').reverse().join('/'))));
       if (belongs) {
         const amt = Math.round(Number(tx.total) || 0);
@@ -620,13 +622,15 @@ function mergeStoreState(serverData, clientData, isAdmin = false) {
 
     let totalCashExpenses = 0;
     let totalBankExpenses = 0;
+    const shiftOpenedDdmmyyyy = shiftOpenedDate.split('-').reverse().join('/');
     (result.expenses || []).forEach(e => {
       // STRICT: Must match this shiftId, OR if no shiftId, must match shift openedDate and NOT belong to a closed shift
-      const belongs = e.shiftId ? (e.shiftId === shiftId) : (!e.closedShiftId && e.date === shiftOpenedDate);
+      const dateMatches = e.date && (e.date === shiftOpenedDate || e.date.startsWith(shiftOpenedDate) || e.date.includes(shiftOpenedDdmmyyyy));
+      const belongs = e.shiftId ? (e.shiftId === shiftId) : (!e.closedShiftId && dateMatches);
       if (belongs) {
         const m = (e.paymentMethod || e.method || '').toLowerCase();
         const amt = Math.round(Number(e.amount) || 0);
-        if (m.includes('efectivo') || m.includes('cash')) {
+        if (m.includes('efectivo') || m.includes('cash') || m.includes('caja') || m.includes('gaveta')) {
           totalCashExpenses += amt;
         } else {
           totalBankExpenses += amt;
@@ -634,13 +638,56 @@ function mergeStoreState(serverData, clientData, isAdmin = false) {
       }
     });
 
+    let totalCashAbonosCompras = 0;
+    let totalBankAbonosCompras = 0;
+    (result.abonosCompras || []).forEach(a => {
+      const dateMatches = a.date && (a.date === shiftOpenedDate || a.date.startsWith(shiftOpenedDate) || a.date.includes(shiftOpenedDdmmyyyy));
+      const belongs = a.shiftId ? (a.shiftId === shiftId) : (!a.closedShiftId && dateMatches);
+      if (belongs) {
+        const m = (a.method || 'Efectivo').toLowerCase();
+        const amt = Math.round(Number(a.amount) || 0);
+        if (m.includes('efectivo') || m.includes('cash') || m.includes('caja') || m.includes('gaveta')) {
+          totalCashAbonosCompras += amt;
+        } else {
+          totalBankAbonosCompras += amt;
+        }
+      }
+    });
+
+    let totalCashPurchases = 0;
+    let totalBankPurchases = 0;
+    (result.purchases || []).forEach(po => {
+      const dateMatches = po.date && (po.date === shiftOpenedDate || po.date.startsWith(shiftOpenedDate) || po.date.includes(shiftOpenedDdmmyyyy));
+      const belongs = po.shiftId ? (po.shiftId === shiftId) : (!po.closedShiftId && dateMatches);
+      if (belongs) {
+        // Excluir compras a crédito pendientes donde NO hubo desembolso inmediato de dinero
+        const isCreditPurchase = (po.paymentStatus && po.paymentStatus !== 'Pagado Total' && po.paymentStatus !== 'Pagado') || 
+                                 (po.paymentMethod && po.paymentMethod.toLowerCase().includes('crédito'));
+        if (isCreditPurchase && (!po.paidAmount || Number(po.paidAmount) <= 0)) {
+          return;
+        }
+        const amt = Math.round(Number(po.paidAmount !== undefined && po.paidAmount !== null && Number(po.paidAmount) > 0 ? po.paidAmount : po.total) || 0);
+        if (amt <= 0) return;
+
+        const m = (po.paymentMethod || 'Efectivo').toLowerCase();
+        if (m.includes('efectivo') || m.includes('cash') || m.includes('caja') || m.includes('gaveta')) {
+          totalCashPurchases += amt;
+        } else if (!m.includes('crédito') && !m.includes('credito')) {
+          totalBankPurchases += amt;
+        }
+      }
+    });
+
+    const consolidatedCashExpenses = totalCashExpenses + totalCashAbonosCompras + totalCashPurchases;
+    const consolidatedBankExpenses = totalBankExpenses + totalBankAbonosCompras + totalBankPurchases;
+
     shift.cashSales = totalCashSales;
     shift.cardSales = totalCardSales;
-    shift.cashExpenses = totalCashExpenses;
-    shift.bankExpenses = totalBankExpenses;
-    shift.totalExpenses = totalCashExpenses + totalBankExpenses;
+    shift.cashExpenses = consolidatedCashExpenses;
+    shift.bankExpenses = consolidatedBankExpenses;
+    shift.totalExpenses = consolidatedCashExpenses + consolidatedBankExpenses;
     const opening = Number(shift.openingCash) || 0;
-    shift.expectedCashInDrawer = opening + totalCashSales + totalCashAbonos - totalCashExpenses;
+    shift.expectedCashInDrawer = opening + totalCashSales + totalCashAbonos - consolidatedCashExpenses;
     if (result.store) {
       result.store.cashInBox = shift.expectedCashInDrawer;
     }
