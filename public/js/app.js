@@ -657,6 +657,16 @@ class NexusApp {
         if (!isNaN(n) && n > maxNum) maxNum = n;
       }
     });
+    (this.data?.deletedProducts || []).forEach(delId => {
+      if (!delId) return;
+      const cleanId = String(delId).trim();
+      seen.add(cleanId);
+      const m = cleanId.match(/^PRD-(\d+)$/i);
+      if (m) {
+        const n = parseInt(m[1], 10);
+        if (!isNaN(n) && n > maxNum) maxNum = n;
+      }
+    });
     let candidateNum = Math.max(maxNum + 1, (this.data?.products?.length || 0) + 1);
     let candidate = `PRD-${String(candidateNum).padStart(3, '0')}`;
     while (seen.has(candidate)) {
@@ -670,6 +680,16 @@ class NexusApp {
     if (!this.data || !Array.isArray(this.data.products) || this.data.products.length === 0) return;
     const seenIds = new Set();
     let maxNum = 0;
+    (this.data.deletedProducts || []).forEach(delId => {
+      if (!delId) return;
+      const cleanId = String(delId).trim();
+      seenIds.add(cleanId);
+      const m = cleanId.match(/^PRD-(\d+)$/i);
+      if (m) {
+        const n = parseInt(m[1], 10);
+        if (!isNaN(n) && n > maxNum) maxNum = n;
+      }
+    });
     this.data.products.forEach(p => {
       if (!p) return;
       const m = String(p.id || '').match(/^PRD-(\d+)$/i);
@@ -684,7 +704,12 @@ class NexusApp {
       const idStr = String(p.id || '').trim();
       if (!idStr || seenIds.has(idStr)) {
         maxNum++;
-        p.id = `PRD-${String(maxNum).padStart(3, '0')}`;
+        let candidate = `PRD-${String(maxNum).padStart(3, '0')}`;
+        while (seenIds.has(candidate)) {
+          maxNum++;
+          candidate = `PRD-${String(maxNum).padStart(3, '0')}`;
+        }
+        p.id = candidate;
       }
       seenIds.add(String(p.id));
       // Preservar código/SKU del producto sin sobreescribirlo jamás
@@ -799,7 +824,7 @@ class NexusApp {
         this.data.deletedProducts = [];
       } else if (this.data.deletedProducts.length > 0) {
         const delSet = new Set(this.data.deletedProducts);
-        this.data.products = (this.data.products || []).filter(p => p && p.id && !delSet.has(p.id));
+        this.data.products = (this.data.products || []).filter(p => p && p.id && (!delSet.has(p.id) || p._explicitStockEdit));
       }
       this.ensureUniqueProductIds();
       this.data.products.forEach(p => {

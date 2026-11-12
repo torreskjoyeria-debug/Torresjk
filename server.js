@@ -518,6 +518,45 @@ function mergeStoreState(serverData, clientData, isAdmin = false) {
       return Math.round(totalDeduct * 10000) / 10000;
     };
 
+    // Safeguard for un-refreshed client tabs: if a newly created product (_explicitStockEdit: true)
+    // was assigned an ID that collides with deletedProducts, re-assign it a fresh unique ID
+    // instead of discarding the user's new product.
+    let maxProdIdNum = 0;
+    const allKnownProdIds = new Set();
+    const trackProdId = (idVal) => {
+      if (!idVal) return;
+      const clean = String(idVal).trim();
+      allKnownProdIds.add(clean);
+      const m = clean.match(/^PRD-(\d+)$/i);
+      if (m) {
+        const n = parseInt(m[1], 10);
+        if (!isNaN(n) && n > maxProdIdNum) maxProdIdNum = n;
+      }
+    };
+    serverData.products.forEach(p => { if (p && p.id) trackProdId(p.id); });
+    clientData.products.forEach(p => { if (p && p.id) trackProdId(p.id); });
+    deletedProducts.forEach(delId => trackProdId(delId));
+
+    clientData.products.forEach(p => {
+      if (p && p.id && p._explicitStockEdit && deletedProducts.has(p.id) && !serverProdMap.has(p.id)) {
+        const oldId = p.id;
+        maxProdIdNum++;
+        let newId = `PRD-${String(maxProdIdNum).padStart(3, '0')}`;
+        while (allKnownProdIds.has(newId)) {
+          maxProdIdNum++;
+          newId = `PRD-${String(maxProdIdNum).padStart(3, '0')}`;
+        }
+        allKnownProdIds.add(newId);
+        p.id = newId;
+        if (p.sku === oldId) p.sku = newId;
+        if (Array.isArray(result.purchases)) {
+          result.purchases.forEach(po => {
+            if (po && po.productId === oldId) po.productId = newId;
+          });
+        }
+      }
+    });
+
     const mergedProducts = clientData.products
       .filter(p => p && p.id && !deletedProducts.has(p.id))
       .map(clientProd => {
