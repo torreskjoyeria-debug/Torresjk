@@ -608,17 +608,13 @@ class NexusApp {
 
     const others = this.data.users.filter(u => u !== rootUser);
 
-    // Check if others have disordered legacy random IDs (like > 10) or if root was not at index 0
+    // Check if others have disordered legacy random IDs (> 100)
     const hasDisorderedLegacy = others.some(u => {
       const m = (u.id || '').match(/USR-(\d+)/i);
-      return m && parseInt(m[1], 10) > 10;
-    }) || this.data.users[0] !== rootUser;
+      return m && parseInt(m[1], 10) > 100;
+    });
 
     if (hasDisorderedLegacy) {
-      // In the legacy unshift system, new users were prepended to index 0,
-      // so the array was [Victor, Zharick, Santiago, Carlos].
-      // Reversing 'others' restores chronological creation order: Santiago -> Zharick -> Victor
-      // With rootUser (Carlos) as first: [Carlos, Santiago, Zharick, Victor]
       const chronologicalOthers = [...others].reverse();
       this.data.users = [rootUser, ...chronologicalOthers];
     } else {
@@ -630,9 +626,44 @@ class NexusApp {
       })];
     }
 
-    // Assign sequential, cleanly formatted IDs: USR-001, USR-002, USR-003, USR-004...
+    // Preserve existing unique USR-xxx IDs so deleting a user never shifts other users' IDs
+    rootUser.id = 'USR-001';
+    const seenIds = new Set(['USR-001', ...(Array.isArray(this.data.deletedUsers) ? this.data.deletedUsers : [])]);
+    let maxNum = 1;
     this.data.users.forEach((u, idx) => {
-      u.id = `USR-${String(idx + 1).padStart(3, '0')}`;
+      if (idx === 0) return;
+      const m = String(u.id || '').match(/^USR-(\d+)$/i);
+      if (m) {
+        const n = parseInt(m[1], 10);
+        if (!isNaN(n) && n <= 100 && n > maxNum) maxNum = n;
+      }
+    });
+    (this.data.deletedUsers || []).forEach(delId => {
+      const m = String(delId || '').match(/^USR-(\d+)$/i);
+      if (m) {
+        const n = parseInt(m[1], 10);
+        if (!isNaN(n) && n <= 100 && n > maxNum) maxNum = n;
+      }
+    });
+
+    this.data.users.forEach((u, idx) => {
+      if (idx === 0) return;
+      const cleanId = String(u.id || '').trim().toUpperCase();
+      const m = cleanId.match(/^USR-(\d+)$/i);
+      const num = m ? parseInt(m[1], 10) : NaN;
+      if (m && !isNaN(num) && num > 1 && num <= 100 && !seenIds.has(cleanId)) {
+        u.id = `USR-${String(num).padStart(3, '0')}`;
+        seenIds.add(u.id);
+      } else {
+        maxNum++;
+        let newId = `USR-${String(maxNum).padStart(3, '0')}`;
+        while (seenIds.has(newId)) {
+          maxNum++;
+          newId = `USR-${String(maxNum).padStart(3, '0')}`;
+        }
+        u.id = newId;
+        seenIds.add(newId);
+      }
     });
 
     // Update currentUser ID if matching email
@@ -643,6 +674,42 @@ class NexusApp {
         try { SafeStorage.setItem('nexus_pos_user', JSON.stringify(this.currentUser)); } catch (e) {}
       }
     }
+  }
+
+  generateUniqueEntityId(prefix, activeArray = [], deletedArray = [], padLen = 3) {
+    const cleanPrefix = String(prefix || 'ID').replace(/-$/, '').toUpperCase();
+    const regex = new RegExp(`^${cleanPrefix}-(\\d+)$`, 'i');
+    let maxNum = 0;
+    const seen = new Set();
+
+    const scanId = (rawId) => {
+      if (!rawId) return;
+      const str = String(rawId).trim().toUpperCase();
+      seen.add(str);
+      const m = str.match(regex);
+      if (m) {
+        const n = parseInt(m[1], 10);
+        if (!isNaN(n) && n < 1000000 && n > maxNum) maxNum = n;
+      }
+    };
+
+    if (Array.isArray(activeArray)) {
+      activeArray.forEach(item => {
+        if (item && typeof item === 'object') scanId(item.id);
+        else scanId(item);
+      });
+    }
+    if (Array.isArray(deletedArray)) {
+      deletedArray.forEach(delId => scanId(delId));
+    }
+
+    let nextNum = Math.max(maxNum + 1, (Array.isArray(activeArray) ? activeArray.length : 0) + 1);
+    let candidate = `${cleanPrefix}-${String(nextNum).padStart(padLen, '0')}`;
+    while (seen.has(candidate.toUpperCase())) {
+      nextNum++;
+      candidate = `${cleanPrefix}-${String(nextNum).padStart(padLen, '0')}`;
+    }
+    return candidate;
   }
 
   generateUniqueProductId() {
@@ -752,7 +819,22 @@ class NexusApp {
   }
 
   sanitizeLoadedData() {
+    if (!Array.isArray(this.data.deletedUsers)) this.data.deletedUsers = [];
+    if (!Array.isArray(this.data.deletedPerfiles)) this.data.deletedPerfiles = [];
+    if (!Array.isArray(this.data.deletedCategories)) this.data.deletedCategories = [];
+    if (!Array.isArray(this.data.deletedCustomers)) this.data.deletedCustomers = [];
+    if (!Array.isArray(this.data.deletedCustomerCredits)) this.data.deletedCustomerCredits = [];
+    if (!Array.isArray(this.data.deletedSuppliers)) this.data.deletedSuppliers = [];
+    if (!Array.isArray(this.data.deletedSupplierCredits)) this.data.deletedSupplierCredits = [];
+    if (!Array.isArray(this.data.deletedServices)) this.data.deletedServices = [];
+    if (!Array.isArray(this.data.deletedAssets)) this.data.deletedAssets = [];
+    if (!Array.isArray(this.data.deletedPaymentMethods)) this.data.deletedPaymentMethods = [];
+
     if (this.data.users && Array.isArray(this.data.users)) {
+      if (this.data.deletedUsers.length > 0) {
+        const delUsrSet = new Set(this.data.deletedUsers);
+        this.data.users = this.data.users.filter(u => u && (u.id === 'USR-001' || u.role === 'Super Admin' || !delUsrSet.has(u.id)));
+      }
       this.data.users.forEach(u => {
         const initUser = INITIAL_DATA.users.find(iu => iu.email?.toLowerCase() === u.email?.toLowerCase() || iu.id === u.id);
         if (initUser) {
@@ -777,6 +859,10 @@ class NexusApp {
     }
 
     if (this.data.perfiles && Array.isArray(this.data.perfiles)) {
+      if (this.data.deletedPerfiles.length > 0) {
+        const delPrfSet = new Set(this.data.deletedPerfiles);
+        this.data.perfiles = this.data.perfiles.filter(p => p && (p.id === 'PRF-01' || p.name === 'Super Admin' || !delPrfSet.has(p.id)));
+      }
       this.data.perfiles.forEach(p => {
         const initPerf = INITIAL_DATA.perfiles.find(ip => ip.name?.toLowerCase() === p.name?.toLowerCase() || ip.id === p.id);
         if (initPerf && (!p.allowedModules || p.allowedModules.length === 0)) {
@@ -808,6 +894,10 @@ class NexusApp {
       this.data.categories = Array.from(INITIAL_DATA.categories);
     }
     if (this.data.categories && Array.isArray(this.data.categories)) {
+      if (this.data.deletedCategories.length > 0) {
+        const delCatSet = new Set(this.data.deletedCategories);
+        this.data.categories = this.data.categories.filter(cat => cat && cat.id && !delCatSet.has(cat.id));
+      }
       this.data.categories.forEach(cat => {
         if (cat.cost === undefined || cat.cost === null) {
           const initCat = INITIAL_DATA.categories.find(ic => ic.id === cat.id);
@@ -891,6 +981,10 @@ class NexusApp {
     }
 
     if (this.data.customers && Array.isArray(this.data.customers)) {
+      if (this.data.deletedCustomers.length > 0) {
+        const delCustSet = new Set(this.data.deletedCustomers);
+        this.data.customers = this.data.customers.filter(c => c && c.id && !delCustSet.has(c.id));
+      }
       this.data.customers.forEach(c => {
         if (!c.allowedPaymentMethods || !Array.isArray(c.allowedPaymentMethods) || c.allowedPaymentMethods.length === 0) {
           c.allowedPaymentMethods = ['Efectivo', 'Tarjeta', 'Transferencia', 'Pago Mixto', 'Crédito', 'Plan Separe'];
@@ -910,11 +1004,18 @@ class NexusApp {
     if (!this.data.paymentMethods || !Array.isArray(this.data.paymentMethods)) {
       this.data.paymentMethods = [];
     }
-    if (!this.data.paymentMethods.some(pm => (pm.name || '').toLowerCase().includes('mixto'))) {
+    if (this.data.deletedPaymentMethods.length > 0) {
+      const delPmSet = new Set(this.data.deletedPaymentMethods);
+      this.data.paymentMethods = this.data.paymentMethods.filter(pm => pm && pm.id && !delPmSet.has(pm.id));
+    }
+    if (!this.data.paymentMethods.some(pm => (pm.name || '').toLowerCase().includes('mixto')) && !this.data.deletedPaymentMethods.includes('PM-06')) {
       this.data.paymentMethods.push({ id: 'PM-06', name: 'Pago Mixto', icon: 'shuffle', fee: '0%', active: true });
     }
     if (!this.data.customerCredits || !Array.isArray(this.data.customerCredits)) {
       this.data.customerCredits = [];
+    } else if (this.data.deletedCustomerCredits.length > 0) {
+      const delCcSet = new Set(this.data.deletedCustomerCredits);
+      this.data.customerCredits = this.data.customerCredits.filter(cc => cc && cc.id && !delCcSet.has(cc.id));
     }
     if (!this.data.store) this.data.store = {};
     if (this.data.store.cardFeePercentage === undefined || this.data.store.cardFeePercentage === null) {
@@ -928,6 +1029,10 @@ class NexusApp {
       };
     }
     if (this.data.suppliers && Array.isArray(this.data.suppliers)) {
+      if (this.data.deletedSuppliers.length > 0) {
+        const delSuppSet = new Set(this.data.deletedSuppliers);
+        this.data.suppliers = this.data.suppliers.filter(s => s && s.id && !delSuppSet.has(s.id));
+      }
       this.data.suppliers.forEach(s => {
         if (!s.docType) s.docType = 'NIT';
         if (s.nit === undefined || s.nit === null) s.nit = '';
@@ -943,6 +1048,9 @@ class NexusApp {
     }
     if (!this.data.supplierCredits || !Array.isArray(this.data.supplierCredits)) {
       this.data.supplierCredits = [];
+    } else if (this.data.deletedSupplierCredits.length > 0) {
+      const delScSet = new Set(this.data.deletedSupplierCredits);
+      this.data.supplierCredits = this.data.supplierCredits.filter(sc => sc && sc.id && !delScSet.has(sc.id));
     }
     if (!this.data.expenses || !Array.isArray(this.data.expenses)) {
       this.data.expenses = [];
@@ -964,9 +1072,15 @@ class NexusApp {
     }
     if (!this.data.services || !Array.isArray(this.data.services)) {
       this.data.services = [];
+    } else if (this.data.deletedServices.length > 0) {
+      const delSrvSet = new Set(this.data.deletedServices);
+      this.data.services = this.data.services.filter(s => s && s.id && !delSrvSet.has(s.id));
     }
     if (!this.data.assets || !Array.isArray(this.data.assets)) {
       this.data.assets = [];
+    } else if (this.data.deletedAssets.length > 0) {
+      const delAstSet = new Set(this.data.deletedAssets);
+      this.data.assets = this.data.assets.filter(a => a && a.id && !delAstSet.has(a.id));
     }
     if (!this.data.abonosVentas || !Array.isArray(this.data.abonosVentas)) {
       this.data.abonosVentas = [];
@@ -1019,7 +1133,22 @@ class NexusApp {
           // Preserve any local deletion blacklists so an immediate page refresh after deleting never resurrects records
           let hasPendingLocalDeletions = false;
           if (localData) {
-            ['deletedExpenses', 'deletedPurchases', 'deletedProducts', 'deletedAbonosCompras'].forEach(delKey => {
+            [
+              'deletedExpenses',
+              'deletedPurchases',
+              'deletedProducts',
+              'deletedAbonosCompras',
+              'deletedSuppliers',
+              'deletedSupplierCredits',
+              'deletedCustomers',
+              'deletedCustomerCredits',
+              'deletedCategories',
+              'deletedServices',
+              'deletedAssets',
+              'deletedUsers',
+              'deletedPerfiles',
+              'deletedPaymentMethods'
+            ].forEach(delKey => {
               const localDel = Array.isArray(localData[delKey]) ? localData[delKey] : [];
               const dbDel = Array.isArray(dbData[delKey]) ? dbData[delKey] : [];
               const dbDelSet = new Set(dbDel);
@@ -1232,54 +1361,68 @@ class NexusApp {
   }
 
   getNextSupplierCreditId() {
-    if (!this.data || !Array.isArray(this.data.supplierCredits) || this.data.supplierCredits.length === 0) {
-      return 'CP-001';
-    }
-    let max = 0;
-    this.data.supplierCredits.forEach(sc => {
-      if (!sc || !sc.id) return;
-      const m = String(sc.id).match(/^CP-(\d+)$/i) || String(sc.id).match(/(\d+)/);
-      if (m) {
-        const n = parseInt(m[1], 10);
-        if (!isNaN(n) && n < 10000 && n > max) max = n;
-      }
-    });
-    return `CP-${String(max + 1).padStart(3, '0')}`;
+    return this.generateUniqueEntityId('CP', this.data?.supplierCredits || [], this.data?.deletedSupplierCredits || [], 3);
   }
 
   normalizeSupplierCreditCodes() {
     if (!this.data || !Array.isArray(this.data.supplierCredits) || this.data.supplierCredits.length === 0) return;
 
-    // Check if any credit has an old non-sequential code or legacy ID
-    const seenIds = new Set();
-    let hasLegacyIds = false;
-    for (const sc of this.data.supplierCredits) {
-      if (!sc || !sc.id) { hasLegacyIds = true; break; }
-      if (String(sc.id).startsWith('OC-')) { hasLegacyIds = true; break; }
-      const m = String(sc.id).match(/^CP-(\d+)$/i);
-      if (!m) { hasLegacyIds = true; break; }
-      const num = parseInt(m[1], 10);
-      if (num > 50 || seenIds.has(sc.id)) { hasLegacyIds = true; break; }
-      seenIds.add(sc.id);
+    const delScSet = new Set(Array.isArray(this.data.deletedSupplierCredits) ? this.data.deletedSupplierCredits : []);
+    if (delScSet.size > 0) {
+      this.data.supplierCredits = this.data.supplierCredits.filter(sc => sc && (!sc.id || !delScSet.has(sc.id)));
     }
 
-    if (hasLegacyIds) {
-      if (!Array.isArray(this.data.abonosCompras)) this.data.abonosCompras = [];
-      const idMap = {};
+    const seenIds = new Set(delScSet);
+    let maxNum = 0;
+    this.data.supplierCredits.forEach(sc => {
+      if (!sc || !sc.id) return;
+      const m = String(sc.id).match(/^CP-(\d+)$/i);
+      if (m) {
+        const n = parseInt(m[1], 10);
+        if (!isNaN(n) && n < 100000 && n > maxNum) maxNum = n;
+      }
+    });
+    delScSet.forEach(delId => {
+      const m = String(delId || '').match(/^CP-(\d+)$/i);
+      if (m) {
+        const n = parseInt(m[1], 10);
+        if (!isNaN(n) && n < 100000 && n > maxNum) maxNum = n;
+      }
+    });
 
-      this.data.supplierCredits.forEach((sc, idx) => {
-        const newId = `CP-${String(idx + 1).padStart(3, '0')}`;
-        if (sc.id !== newId) {
+    const idMap = {};
+    let changed = false;
+    this.data.supplierCredits.forEach(sc => {
+      if (!sc) return;
+      const rawId = String(sc.id || '').trim().toUpperCase();
+      const m = rawId.match(/^CP-(\d+)$/i);
+      const num = m ? parseInt(m[1], 10) : NaN;
+      const isValidUnique = m && !isNaN(num) && num > 0 && num < 100000 && !seenIds.has(rawId);
+      if (isValidUnique) {
+        sc.id = `CP-${String(num).padStart(3, '0')}`;
+        seenIds.add(sc.id);
+      } else {
+        maxNum++;
+        let newId = `CP-${String(maxNum).padStart(3, '0')}`;
+        while (seenIds.has(newId)) {
+          maxNum++;
+          newId = `CP-${String(maxNum).padStart(3, '0')}`;
+        }
+        if (sc.id) {
           idMap[sc.id] = newId;
           if (String(sc.id).startsWith('OC-') && !sc.poId) {
             sc.poId = sc.id;
           }
-          sc.id = newId;
         }
-      });
+        sc.id = newId;
+        seenIds.add(newId);
+        changed = true;
+      }
+    });
 
+    if (changed && Array.isArray(this.data.abonosCompras)) {
       this.data.abonosCompras.forEach(ab => {
-        if (ab.poId && idMap[ab.poId]) {
+        if (ab && ab.poId && idMap[ab.poId]) {
           ab.poId = idMap[ab.poId];
         }
       });
@@ -1291,11 +1434,18 @@ class NexusApp {
     if (!Array.isArray(this.data.suppliers)) this.data.suppliers = [];
     if (!Array.isArray(this.data.supplierCredits)) this.data.supplierCredits = [];
     if (!Array.isArray(this.data.purchases)) this.data.purchases = [];
+    if (!Array.isArray(this.data.deletedSuppliers)) this.data.deletedSuppliers = [];
+    if (!Array.isArray(this.data.deletedSupplierCredits)) this.data.deletedSupplierCredits = [];
 
-    // Auto-consolidar créditos por proveedor para evitar duplicación y fragmentación
+    const delSuppSet = new Set(this.data.deletedSuppliers);
+    const delScSet = new Set(this.data.deletedSupplierCredits);
+
+    // Auto-consolidar créditos por proveedor para evitar duplicación y fragmentación, preservando IDs estables
     const groups = {};
     this.data.supplierCredits.forEach(sc => {
       if (!sc) return;
+      if (sc.id && delScSet.has(sc.id)) return;
+      if (sc.supplierId && delSuppSet.has(sc.supplierId)) return;
       const suppName = (sc.supplier || '').toLowerCase().trim();
       if (!suppName) return;
       if (!groups[suppName]) groups[suppName] = [];
@@ -1303,10 +1453,42 @@ class NexusApp {
     });
 
     const consolidated = [];
-    let nextIdCounter = 1;
+    const usedIds = new Set(delScSet);
+    let maxCpNum = 0;
+    const trackCpId = (rawId) => {
+      if (!rawId) return;
+      const m = String(rawId).trim().match(/^CP-(\d+)$/i);
+      if (m) {
+        const n = parseInt(m[1], 10);
+        if (!isNaN(n) && n < 100000 && n > maxCpNum) maxCpNum = n;
+      }
+    };
+    this.data.supplierCredits.forEach(sc => { if (sc && sc.id) trackCpId(sc.id); });
+    delScSet.forEach(id => trackCpId(id));
+
+    const allocateCpId = (preferredList = []) => {
+      for (const item of preferredList) {
+        const cand = item && item.id ? String(item.id).trim().toUpperCase() : '';
+        if (/^CP-\d+$/i.test(cand) && !usedIds.has(cand)) {
+          usedIds.add(cand);
+          return cand;
+        }
+      }
+      maxCpNum++;
+      let nextId = `CP-${String(maxCpNum).padStart(3, '0')}`;
+      while (usedIds.has(nextId)) {
+        maxCpNum++;
+        nextId = `CP-${String(maxCpNum).padStart(3, '0')}`;
+      }
+      usedIds.add(nextId);
+      return nextId;
+    };
 
     for (const [suppName, credList] of Object.entries(groups)) {
       const suppObj = this.data.suppliers.find(s => (s.name || '').toLowerCase().trim() === suppName);
+      if (!suppObj && credList.some(c => c.supplierId && delSuppSet.has(c.supplierId))) {
+        continue;
+      }
       const realName = suppObj ? suppObj.name : credList[0].supplier;
       const suppId = suppObj ? suppObj.id : (credList[0].supplierId || '');
       const suppCreditBalance = suppObj ? Math.max(0, Number(suppObj.creditBalance) || 0) : 0;
@@ -1314,26 +1496,38 @@ class NexusApp {
       // Unir todas las OCs asociadas
       const suppPOs = this.data.purchases.filter(p => (p.supplier || '').toLowerCase().trim() === suppName);
       const allPOIds = new Set(suppPOs.map(p => p.id));
+      const combinedHistory = [];
       credList.forEach(c => {
         if (c.poId) allPOIds.add(c.poId);
         if (Array.isArray(c.purchaseOrderIds)) c.purchaseOrderIds.forEach(id => allPOIds.add(id));
+        if (Array.isArray(c.history)) {
+          c.history.forEach(h => { if (h) combinedHistory.push(h); });
+        }
       });
 
       const pendingList = credList.filter(c => (Number(c.pendingAmount) || 0) > 0 || c.status !== 'Pagado Total');
       const paidList = credList.filter(c => (Number(c.pendingAmount) || 0) <= 0 || c.status === 'Pagado Total');
 
       const totalOwedSum = pendingList.reduce((sum, c) => sum + (Number(c.totalOwed) || 0), 0);
-      const pendingVal = suppCreditBalance > 0 ? suppCreditBalance : pendingList.reduce((sum, c) => sum + (Number(c.pendingAmount) || 0), 0);
+      const pendingVal = suppObj
+        ? (suppCreditBalance > 0 ? suppCreditBalance : pendingList.reduce((sum, c) => sum + (Number(c.pendingAmount) || 0), 0))
+        : pendingList.reduce((sum, c) => sum + (Number(c.pendingAmount) || 0), 0);
       const paidVal = Math.max(0, totalOwedSum - pendingVal);
 
       const allDates = credList.map(c => c.date).filter(Boolean).sort();
       const earliest = allDates[0] || new Date().toISOString().slice(0, 10);
       const latest = allDates[allDates.length - 1] || earliest;
 
+      const maxUpdatedAt = credList.reduce((max, c) => Math.max(max, Number(c.updatedAt) || 0), 0);
+      const minCreatedAt = credList.reduce((min, c) => {
+        const ts = Number(c.createdAt) || 0;
+        return ts > 0 && (min === 0 || ts < min) ? ts : min;
+      }, 0);
+
       // 1 registro consolidado pendiente si existe deuda
       if (pendingVal > 0) {
         consolidated.push({
-          id: `CP-${String(nextIdCounter++).padStart(3, '0')}`,
+          id: allocateCpId([...pendingList, ...credList]),
           supplier: realName,
           supplierId: suppId,
           totalOwed: totalOwedSum > pendingVal ? totalOwedSum : pendingVal,
@@ -1343,7 +1537,10 @@ class NexusApp {
           lastPurchaseDate: latest,
           dueDate: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
           status: 'Pendiente',
-          purchaseOrderIds: Array.from(allPOIds)
+          purchaseOrderIds: Array.from(allPOIds),
+          history: combinedHistory.length > 0 ? combinedHistory : undefined,
+          createdAt: minCreatedAt || undefined,
+          updatedAt: maxUpdatedAt || undefined
         });
       }
 
@@ -1351,7 +1548,7 @@ class NexusApp {
       if (paidList.length > 0 && (pendingVal === 0 || paidList.length > 5)) {
         const totalPaidHist = paidList.reduce((sum, c) => sum + (Number(c.totalOwed) || Number(c.paidAmount) || 0), 0);
         consolidated.push({
-          id: `CP-${String(nextIdCounter++).padStart(3, '0')}`,
+          id: allocateCpId([...paidList, ...credList]),
           supplier: realName,
           supplierId: suppId,
           totalOwed: totalPaidHist,
@@ -1361,13 +1558,17 @@ class NexusApp {
           lastPurchaseDate: latest,
           dueDate: latest,
           status: 'Pagado Total',
-          purchaseOrderIds: Array.from(allPOIds)
+          purchaseOrderIds: Array.from(allPOIds),
+          history: combinedHistory.length > 0 ? combinedHistory : undefined,
+          createdAt: minCreatedAt || undefined,
+          updatedAt: maxUpdatedAt || undefined
         });
       }
     }
 
-    // Verificar si algún proveedor en el directorio tiene saldo y no estaba en supplierCredits
+    // Verificar si algún proveedor activo en el directorio tiene saldo y no estaba en supplierCredits
     this.data.suppliers.forEach(s => {
+      if (!s || (s.id && delSuppSet.has(s.id))) return;
       const bal = Math.max(0, Number(s.creditBalance) || 0);
       if (bal > 0) {
         const existing = consolidated.find(sc => 
@@ -1377,7 +1578,7 @@ class NexusApp {
         if (!existing) {
           const suppPOs = this.data.purchases.filter(p => (p.supplier || '').toLowerCase().trim() === (s.name || '').toLowerCase().trim());
           consolidated.push({
-            id: `CP-${String(nextIdCounter++).padStart(3, '0')}`,
+            id: allocateCpId([]),
             supplier: s.name,
             supplierId: s.id,
             totalOwed: bal,
@@ -1578,8 +1779,14 @@ class NexusApp {
           // Structural fingerprint to detect real stock, price, debt, cash register, users and configuration updates
           const buildFingerprint = (d) => {
             const pFp = (d.products || []).map(p => `${p.id}:${p.name}:${p.category}:${p.measureType || 'Pesaje'}:${p.pieceWeight || 0}:${p.cost}:${p.price}:${p.stock}:${p.status}`).join('|');
-            const cFp = (d.customers || []).map(c => `${c.id}:${c.creditBalance}`).join('|');
-            const sFp = (d.suppliers || []).map(s => `${s.id}:${s.creditBalance}`).join('|');
+            const cFp = (d.customers || []).map(c => `${c.id}:${c.name}:${c.creditBalance}`).join('|');
+            const sFp = (d.suppliers || []).map(s => `${s.id}:${s.name}:${s.creditBalance}`).join('|');
+            const scFp = (d.supplierCredits || []).map(sc => `${sc.id}:${sc.pendingAmount}:${sc.status}`).join('|');
+            const ccFp = (d.customerCredits || []).map(cc => `${cc.id}:${cc.currentBalance}:${cc.status}`).join('|');
+            const catFp = (d.categories || []).map(cat => `${cat.id}:${cat.name}:${cat.cost}`).join('|');
+            const srvFp = (d.services || []).map(srv => `${srv.id}:${srv.name}:${srv.price}`).join('|');
+            const astFp = (d.assets || []).map(ast => `${ast.id}:${ast.name}:${ast.currentVal}`).join('|');
+            const pmFp = (d.paymentMethods || []).map(pm => `${pm.id}:${pm.name}:${pm.fee}`).join('|');
             const uFp = (d.users || []).map(u => `${u.id}:${u.status}:${u.role}`).join('|');
             const prfFp = (d.perfiles || []).map(pr => `${pr.id}:${pr.name}:${(pr.allowedModules || []).length}`).join('|');
             const cashFp = `${d.cashShiftLog?.status || ''}:${d.cashShiftLog?.expectedCashInDrawer || 0}:${d.cashShiftLog?.cashSales || 0}:${d.cashShiftLog?.cashExpenses || 0}`;
@@ -1588,13 +1795,35 @@ class NexusApp {
             const expCount = d.expenses?.length || 0;
             const acCount = d.abonosCompras?.length || 0;
             const storeName = d.store?.name || '';
-            return `${pFp};${cFp};${sFp};${uFp};${prfFp};${cashFp};${txCount};${poCount};${expCount};${acCount};${storeName}`;
+            return `${pFp};${cFp};${sFp};${scFp};${ccFp};${catFp};${srvFp};${astFp};${pmFp};${uFp};${prfFp};${cashFp};${txCount};${poCount};${expCount};${acCount};${storeName}`;
           };
 
           const localFp = buildFingerprint(this.data);
           const remoteFp = buildFingerprint(remote);
 
           if (localFp !== remoteFp) {
+            // Smart local preservation: merge all local deletion blacklists
+            [
+              'deletedExpenses',
+              'deletedPurchases',
+              'deletedProducts',
+              'deletedAbonosCompras',
+              'deletedSuppliers',
+              'deletedSupplierCredits',
+              'deletedCustomers',
+              'deletedCustomerCredits',
+              'deletedCategories',
+              'deletedServices',
+              'deletedAssets',
+              'deletedUsers',
+              'deletedPerfiles',
+              'deletedPaymentMethods'
+            ].forEach(delKey => {
+              const localList = Array.isArray(this.data[delKey]) ? this.data[delKey] : [];
+              const remoteList = Array.isArray(remote[delKey]) ? remote[delKey] : [];
+              remote[delKey] = Array.from(new Set([...localList, ...remoteList]));
+            });
+
             // Smart local preservation: merge recent local transactions that might not yet be in remote
             const localTxs = this.data.recentTransactions || [];
             const remoteTxs = remote.recentTransactions || [];
@@ -1614,12 +1843,7 @@ class NexusApp {
               return tB - tA;
             });
 
-            // Smart local preservation: merge deletedExpenses
-            const localDelExp = Array.isArray(this.data.deletedExpenses) ? this.data.deletedExpenses : [];
-            const remoteDelExp = Array.isArray(remote.deletedExpenses) ? remote.deletedExpenses : [];
-            const combinedDelExp = Array.from(new Set([...localDelExp, ...remoteDelExp]));
-            remote.deletedExpenses = combinedDelExp;
-            const delExpSet = new Set(combinedDelExp);
+            const delExpSet = new Set(remote.deletedExpenses || []);
 
             // Smart local preservation: merge recent local expenses that might not yet be in remote
             const localExp = (this.data.expenses || []).filter(e => e && e.id && !delExpSet.has(e.id));
@@ -1636,33 +1860,16 @@ class NexusApp {
             });
             remote.expenses = Array.from(expMap.values()).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
-            // Smart local preservation: merge deletedAbonosCompras
-            const localDelAc = Array.isArray(this.data.deletedAbonosCompras) ? this.data.deletedAbonosCompras : [];
-            const remoteDelAc = Array.isArray(remote.deletedAbonosCompras) ? remote.deletedAbonosCompras : [];
-            const combinedDelAc = Array.from(new Set([...localDelAc, ...remoteDelAc]));
-            remote.deletedAbonosCompras = combinedDelAc;
-            if (combinedDelAc.length > 0 && Array.isArray(remote.abonosCompras)) {
-              const delAcSet = new Set(combinedDelAc);
+            if (remote.deletedAbonosCompras?.length > 0 && Array.isArray(remote.abonosCompras)) {
+              const delAcSet = new Set(remote.deletedAbonosCompras);
               remote.abonosCompras = remote.abonosCompras.filter(a => a && a.id && !delAcSet.has(a.id));
             }
-
-            // Smart local preservation: merge deletedPurchases
-            const localDel = Array.isArray(this.data.deletedPurchases) ? this.data.deletedPurchases : [];
-            const remoteDel = Array.isArray(remote.deletedPurchases) ? remote.deletedPurchases : [];
-            const combinedDel = Array.from(new Set([...localDel, ...remoteDel]));
-            remote.deletedPurchases = combinedDel;
-            if (combinedDel.length > 0 && Array.isArray(remote.purchases)) {
-              const delSet = new Set(combinedDel);
+            if (remote.deletedPurchases?.length > 0 && Array.isArray(remote.purchases)) {
+              const delSet = new Set(remote.deletedPurchases);
               remote.purchases = remote.purchases.filter(p => !delSet.has(p.id));
             }
-
-            // Smart local preservation: merge deletedProducts
-            const localDelProd = Array.isArray(this.data.deletedProducts) ? this.data.deletedProducts : [];
-            const remoteDelProd = Array.isArray(remote.deletedProducts) ? remote.deletedProducts : [];
-            const combinedDelProd = Array.from(new Set([...localDelProd, ...remoteDelProd]));
-            remote.deletedProducts = combinedDelProd;
-            if (combinedDelProd.length > 0 && Array.isArray(remote.products)) {
-              const delProdSet = new Set(combinedDelProd);
+            if (remote.deletedProducts?.length > 0 && Array.isArray(remote.products)) {
+              const delProdSet = new Set(remote.deletedProducts);
               remote.products = remote.products.filter(p => p && p.id && !delProdSet.has(p.id));
             }
 
@@ -2847,16 +3054,7 @@ class NexusApp {
         }
         const customPermissions = this.getSelectedPermissions('add-user-perm-box', 'add-usr-perm');
 
-        let maxNum = 0;
-        (this.data.users || []).forEach(u => {
-          const match = (u.id || '').match(/USR-(\d+)/i);
-          if (match) {
-            const num = parseInt(match[1], 10);
-            if (!isNaN(num) && num > maxNum) maxNum = num;
-          }
-        });
-        const nextNum = Math.max(maxNum + 1, (this.data.users || []).length + 1);
-        const nextId = `USR-${String(nextNum).padStart(3, '0')}`;
+        const nextId = this.generateUniqueEntityId('USR', this.data.users, this.data.deletedUsers, 3);
 
         const userStoreId = document.getElementById('user-store-select')?.value || '*';
         const newUser = {
@@ -2866,7 +3064,9 @@ class NexusApp {
           customPermissions: customPermissions.length > 0 ? customPermissions : null,
           status: "Active",
           lastLogin: "Ahora mismo",
-          avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80"
+          avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80",
+          createdAt: Date.now(),
+          updatedAt: Date.now()
         };
         this.data.users.push(newUser);
         this.ensureOrderedUserIds();
@@ -3004,7 +3204,7 @@ class NexusApp {
         }
 
         const newCust = {
-          id: `CLI-${Math.floor(106 + Math.random() * 900)}`,
+          id: this.generateUniqueEntityId('CLI', this.data.customers, this.data.deletedCustomers, 3),
           docType,
           document: documentVal,
           name,
@@ -3014,7 +3214,9 @@ class NexusApp {
           creditLimit: limit,
           creditBalance: 0.00,
           allowedPaymentMethods,
-          status: "Active"
+          status: "Active",
+          createdAt: Date.now(),
+          updatedAt: Date.now()
         };
         this.data.customers.unshift(newCust);
         await this.savePersistence();
@@ -3080,6 +3282,7 @@ class NexusApp {
           cust.address = address;
           cust.creditLimit = Math.max(0, this.parseCleanNumber(document.getElementById('edit-cust-limit')?.value));
           cust.allowedPaymentMethods = allowedPaymentMethods;
+          cust.updatedAt = Date.now();
 
           // Cascade name change to credit portfolio and transactions if renamed
           if (oldName !== newName) {
@@ -3189,7 +3392,7 @@ class NexusApp {
         }
 
         const newSupp = {
-          id: `PRV-${Math.floor(205 + Math.random() * 900)}`,
+          id: this.generateUniqueEntityId('PRV', this.data.suppliers, this.data.deletedSuppliers, 3),
           docType,
           nit,
           name,
@@ -3200,7 +3403,9 @@ class NexusApp {
           accountNumber,
           bank,
           creditBalance: pendingBalance,
-          status: isActive ? "Active" : "Inactive"
+          status: isActive ? "Active" : "Inactive",
+          createdAt: Date.now(),
+          updatedAt: Date.now()
         };
         this.data.suppliers.unshift(newSupp);
         if (pendingBalance > 0) {
@@ -3281,6 +3486,7 @@ class NexusApp {
           supp.bank = bank;
           supp.creditBalance = pendingBalance;
           supp.status = isActive ? "Active" : "Inactive";
+          supp.updatedAt = Date.now();
 
           if (!Array.isArray(this.data.supplierCredits)) this.data.supplierCredits = [];
           (this.data.supplierCredits || []).forEach(sc => {
@@ -3340,12 +3546,14 @@ class NexusApp {
         });
 
         const newPrf = {
-          id: `PRF-${Math.floor(10 + Math.random() * 90)}`,
+          id: this.generateUniqueEntityId('PRF', this.data.perfiles, this.data.deletedPerfiles, 2),
           name,
           permissions: desc || `Acceso a ${allowedModules.length} módulo(s)`,
           usersCount: assignedUserIds.length,
           badgeColor: "#7C3AED",
-          allowedModules: allowedModules.length > 0 ? allowedModules : ['*']
+          allowedModules: allowedModules.length > 0 ? allowedModules : ['*'],
+          createdAt: Date.now(),
+          updatedAt: Date.now()
         };
         this.data.perfiles.unshift(newPrf);
         await this.savePersistence();
@@ -3425,11 +3633,13 @@ class NexusApp {
         const fee = document.getElementById('pm-fee-input').value;
 
         const newPm = {
-          id: `PM-${Math.floor(10 + Math.random() * 90)}`,
+          id: this.generateUniqueEntityId('PM', this.data.paymentMethods, this.data.deletedPaymentMethods, 2),
           name,
           icon: "card",
           fee: fee.includes('%') ? fee : `${fee}%`,
-          active: true
+          active: true,
+          createdAt: Date.now(),
+          updatedAt: Date.now()
         };
         this.data.paymentMethods.unshift(newPm);
         await this.savePersistence();
@@ -3580,8 +3790,10 @@ class NexusApp {
         const price = this.parseCleanNumber(document.getElementById('srv-price-input')?.value);
 
         const newSrv = {
-          id: `SRV-${Math.floor(10 + Math.random() * 90)}`,
-          name, category: cat, price, status: "Active"
+          id: this.generateUniqueEntityId('SRV', this.data.services, this.data.deletedServices, 2),
+          name, category: cat, price, status: "Active",
+          createdAt: Date.now(),
+          updatedAt: Date.now()
         };
         this.data.services.unshift(newSrv);
         await this.savePersistence();
@@ -3629,7 +3841,20 @@ class NexusApp {
         const isExtras = catType === 'extras';
         const name = document.getElementById('cat-name-input').value.trim();
         const color = document.getElementById('cat-color-input').value;
-        const id = name.toLowerCase().replace(/[^a-z0-9]/g, '') || `cat_${Date.now()}`;
+        if ((this.data.categories || []).some(c => c && (c.name || '').toLowerCase().trim() === name.toLowerCase())) {
+          this.showToast(`Ya existe una categoría registrada con el nombre "${name}".`, 'warning');
+          return;
+        }
+        const baseId = name.toLowerCase().replace(/[^a-z0-9]/g, '') || `cat_${Date.now()}`;
+        const existingCatIds = new Set([
+          ...(this.data.categories || []).map(c => c && c.id).filter(Boolean),
+          ...(this.data.deletedCategories || [])
+        ]);
+        let id = baseId;
+        let idSuffix = 2;
+        while (existingCatIds.has(id)) {
+          id = `${baseId}_${idSuffix++}`;
+        }
 
         let newCat;
         if (isExtras) {
@@ -3649,7 +3874,9 @@ class NexusApp {
             availableUnits: Math.max(0, Math.round(availableUnits * 100) / 100),
             availableGrams: 0, // CRITICAL: zero grams for extras/manillas
             cost: Math.max(0, Math.round(unitCost * 100) / 100),
-            totalValuation: Math.max(0, Math.round(availableUnits * unitCost * 100) / 100)
+            totalValuation: Math.max(0, Math.round(availableUnits * unitCost * 100) / 100),
+            createdAt: Date.now(),
+            updatedAt: Date.now()
           };
         } else {
           const gramsInput = document.getElementById('cat-grams-input');
@@ -3664,7 +3891,9 @@ class NexusApp {
             itemsCount: 0, 
             color, 
             availableGrams: Math.max(0, Math.round(availableGrams * 10000) / 10000),
-            cost: Math.max(0, Math.round(cost * 100) / 100)
+            cost: Math.max(0, Math.round(cost * 100) / 100),
+            createdAt: Date.now(),
+            updatedAt: Date.now()
           };
         }
 
@@ -3700,6 +3929,7 @@ class NexusApp {
           const isExtras = cat.type === 'extras' || cat.isExtra;
           cat.name = newName;
           cat.color = newColor;
+          cat.updatedAt = Date.now();
 
           if (isExtras) {
             const unitsInput = document.getElementById('edit-cat-units-input');
@@ -3762,10 +3992,12 @@ class NexusApp {
         const cost = this.parseCleanNumber(document.getElementById('ast-cost-input')?.value);
 
         const newAst = {
-          id: `ACT-${Math.floor(10 + Math.random() * 90)}`,
+          id: this.generateUniqueEntityId('ACT', this.data.assets, this.data.deletedAssets, 2),
           name, category: cat,
           purchaseDate: new Date().toISOString().slice(0, 10),
-          costValue: cost, currentVal: cost, status: "Excelente"
+          costValue: cost, currentVal: cost, status: "Excelente",
+          createdAt: Date.now(),
+          updatedAt: Date.now()
         };
         this.data.assets.unshift(newAst);
         await this.savePersistence();
@@ -3984,8 +4216,17 @@ class NexusApp {
             : 'Crédito Proveedor';
 
           const now = new Date();
+          const knownPoIds = new Set([
+            ...(this.data.purchases || []).map(p => p && p.id).filter(Boolean),
+            ...(this.data.deletedPurchases || [])
+          ]);
+          let candidatePoId = `OC-${now.getTime().toString().slice(-6)}`;
+          let poCounter = 1;
+          while (knownPoIds.has(candidatePoId)) {
+            candidatePoId = `OC-${(now.getTime() + poCounter++).toString().slice(-6)}`;
+          }
           const newPO = {
-            id: `OC-${Date.now().toString().slice(-6)}`,
+            id: candidatePoId,
             supplier: supp,
             productId: targetProd.id,
             productName: targetProd.name,
@@ -4037,6 +4278,7 @@ class NexusApp {
               activeCredit.lastPurchaseDate = now.toISOString().slice(0, 10);
               activeCredit.dueDate = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
               activeCredit.status = 'Pendiente';
+              activeCredit.updatedAt = Date.now();
 
               if (!Array.isArray(activeCredit.purchaseOrderIds)) {
                 activeCredit.purchaseOrderIds = activeCredit.poId ? [activeCredit.poId] : [];
@@ -4068,6 +4310,8 @@ class NexusApp {
                 lastPurchaseDate: now.toISOString().slice(0, 10),
                 dueDate: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
                 status: 'Pendiente',
+                createdAt: Date.now(),
+                updatedAt: Date.now(),
                 history: [{
                   type: 'purchase',
                   poId: newPO.id,
@@ -4081,6 +4325,7 @@ class NexusApp {
 
             if (suppObj) {
               suppObj.creditBalance = Math.round(((Number(suppObj.creditBalance) || 0) + totalCost) * 100) / 100;
+              suppObj.updatedAt = Date.now();
             }
           } else if (paymentMethod && paymentMethod.toLowerCase().includes('efectivo')) {
             // Descontar de gaveta de caja y sincronizar arqueo auditado del turno
@@ -6406,6 +6651,7 @@ class NexusApp {
     }
 
     u.password = newPwd;
+    u.updatedAt = Date.now();
     this._adminTargetUserPassword = newPwd;
 
     // If super admin edited their own password, keep session in sync
@@ -6522,7 +6768,12 @@ class NexusApp {
       return;
     }
     if (!confirm(`¿Estás seguro de que deseas eliminar permanentemente este usuario (${u ? u.name : id})?`)) return;
-    this.data.users = this.data.users.filter(usr => usr.id !== id);
+    const cleanId = String(id || '').trim();
+    if (!Array.isArray(this.data.deletedUsers)) this.data.deletedUsers = [];
+    if (cleanId && !this.data.deletedUsers.includes(cleanId)) {
+      this.data.deletedUsers.push(cleanId);
+    }
+    this.data.users = (this.data.users || []).filter(usr => String(usr.id || '').trim() !== cleanId);
     this.ensureOrderedUserIds();
     await this.savePersistence();
     this.renderUsersTable();
@@ -6541,9 +6792,32 @@ class NexusApp {
     } else {
       if (!confirm(`¿Estás seguro de eliminar al cliente "${cust ? cust.name : id}" del directorio?`)) return;
     }
-    this.data.customers = this.data.customers.filter(c => c.id !== id);
-    await this.savePersistence();
+    const cleanId = String(id || '').trim();
+    if (!Array.isArray(this.data.deletedCustomers)) this.data.deletedCustomers = [];
+    if (cleanId && !this.data.deletedCustomers.includes(cleanId)) {
+      this.data.deletedCustomers.push(cleanId);
+    }
+    const custNameNorm = cust && cust.name ? String(cust.name).toLowerCase().trim() : '';
+    if (Array.isArray(this.data.customerCredits)) {
+      if (!Array.isArray(this.data.deletedCustomerCredits)) this.data.deletedCustomerCredits = [];
+      this.data.customerCredits.forEach(cc => {
+        if (!cc) return;
+        const matchCust = (cc.customerId && String(cc.customerId).trim() === cleanId) ||
+                          (custNameNorm && String(cc.customer || '').toLowerCase().trim() === custNameNorm);
+        if (matchCust && cc.id && !this.data.deletedCustomerCredits.includes(String(cc.id).trim())) {
+          this.data.deletedCustomerCredits.push(String(cc.id).trim());
+        }
+      });
+      this.data.customerCredits = this.data.customerCredits.filter(cc => {
+        if (!cc) return false;
+        const matchCust = (cc.customerId && String(cc.customerId).trim() === cleanId) ||
+                          (custNameNorm && String(cc.customer || '').toLowerCase().trim() === custNameNorm);
+        return !matchCust;
+      });
+    }
+    this.data.customers = (this.data.customers || []).filter(c => String(c.id || '').trim() !== cleanId);
     this.syncAllModules();
+    await this.savePersistence();
     this.showToast(`Cliente ${cust ? cust.name : id} eliminado`, 'warning');
   }
 
@@ -6554,9 +6828,32 @@ class NexusApp {
     }
     const supp = (this.data.suppliers || []).find(s => s.id === id);
     if (!confirm(`¿Estás seguro de eliminar al proveedor "${supp ? supp.name : id}"?`)) return;
-    this.data.suppliers = this.data.suppliers.filter(s => s.id !== id);
-    await this.savePersistence();
+    const cleanId = String(id || '').trim();
+    if (!Array.isArray(this.data.deletedSuppliers)) this.data.deletedSuppliers = [];
+    if (cleanId && !this.data.deletedSuppliers.includes(cleanId)) {
+      this.data.deletedSuppliers.push(cleanId);
+    }
+    const suppNameNorm = supp && supp.name ? String(supp.name).toLowerCase().trim() : '';
+    if (Array.isArray(this.data.supplierCredits)) {
+      if (!Array.isArray(this.data.deletedSupplierCredits)) this.data.deletedSupplierCredits = [];
+      this.data.supplierCredits.forEach(sc => {
+        if (!sc) return;
+        const matchSupp = (sc.supplierId && String(sc.supplierId).trim() === cleanId) ||
+                          (suppNameNorm && String(sc.supplier || '').toLowerCase().trim() === suppNameNorm);
+        if (matchSupp && sc.id && !this.data.deletedSupplierCredits.includes(String(sc.id).trim())) {
+          this.data.deletedSupplierCredits.push(String(sc.id).trim());
+        }
+      });
+      this.data.supplierCredits = this.data.supplierCredits.filter(sc => {
+        if (!sc) return false;
+        const matchSupp = (sc.supplierId && String(sc.supplierId).trim() === cleanId) ||
+                          (suppNameNorm && String(sc.supplier || '').toLowerCase().trim() === suppNameNorm);
+        return !matchSupp;
+      });
+    }
+    this.data.suppliers = (this.data.suppliers || []).filter(s => String(s.id || '').trim() !== cleanId);
     this.syncAllModules();
+    await this.savePersistence();
     this.showToast(`Proveedor ${supp ? supp.name : id} eliminado`, 'warning');
   }
 
@@ -6578,7 +6875,12 @@ class NexusApp {
       }
     }
     if (!confirm(`¿Estás seguro de eliminar el perfil "${prf ? prf.name : id}" y sus permisos?`)) return;
-    this.data.perfiles = this.data.perfiles.filter(p => p.id !== id);
+    const cleanId = String(id || '').trim();
+    if (!Array.isArray(this.data.deletedPerfiles)) this.data.deletedPerfiles = [];
+    if (cleanId && !this.data.deletedPerfiles.includes(cleanId)) {
+      this.data.deletedPerfiles.push(cleanId);
+    }
+    this.data.perfiles = (this.data.perfiles || []).filter(p => String(p.id || '').trim() !== cleanId);
     await this.savePersistence();
     this.renderPerfilesTable();
     this.showToast(`Perfil ${prf ? prf.name : id} eliminado`, 'warning');
@@ -6590,7 +6892,12 @@ class NexusApp {
       return;
     }
     if (!confirm('¿Estás seguro de eliminar esta forma de pago del sistema?')) return;
-    this.data.paymentMethods = this.data.paymentMethods.filter(p => p.id !== id);
+    const cleanId = String(id || '').trim();
+    if (!Array.isArray(this.data.deletedPaymentMethods)) this.data.deletedPaymentMethods = [];
+    if (cleanId && !this.data.deletedPaymentMethods.includes(cleanId)) {
+      this.data.deletedPaymentMethods.push(cleanId);
+    }
+    this.data.paymentMethods = (this.data.paymentMethods || []).filter(p => String(p.id || '').trim() !== cleanId);
     await this.savePersistence();
     this.renderPaymentMethodsTable();
     this.showToast(`Método de pago ${id} eliminado`, 'warning');
@@ -6645,7 +6952,12 @@ class NexusApp {
       return;
     }
     if (!confirm('¿Estás seguro de eliminar este servicio del taller joyero?')) return;
-    this.data.services = this.data.services.filter(s => s.id !== id);
+    const cleanId = String(id || '').trim();
+    if (!Array.isArray(this.data.deletedServices)) this.data.deletedServices = [];
+    if (cleanId && !this.data.deletedServices.includes(cleanId)) {
+      this.data.deletedServices.push(cleanId);
+    }
+    this.data.services = (this.data.services || []).filter(s => String(s.id || '').trim() !== cleanId);
     await this.savePersistence();
     this.renderInvServiciosTable();
     this.showToast(`Servicio ${id} eliminado`, 'warning');
@@ -6669,11 +6981,16 @@ class NexusApp {
 
     if (!confirm(`¿Estás seguro de eliminar la categoría vacía "${catName}"?`)) return;
 
-    this.data.categories = (this.data.categories || []).filter(c => c.id !== id);
+    const cleanId = String(id || '').trim();
+    if (!Array.isArray(this.data.deletedCategories)) this.data.deletedCategories = [];
+    if (cleanId && !this.data.deletedCategories.includes(cleanId)) {
+      this.data.deletedCategories.push(cleanId);
+    }
+    this.data.categories = (this.data.categories || []).filter(c => String(c.id || '').trim() !== cleanId);
     if (this.selectedCategory === id) this.selectedCategory = 'all';
     this.syncAllCategoryGrams();
-    await this.savePersistence();
     this.syncAllModules();
+    await this.savePersistence();
     this.showToast(`Categoría "${catName}" eliminada y sincronizada`, 'warning');
   }
 
@@ -6683,9 +7000,14 @@ class NexusApp {
       return;
     }
     if (!confirm('¿Estás seguro de dar de baja y eliminar este activo fijo?')) return;
-    this.data.assets = this.data.assets.filter(a => a.id !== id);
-    await this.savePersistence();
+    const cleanId = String(id || '').trim();
+    if (!Array.isArray(this.data.deletedAssets)) this.data.deletedAssets = [];
+    if (cleanId && !this.data.deletedAssets.includes(cleanId)) {
+      this.data.deletedAssets.push(cleanId);
+    }
+    this.data.assets = (this.data.assets || []).filter(a => String(a.id || '').trim() !== cleanId);
     this.syncAllModules();
+    await this.savePersistence();
     this.showToast(`Activo ${id} eliminado`, 'warning');
   }
 
@@ -6802,6 +7124,10 @@ class NexusApp {
       const suppNorm = (po.supplier || '').toLowerCase().trim();
       const suppObj = (this.data.suppliers || []).find(s => (s.name || '').toLowerCase().trim() === suppNorm);
 
+      if (!Array.isArray(this.data.deletedSupplierCredits)) {
+        this.data.deletedSupplierCredits = [];
+      }
+
       this.data.supplierCredits.forEach(cred => {
         const credSuppNorm = (cred.supplier || '').toLowerCase().trim();
         const matchesPO = cred.poId === po.id || 
@@ -6812,6 +7138,7 @@ class NexusApp {
           const amountToDeduct = Math.min(Number(cred.pendingAmount) || 0, poTotal);
           cred.totalOwed = Math.round(Math.max(0, (Number(cred.totalOwed) || 0) - poTotal) * 100) / 100;
           cred.pendingAmount = Math.round(Math.max(0, (Number(cred.pendingAmount) || 0) - amountToDeduct) * 100) / 100;
+          cred.updatedAt = Date.now();
 
           if (Array.isArray(cred.purchaseOrderIds)) {
             cred.purchaseOrderIds = cred.purchaseOrderIds.filter(pid => pid !== po.id);
@@ -6824,6 +7151,9 @@ class NexusApp {
           }
           if (cred.totalOwed <= 0 && (!cred.purchaseOrderIds || cred.purchaseOrderIds.length === 0)) {
             cred._delete = true;
+            if (cred.id && !this.data.deletedSupplierCredits.includes(String(cred.id).trim())) {
+              this.data.deletedSupplierCredits.push(String(cred.id).trim());
+            }
           }
         }
       });
@@ -6832,6 +7162,7 @@ class NexusApp {
 
       if (isCreditPurchase && suppObj) {
         suppObj.creditBalance = Math.round(Math.max(0, (Number(suppObj.creditBalance) || 0) - poTotal) * 100) / 100;
+        suppObj.updatedAt = Date.now();
       }
     }
 
@@ -6902,6 +7233,7 @@ class NexusApp {
         if (cred.pendingAmount > 0) {
           cred.status = 'Pendiente';
         }
+        cred.updatedAt = Date.now();
       }
     }
 
@@ -6909,6 +7241,7 @@ class NexusApp {
     const suppObj = (this.data.suppliers || []).find(s => s.name?.toLowerCase().trim() === ab.supplier?.toLowerCase().trim());
     if (suppObj) {
       suppObj.creditBalance = Math.round(((Number(suppObj.creditBalance) || 0) + amt) * 100) / 100;
+      suppObj.updatedAt = Date.now();
     }
 
     // Revertir pago en la orden de compra si existe
@@ -7112,13 +7445,17 @@ class NexusApp {
       let cred = this.data.customerCredits.find(c => (c.customer === entityName || (cust && c.customer === cust.name)) && c.currentBalance > 0);
       if (!cred) {
         if (cust && cust.creditBalance > 0) {
+          const newCcId = this.generateUniqueEntityId('CC', this.data.customerCredits, this.data.deletedCustomerCredits, 3);
           cred = {
-            id: `CC-${Math.floor(304 + Math.random() * 900)}`,
+            id: newCcId,
             customer: entityName,
+            customerId: cust.id || '',
             totalGranted: cust.creditBalance,
             currentBalance: cust.creditBalance,
             dueDate: new Date().toISOString().slice(0, 10),
-            status: "Pendiente"
+            status: "Pendiente",
+            createdAt: Date.now(),
+            updatedAt: Date.now()
           };
           this.data.customerCredits.unshift(cred);
         }
@@ -7206,10 +7543,12 @@ class NexusApp {
         cred.currentBalance = 0;
         cred.status = "Saldado";
       }
+      cred.updatedAt = Date.now();
 
       const cust = (this.data.customers || []).find(c => c.name === cred.customer);
       if (cust) {
         cust.creditBalance = Math.round(Math.max(0, (cust.creditBalance || 0) - actualPay) * 100) / 100;
+        cust.updatedAt = Date.now();
       }
 
       // Sync with cashier cash drawer and electronic sales
@@ -7321,6 +7660,7 @@ class NexusApp {
         cp.pendingAmount = 0;
         cp.status = "Pagado Total";
       }
+      cp.updatedAt = Date.now();
 
       const supp = (this.data.suppliers || []).find(s => 
         s.name?.toLowerCase().trim() === cp.supplier?.toLowerCase().trim() ||
@@ -7328,6 +7668,7 @@ class NexusApp {
       );
       if (supp) {
         supp.creditBalance = Math.round(Math.max(0, (Number(supp.creditBalance) || 0) - actualPay) * 100) / 100;
+        supp.updatedAt = Date.now();
       }
 
       // Solo descontar de caja FÍSICA si fue pagado en Efectivo o porción efectivo de Pago Mixto
@@ -7428,37 +7769,73 @@ class NexusApp {
     this.openAbonoModal('supplier', deudaId);
   }
 
-  deleteSupplierCredit(deudaId) {
-    const credit = (this.data.supplierCredits || []).find(sc => sc.id === deudaId);
+  async deleteSupplierCredit(deudaId) {
+    const cleanId = String(deudaId || '').trim();
+    const credit = (this.data.supplierCredits || []).find(sc => String(sc.id || '').trim() === cleanId);
     const supplierName = credit ? credit.supplier : 'este proveedor';
     const pendingFmt = credit ? this.formatCurrency(credit.pendingAmount || 0) : '';
     const confirmMsg = `¿Eliminar definitivamente la deuda${pendingFmt ? ' de ' + pendingFmt : ''} con "${supplierName}"?\n\nEsta acción eliminará el registro y saldará el saldo en el directorio de proveedores. No se puede deshacer.`;
     if (!confirm(confirmMsg)) return;
 
-    // 1. Eliminar el registro de supplierCredits
+    if (!Array.isArray(this.data.deletedSupplierCredits)) {
+      this.data.deletedSupplierCredits = [];
+    }
+    if (cleanId && !this.data.deletedSupplierCredits.includes(cleanId)) {
+      this.data.deletedSupplierCredits.push(cleanId);
+    }
+
+    const suppNorm = credit && credit.supplier ? String(credit.supplier).toLowerCase().trim() : '';
+    const suppIdNorm = credit && credit.supplierId ? String(credit.supplierId).trim() : '';
+
+    // 1. Eliminar el registro de supplierCredits (y cualquier otro crédito activo del mismo proveedor consolidado)
     if (Array.isArray(this.data.supplierCredits)) {
-      this.data.supplierCredits = this.data.supplierCredits.filter(sc => sc.id !== deudaId);
+      this.data.supplierCredits.forEach(sc => {
+        if (!sc) return;
+        const scId = String(sc.id || '').trim();
+        const matchSameSupp = (suppIdNorm && String(sc.supplierId || '').trim() === suppIdNorm) ||
+                              (suppNorm && String(sc.supplier || '').toLowerCase().trim() === suppNorm);
+        if ((scId === cleanId || matchSameSupp) && scId && !this.data.deletedSupplierCredits.includes(scId)) {
+          this.data.deletedSupplierCredits.push(scId);
+        }
+      });
+      this.data.supplierCredits = this.data.supplierCredits.filter(sc => {
+        if (!sc) return false;
+        const scId = String(sc.id || '').trim();
+        const matchSameSupp = (suppIdNorm && String(sc.supplierId || '').trim() === suppIdNorm) ||
+                              (suppNorm && String(sc.supplier || '').toLowerCase().trim() === suppNorm);
+        return scId !== cleanId && !matchSameSupp;
+      });
     }
 
     // 2. Si el crédito tiene supplierId o nombre, poner creditBalance = 0 en el proveedor
     if (credit && Array.isArray(this.data.suppliers)) {
       const supplier = this.data.suppliers.find(s =>
-        (credit.supplierId && s.id === credit.supplierId) ||
-        s.name?.toLowerCase().trim() === credit.supplier?.toLowerCase().trim()
+        (suppIdNorm && String(s.id || '').trim() === suppIdNorm) ||
+        (suppNorm && String(s.name || '').toLowerCase().trim() === suppNorm)
       );
       if (supplier) {
         supplier.creditBalance = 0;
+        supplier.updatedAt = Date.now();
       }
     }
 
-    // 3. Guardar y re-renderizar globalmente
-    this.savePersistence().then(() => {
-      this.syncAllModules();
-      this.showToast('Deuda eliminada correctamente. El saldo del proveedor ha sido actualizado.', 'success');
-    }).catch(() => {
-      this.syncAllModules();
-      this.showToast('Deuda eliminada correctamente.', 'success');
-    });
+    // 3. Marcar órdenes de compra asociadas como saldadas para que syncSupplierCreditsState no regenere la deuda
+    if (credit && Array.isArray(this.data.purchases)) {
+      const linkedIds = new Set(Array.isArray(credit.purchaseOrderIds) ? credit.purchaseOrderIds : (credit.poId ? [credit.poId] : []));
+      this.data.purchases.forEach(po => {
+        if (!po) return;
+        const poSuppNorm = String(po.supplier || '').toLowerCase().trim();
+        if (linkedIds.has(po.id) || (suppNorm && poSuppNorm === suppNorm && po.paymentStatus !== 'Pagado Total')) {
+          po.paymentStatus = 'Pagado Total';
+          po.paidAmount = Number(po.total) || 0;
+        }
+      });
+    }
+
+    // 4. Sincronizar y guardar globalmente
+    this.syncAllModules();
+    await this.savePersistence();
+    this.showToast('Deuda eliminada correctamente. El saldo del proveedor ha sido actualizado.', 'success');
   }
 
   /* --------------------------------------------------------------------------
@@ -10569,6 +10946,7 @@ class NexusApp {
 
           p.stock = Math.round(((Number(p.stock) || 0) + unitsToRestore) * 10000) / 10000;
           p.stockUpdatedAt = Date.now();
+          p._explicitStockEdit = true;
           if (p.stock > (Number(p.minStock) || 0)) {
             p.status = 'active';
           } else if (p.stock > 0) {
@@ -10605,6 +10983,7 @@ class NexusApp {
       const cust = (this.data.customers || []).find(c => c.name && c.name.toLowerCase().trim() === tx.customer.toLowerCase().trim());
       if (cust) {
         cust.creditBalance = Math.round(Math.max(0, (Number(cust.creditBalance) || 0) - creditAmtToRevert) * 100) / 100;
+        cust.updatedAt = Date.now();
       }
       const cc = (this.data.customerCredits || []).find(c => 
         (c.invoiceId && c.invoiceId === tx.id) || 
@@ -10613,6 +10992,7 @@ class NexusApp {
       if (cc) {
         cc.currentBalance = Math.round(Math.max(0, (Number(cc.currentBalance) || 0) - creditAmtToRevert) * 100) / 100;
         if (cc.currentBalance <= 0) cc.status = 'Anulado';
+        cc.updatedAt = Date.now();
       }
     }
 
@@ -28268,38 +28648,50 @@ class NexusApp {
         }
         if (mCredit > 0 && cust) {
           cust.creditBalance = Math.round(((Number(cust.creditBalance) || 0) + mCredit) * 100) / 100;
+          cust.updatedAt = Date.now();
           let existing = (this.data.customerCredits || []).find(cr => cr.customer === cust.name);
           if (existing) {
             existing.totalGranted = Math.round(((Number(existing.totalGranted) || 0) + mCredit) * 100) / 100;
             existing.currentBalance = Math.round(((Number(existing.currentBalance) || 0) + mCredit) * 100) / 100;
             existing.status = 'Al Día';
+            existing.updatedAt = Date.now();
           } else {
+            const newCcId = this.generateUniqueEntityId('CC', this.data.customerCredits, this.data.deletedCustomerCredits, 3);
             this.data.customerCredits.unshift({
-              id: `CC-${Math.floor(310 + Math.random() * 600)}`,
+              id: newCcId,
               customer: cust.name,
+              customerId: cust.id || '',
               totalGranted: mCredit,
               currentBalance: mCredit,
               dueDate: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString().split('T')[0],
-              status: 'Al Día'
+              status: 'Al Día',
+              createdAt: Date.now(),
+              updatedAt: Date.now()
             });
           }
         }
       } else if (this.selectedPayMethod === 'credit') {
         if (cust) {
           cust.creditBalance = Math.round(((Number(cust.creditBalance) || 0) + grandTotal) * 100) / 100;
+          cust.updatedAt = Date.now();
           let existing = (this.data.customerCredits || []).find(cr => cr.customer === cust.name);
           if (existing) {
             existing.totalGranted = Math.round(((Number(existing.totalGranted) || 0) + grandTotal) * 100) / 100;
             existing.currentBalance = Math.round(((Number(existing.currentBalance) || 0) + grandTotal) * 100) / 100;
             existing.status = 'Al Día';
+            existing.updatedAt = Date.now();
           } else {
+            const newCcId = this.generateUniqueEntityId('CC', this.data.customerCredits, this.data.deletedCustomerCredits, 3);
             this.data.customerCredits.unshift({
-              id: `CC-${Math.floor(310 + Math.random() * 600)}`,
+              id: newCcId,
               customer: cust.name,
+              customerId: cust.id || '',
               totalGranted: grandTotal,
               currentBalance: grandTotal,
               dueDate: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString().split('T')[0],
-              status: 'Al Día'
+              status: 'Al Día',
+              createdAt: Date.now(),
+              updatedAt: Date.now()
             });
           }
         }
@@ -28311,13 +28703,18 @@ class NexusApp {
         }
         if (cust && separePending > 0) {
           cust.creditBalance = Math.round(((Number(cust.creditBalance) || 0) + separePending) * 100) / 100;
+          cust.updatedAt = Date.now();
+          const newSepId = this.generateUniqueEntityId('SEP', this.data.customerCredits, this.data.deletedCustomerCredits, 3);
           this.data.customerCredits.unshift({
-            id: `SEP-${Math.floor(500 + Math.random() * 500)}`,
+            id: newSepId,
             customer: cust.name,
+            customerId: cust.id || '',
             totalGranted: grandTotal,
             currentBalance: separePending,
             dueDate: new Date(Date.now() + 45 * 24 * 3600 * 1000).toISOString().split('T')[0],
-            status: 'Plan Separe'
+            status: 'Plan Separe',
+            createdAt: Date.now(),
+            updatedAt: Date.now()
           });
         }
       }

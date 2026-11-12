@@ -198,6 +198,7 @@ function mergeStoreState(serverData, clientData, isAdmin = false) {
   if (!clientData || typeof clientData !== 'object') return serverData;
 
   const result = Object.assign({}, clientData);
+  const nowMs = Date.now();
 
   // 1. MERGE recentTransactions (Keyed by id, strictly preserve any transaction already committed to server)
   const serverTxs = Array.isArray(serverData.recentTransactions) ? serverData.recentTransactions : [];
@@ -212,7 +213,15 @@ function mergeStoreState(serverData, clientData, isAdmin = false) {
     if (tx && tx.id) {
       const existing = txMap.get(tx.id);
       if (existing) {
-        txMap.set(tx.id, Object.assign({}, existing, tx));
+        const mergedTx = Object.assign({}, existing, tx);
+        const existSt = String(existing.status || '').toLowerCase();
+        const clientSt = String(tx.status || '').toLowerCase();
+        if ((existSt === 'anulado' || existSt === 'cancelado') && clientSt !== 'anulado' && clientSt !== 'cancelado') {
+          mergedTx.status = existing.status;
+          if (existing.anuladoAt) mergedTx.anuladoAt = existing.anuladoAt;
+          if (existing.anuladoBy) mergedTx.anuladoBy = existing.anuladoBy;
+        }
+        txMap.set(tx.id, mergedTx);
       } else {
         txMap.set(tx.id, tx);
       }
@@ -270,7 +279,10 @@ function mergeStoreState(serverData, clientData, isAdmin = false) {
     const clientExpIds = new Set(clientExp.map(e => e && e.id).filter(Boolean));
     serverExp.forEach(se => {
       if (se && se.id && !clientExpIds.has(se.id)) {
-        deletedExpenses.add(se.id);
+        const itemTs = Number(se.createdAt || se.timestamp) || 0;
+        if (!itemTs || (nowMs - itemTs > 120000)) {
+          deletedExpenses.add(se.id);
+        }
       }
     });
   }
@@ -311,7 +323,10 @@ function mergeStoreState(serverData, clientData, isAdmin = false) {
     const clientAcIds = new Set(clientAc.map(a => a && a.id).filter(Boolean));
     serverAc.forEach(sa => {
       if (sa && sa.id && !clientAcIds.has(sa.id)) {
-        deletedAbonosCompras.add(sa.id);
+        const itemTs = Number(sa.createdAt || sa.timestamp) || 0;
+        if (!itemTs || (nowMs - itemTs > 120000)) {
+          deletedAbonosCompras.add(sa.id);
+        }
       }
     });
   }
@@ -338,13 +353,108 @@ function mergeStoreState(serverData, clientData, isAdmin = false) {
   clientHist.forEach(h => { const k = h.shiftId || h.id; if (k) histMap.set(k, h); });
   result.cashShiftsHistory = Array.from(histMap.values());
 
-  // 5. MERGE customerCredits (Keyed by id or customer)
-  const serverCredits = Array.isArray(serverData.customerCredits) ? serverData.customerCredits : [];
-  const clientCredits = Array.isArray(clientData.customerCredits) ? clientData.customerCredits : [];
-  const creditMap = new Map();
-  serverCredits.forEach(c => { const k = c.id || c.customer; if (k) creditMap.set(k, c); });
-  clientCredits.forEach(c => { const k = c.id || c.customer; if (k) creditMap.set(k, c); });
-  result.customerCredits = Array.from(creditMap.values());
+  // Helper: Merge CRUD collections with persistent deletion blacklists & timestamp-aware conflict resolution
+  const mergeCrudCollection = (colKey, delKey, fallbackKeyProp = null) => {
+    const deletedSet = new Set(
+      [
+        ...(Array.isArray(clientData[delKey]) ? clientData[delKey] : []),
+        ...(Array.isArray(serverData[delKey]) ? serverData[delKey] : [])
+      ].map(id => String(id || '').trim()).filter(Boolean)
+    );
+
+    const serverArr = Array.isArray(serverData[colKey]) ? serverData[colKey] : [];
+    const clientArr = Array.isArray(clientData[colKey]) ? clientData[colKey] : [];
+
+    const getKey = (item) => {
+      if (!item) return '';
+      if (item.id) return String(item.id).trim();
+      if (fallbackKeyProp && item[fallbackKeyProp]) return String(item[fallbackKeyProp]).trim();
+      return '';
+    };
+
+    if (isAdmin && Array.isArray(clientData[colKey])) {
+      const clientKeys = new Set(clientArr.map(getKey).filter(Boolean));
+      const clientNames = fallbackKeyProp
+        ? new Set(clientArr.map(item => item && item[fallbackKeyProp] ? String(item[fallbackKeyProp]).toLowerCase().trim() : '').filter(Boolean))
+        : new Set();
+
+      serverArr.forEach(sItem => {
+        const k = getKey(sItem);
+        if (!k) return;
+        const fName = (fallbackKeyProp && sItem[fallbackKeyProp]) ? String(sItem[fallbackKeyProp]).toLowerCase().trim() : '';
+        const existsInClient = clientKeys.has(k) || (fName && clientNames.has(fName));
+        if (!existsInClient) {
+          const itemTs = Number(sItem.createdAt || sItem.timestamp) || 0;
+          if (!itemTs || (nowMs - itemTs > 120000)) {
+            deletedSet.add(k);
+          }
+        }
+      });
+    }
+
+    result[delKey] = Array.from(deletedSet);
+
+    const itemMap = new Map();
+    serverArr.forEach(sItem => {
+      const k = getKey(sItem);
+      if (k && !deletedSet.has(k)) {
+        itemMap.set(k, sItem);
+      }
+    });
+
+    clientArr.forEach(cItem => {
+      const k = getKey(cItem);
+      if (!k || deletedSet.has(k)) return;
+      const existing = itemMap.get(k);
+      if (!existing) {
+        itemMap.set(k, cItem);
+      } else {
+        const sTs = Number(existing.updatedAt || existing.createdAt || existing.timestamp) || 0;
+        const cTs = Number(cItem.updatedAt || cItem.createdAt || cItem.timestamp) || 0;
+        const preferServerOnTie = !isAdmin && colKey !== 'customers' && colKey !== 'customerCredits';
+        if (sTs > cTs || (preferServerOnTie && sTs === cTs)) {
+          itemMap.set(k, Object.assign({}, cItem, existing));
+        } else {
+          itemMap.set(k, Object.assign({}, existing, cItem));
+        }
+      }
+    });
+
+    result[colKey] = Array.from(itemMap.values()).filter(item => {
+      const k = getKey(item);
+      return k && !deletedSet.has(k);
+    });
+    return deletedSet;
+  };
+
+  // 5. MERGE customers, suppliers, and their credits with deletion blacklists
+  const deletedCustomers = mergeCrudCollection('customers', 'deletedCustomers', 'name');
+  const deletedCustomerCredits = mergeCrudCollection('customerCredits', 'deletedCustomerCredits', 'customer');
+  const deletedSuppliers = mergeCrudCollection('suppliers', 'deletedSuppliers', 'name');
+
+  // Purge orphan customerCredits belonging to deleted customers
+  if (deletedCustomers.size > 0 && Array.isArray(result.customerCredits)) {
+    const activeCustNames = new Set(
+      (result.customers || []).map(c => c && c.name ? String(c.name).toLowerCase().trim() : '').filter(Boolean)
+    );
+    const deletedCustNames = new Set(
+      (Array.isArray(serverData.customers) ? serverData.customers : [])
+        .filter(c => c && c.id && deletedCustomers.has(String(c.id).trim()) && c.name)
+        .map(c => String(c.name).toLowerCase().trim())
+        .filter(n => n && !activeCustNames.has(n))
+    );
+    result.customerCredits = result.customerCredits.filter(cc => {
+      if (!cc) return false;
+      const matchId = cc.customerId && deletedCustomers.has(String(cc.customerId).trim());
+      const matchName = cc.customer && deletedCustNames.has(String(cc.customer).toLowerCase().trim());
+      if (matchId || matchName) {
+        if (cc.id) deletedCustomerCredits.add(String(cc.id).trim());
+        return false;
+      }
+      return true;
+    });
+    result.deletedCustomerCredits = Array.from(deletedCustomerCredits);
+  }
 
   // 5b. DELETED PURCHASES BLACKLIST & PURCHASES MERGE:
   // Strictly prevent deleted purchases from resurrecting via server merge
@@ -361,7 +471,10 @@ function mergeStoreState(serverData, clientData, isAdmin = false) {
     const clientPoIds = new Set(clientPurchases.map(p => p && p.id).filter(Boolean));
     serverPurchases.forEach(sp => {
       if (sp && sp.id && !clientPoIds.has(sp.id)) {
-        deletedPurchases.add(sp.id);
+        const itemTs = Number(sp.createdAt || sp.timestamp) || 0;
+        if (!itemTs || (nowMs - itemTs > 120000)) {
+          deletedPurchases.add(sp.id);
+        }
       }
     });
   }
@@ -405,16 +518,174 @@ function mergeStoreState(serverData, clientData, isAdmin = false) {
   });
   result.purchases = deduplicatedPOs;
 
-  // 5c. MERGE supplierCredits (Keyed by id or supplier, respecting admin updates and purged purchases)
+  // 5c. MERGE supplierCredits with deletion blacklist & cascade cleanup (matched by supplier identity + ID)
+  const deletedSupplierCredits = new Set(
+    [
+      ...(Array.isArray(clientData.deletedSupplierCredits) ? clientData.deletedSupplierCredits : []),
+      ...(Array.isArray(serverData.deletedSupplierCredits) ? serverData.deletedSupplierCredits : [])
+    ].map(id => String(id || '').trim()).filter(Boolean)
+  );
+  const explicitClientDeletedSc = new Set(
+    (Array.isArray(clientData.deletedSupplierCredits) ? clientData.deletedSupplierCredits : [])
+      .map(id => String(id || '').trim()).filter(Boolean)
+  );
+
+  const getScSuppKey = (sc) => {
+    if (!sc) return '';
+    const sName = String(sc.supplier || sc.supplierId || sc.id || '').toLowerCase().trim();
+    if (!sName) return '';
+    const state = (Number(sc.pendingAmount) > 0 && sc.status !== 'Pagado Total') ? 'pending' : 'paid';
+    return `${sName}__${state}`;
+  };
+
+  const serverSuppCredits = Array.isArray(serverData.supplierCredits) ? serverData.supplierCredits : [];
+  const clientSuppCredits = Array.isArray(clientData.supplierCredits) ? clientData.supplierCredits : [];
+  const newlyDeletedScObjects = [];
+
   if (isAdmin && Array.isArray(clientData.supplierCredits)) {
-    result.supplierCredits = clientData.supplierCredits.map(sc => Object.assign({}, sc));
+    const clientScSuppKeys = new Set(clientSuppCredits.map(getScSuppKey).filter(Boolean));
+    serverSuppCredits.forEach(sSc => {
+      if (!sSc) return;
+      const scId = String(sSc.id || '').trim();
+      const sKey = getScSuppKey(sSc);
+      const explicitlyDeleted = scId && explicitClientDeletedSc.has(scId);
+      const missingBySupplier = sKey && !clientScSuppKeys.has(sKey);
+      if (explicitlyDeleted || missingBySupplier) {
+        const itemTs = Number(sSc.createdAt || sSc.timestamp) || 0;
+        if (explicitlyDeleted || !itemTs || (nowMs - itemTs > 120000)) {
+          if (scId) deletedSupplierCredits.add(scId);
+          if (sKey) deletedSupplierCredits.add(`suppkey:${sKey}`);
+          newlyDeletedScObjects.push(sSc);
+        }
+      }
+    });
+
+    // If admin created a fresh credit for a supplier, un-blacklist its suppkey
+    clientSuppCredits.forEach(cSc => {
+      if (!cSc) return;
+      const scId = String(cSc.id || '').trim();
+      if (scId && explicitClientDeletedSc.has(scId)) return;
+      const sKey = getScSuppKey(cSc);
+      if (sKey && deletedSupplierCredits.has(`suppkey:${sKey}`)) {
+        const cTs = Number(cSc.updatedAt || cSc.createdAt || cSc.timestamp) || 0;
+        if (cTs && (nowMs - cTs < 120000)) {
+          deletedSupplierCredits.delete(`suppkey:${sKey}`);
+        }
+      }
+    });
+
+    const scMap = new Map();
+    clientSuppCredits.forEach(cSc => {
+      if (!cSc) return;
+      const scId = String(cSc.id || '').trim();
+      const sKey = getScSuppKey(cSc);
+      if (scId && explicitClientDeletedSc.has(scId)) return;
+      if (sKey && deletedSupplierCredits.has(`suppkey:${sKey}`)) return;
+      scMap.set(sKey || scId, Object.assign({}, cSc));
+    });
+    serverSuppCredits.forEach(sSc => {
+      if (!sSc) return;
+      const scId = String(sSc.id || '').trim();
+      const sKey = getScSuppKey(sSc);
+      if ((scId && deletedSupplierCredits.has(scId)) || (sKey && deletedSupplierCredits.has(`suppkey:${sKey}`))) return;
+      if (!scMap.has(sKey || scId)) {
+        scMap.set(sKey || scId, Object.assign({}, sSc));
+      }
+    });
+    result.supplierCredits = Array.from(scMap.values());
   } else {
-    const serverSuppCredits = Array.isArray(serverData.supplierCredits) ? serverData.supplierCredits : [];
-    const clientSuppCredits = Array.isArray(clientData.supplierCredits) ? clientData.supplierCredits : [];
-    const suppCreditMap = new Map();
-    serverSuppCredits.forEach(sc => { const k = sc.id || sc.supplier; if (k) suppCreditMap.set(k, sc); });
-    clientSuppCredits.forEach(sc => { const k = sc.id || sc.supplier; if (k) suppCreditMap.set(k, sc); });
-    result.supplierCredits = Array.from(suppCreditMap.values());
+    const scMap = new Map();
+    serverSuppCredits.forEach(sSc => {
+      if (!sSc) return;
+      const scId = String(sSc.id || '').trim();
+      const sKey = getScSuppKey(sSc);
+      if ((scId && deletedSupplierCredits.has(scId)) || (sKey && deletedSupplierCredits.has(`suppkey:${sKey}`))) return;
+      scMap.set(sKey || scId, Object.assign({}, sSc));
+    });
+    clientSuppCredits.forEach(cSc => {
+      if (!cSc) return;
+      const scId = String(cSc.id || '').trim();
+      const sKey = getScSuppKey(cSc);
+      if ((scId && deletedSupplierCredits.has(scId)) || (sKey && deletedSupplierCredits.has(`suppkey:${sKey}`))) return;
+      const existing = scMap.get(sKey || scId);
+      if (!existing) {
+        scMap.set(sKey || scId, Object.assign({}, cSc));
+      } else {
+        const sTs = Number(existing.updatedAt || existing.createdAt || 0) || 0;
+        const cTs = Number(cSc.updatedAt || cSc.createdAt || 0) || 0;
+        if (cTs > sTs) {
+          scMap.set(sKey || scId, Object.assign({}, existing, cSc));
+        }
+      }
+    });
+    result.supplierCredits = Array.from(scMap.values());
+  }
+
+  // If any supplier was deleted, also purge its supplierCredits
+  if (deletedSuppliers.size > 0 && Array.isArray(result.supplierCredits)) {
+    const activeSuppNames = new Set(
+      (result.suppliers || []).map(s => s && s.name ? String(s.name).toLowerCase().trim() : '').filter(Boolean)
+    );
+    const deletedSuppNames = new Set(
+      (Array.isArray(serverData.suppliers) ? serverData.suppliers : [])
+        .filter(s => s && s.id && deletedSuppliers.has(String(s.id).trim()) && s.name)
+        .map(s => String(s.name).toLowerCase().trim())
+        .filter(n => n && !activeSuppNames.has(n))
+    );
+    result.supplierCredits = result.supplierCredits.filter(sc => {
+      if (!sc) return false;
+      const matchId = sc.supplierId && deletedSuppliers.has(String(sc.supplierId).trim());
+      const matchName = sc.supplier && deletedSuppNames.has(String(sc.supplier).toLowerCase().trim());
+      if (matchId || matchName) {
+        if (sc.id) deletedSupplierCredits.add(String(sc.id).trim());
+        const sKey = getScSuppKey(sc);
+        if (sKey) deletedSupplierCredits.add(`suppkey:${sKey}`);
+        return false;
+      }
+      return true;
+    });
+  }
+  result.deletedSupplierCredits = Array.from(deletedSupplierCredits);
+
+  // If a supplierCredit was deleted, ensure its supplier creditBalance is 0 and linked POs are marked paid
+  if (newlyDeletedScObjects.length > 0 || deletedSupplierCredits.size > 0) {
+    const checkScList = newlyDeletedScObjects.length > 0 ? newlyDeletedScObjects : serverSuppCredits.filter(oldSc =>
+      oldSc && ((oldSc.id && deletedSupplierCredits.has(String(oldSc.id).trim())) || deletedSupplierCredits.has(`suppkey:${getScSuppKey(oldSc)}`))
+    );
+    checkScList.forEach(oldSc => {
+      if (!oldSc) return;
+      const scSuppNorm = String(oldSc.supplier || '').toLowerCase().trim();
+      const scSuppId = String(oldSc.supplierId || '').trim();
+      const stillHasActiveCredit = (result.supplierCredits || []).some(activeSc =>
+        activeSc &&
+        ((scSuppId && String(activeSc.supplierId || '').trim() === scSuppId) ||
+         (scSuppNorm && String(activeSc.supplier || '').toLowerCase().trim() === scSuppNorm)) &&
+        Number(activeSc.pendingAmount) > 0
+      );
+      if (!stillHasActiveCredit) {
+        if (Array.isArray(result.suppliers)) {
+          const supp = result.suppliers.find(s =>
+            s && ((scSuppId && String(s.id || '').trim() === scSuppId) ||
+                  (scSuppNorm && String(s.name || '').toLowerCase().trim() === scSuppNorm))
+          );
+          if (supp && Number(supp.creditBalance) > 0) {
+            supp.creditBalance = 0;
+            supp.updatedAt = nowMs;
+          }
+        }
+        if (Array.isArray(result.purchases)) {
+          const linkedPoIds = new Set(Array.isArray(oldSc.purchaseOrderIds) ? oldSc.purchaseOrderIds : (oldSc.poId ? [oldSc.poId] : []));
+          result.purchases.forEach(po => {
+            if (!po) return;
+            const poSuppNorm = String(po.supplier || '').toLowerCase().trim();
+            if (linkedPoIds.has(po.id) || (scSuppNorm && poSuppNorm === scSuppNorm && po.paymentStatus !== 'Pagado Total')) {
+              po.paymentStatus = 'Pagado Total';
+              po.paidAmount = Number(po.total) || 0;
+            }
+          });
+        }
+      }
+    });
   }
 
   // Purge any references to deleted purchases in supplierCredits and abonosCompras
@@ -438,19 +709,13 @@ function mergeStoreState(serverData, clientData, isAdmin = false) {
     }
   }
 
-  // 5d. MERGE customers & suppliers (Keyed by id or name)
-  if (Array.isArray(serverData.customers) && Array.isArray(clientData.customers)) {
-    const custMap = new Map();
-    serverData.customers.forEach(c => { const k = c.id || c.name; if (k) custMap.set(k, c); });
-    clientData.customers.forEach(c => { const k = c.id || c.name; if (k) custMap.set(k, Object.assign({}, custMap.get(k) || {}, c)); });
-    result.customers = Array.from(custMap.values());
-  }
-  if (Array.isArray(serverData.suppliers) && Array.isArray(clientData.suppliers)) {
-    const suppMap = new Map();
-    serverData.suppliers.forEach(s => { const k = s.id || s.name; if (k) suppMap.set(k, s); });
-    clientData.suppliers.forEach(s => { const k = s.id || s.name; if (k) suppMap.set(k, Object.assign({}, suppMap.get(k) || {}, s)); });
-    result.suppliers = Array.from(suppMap.values());
-  }
+  // 5d. MERGE categories, services, assets, users, perfiles, and paymentMethods with deletion blacklists
+  mergeCrudCollection('categories', 'deletedCategories', 'name');
+  mergeCrudCollection('services', 'deletedServices', 'name');
+  mergeCrudCollection('assets', 'deletedAssets', 'name');
+  mergeCrudCollection('users', 'deletedUsers', 'email');
+  mergeCrudCollection('perfiles', 'deletedPerfiles', 'name');
+  mergeCrudCollection('paymentMethods', 'deletedPaymentMethods', 'name');
 
   // 6. DELETED PRODUCTS BLACKLIST & PRODUCTS MERGE:
   // Strictly prevent deleted products from resurrecting via server merge (keyed strictly by ID)
