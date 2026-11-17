@@ -1,6 +1,6 @@
 {
   "activeStoreId": "store_1",
-  "updatedAt": "2026-11-17T02:50:25.078Z",
+  "updatedAt": "2026-11-17T15:55:24.302Z",
   "storesList": [
     {
       "id": "store_1",
@@ -33,10 +33,10 @@
         "email": "torreskjoyeria@gmail.com",
         "address": "Cr 52 #46-11",
         "addressExtra": "Centro comercial san angel local 601",
-        "cashier": "Tatiana torres",
+        "cashier": "Jojan Torres",
         "shiftStatus": "Cerrado",
         "shiftStartTime": "08:00 AM",
-        "cashInBox": 0,
+        "cashInBox": 422000,
         "taxRate": 0,
         "cardFeePercentage": 0,
         "branding": {
@@ -194,6 +194,22 @@
           "lastLogin": "Hoy 08:00 AM",
           "avatar": "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=120&auto=format&fit=crop&q=80",
           "customPermissions": null
+        },
+        {
+          "id": "USR-009",
+          "name": "Cajera de prueba",
+          "email": "prueba@nexus.io",
+          "password": "123456789",
+          "role": "Cajero",
+          "storeId": "*",
+          "customPermissions": [
+            "pos"
+          ],
+          "status": "Active",
+          "lastLogin": "Ahora mismo",
+          "avatar": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80",
+          "createdAt": 1794884866928,
+          "updatedAt": 1794884866928
         }
       ],
       "customers": [],
@@ -210,8 +226,7 @@
           "accountNumber": "0",
           "bank": "0",
           "creditBalance": 0,
-          "status": "Active",
-          "updatedAt": 1794883825073
+          "status": "Active"
         },
         {
           "id": "PRV-541",
@@ -224,9 +239,9 @@
           "accountType": "Ahorros",
           "accountNumber": "0",
           "bank": "0",
-          "creditBalance": 0,
+          "creditBalance": 60060800,
           "status": "Active",
-          "updatedAt": 1794883825073
+          "updatedAt": 1794616646482
         },
         {
           "id": "PRV-386",
@@ -240,8 +255,7 @@
           "accountNumber": "0",
           "bank": "0",
           "creditBalance": 0,
-          "status": "Active",
-          "updatedAt": 1794883825073
+          "status": "Active"
         }
       ],
       "perfiles": [
@@ -360,7 +374,11 @@
         }
       ],
       "purchases": [],
-      "deletedPurchases": [],
+      "deletedPurchases": [
+        "OC-130836",
+        "OC-061299",
+        "OC-189114"
+      ],
       "deletedProducts": [
         "PRD-1433",
         "PRD-2035",
@@ -370,9 +388,65 @@
         "PRD-2005",
         "PRD-2034"
       ],
-      "deletedExpenses": [],
+      "deletedExpenses": [
+        "EXP-368403-974",
+        "EXP-609676-408",
+        "EXP-628022-874",
+        "EXP-654151-212",
+        "EXP-393579-105",
+        "EXP-133969-806"
+      ],
       "customerCredits": [],
-      "supplierCredits": [],
+      "supplierCredits": [
+        {
+          "id": "CP-001",
+          "supplier": "Carlos nazca",
+          "supplierId": "PRV-440",
+          "totalOwed": 50000000,
+          "paidAmount": 50000000,
+          "pendingAmount": 0,
+          "date": "2026-10-22",
+          "lastPurchaseDate": "2026-10-22",
+          "dueDate": "2026-10-22",
+          "status": "Pagado Total",
+          "purchaseOrderIds": []
+        },
+        {
+          "id": "CP-002",
+          "supplier": "hector",
+          "supplierId": "PRV-386",
+          "totalOwed": 2268352000,
+          "paidAmount": 2268352000,
+          "pendingAmount": 0,
+          "date": "2026-10-23",
+          "lastPurchaseDate": "2026-10-23",
+          "dueDate": "2026-10-23",
+          "status": "Pagado Total",
+          "purchaseOrderIds": []
+        },
+        {
+          "id": "CP-003",
+          "supplier": "Baby’s",
+          "supplierId": "PRV-541",
+          "totalOwed": 141772000,
+          "paidAmount": 81711200,
+          "pendingAmount": 60060800,
+          "date": "2026-10-27",
+          "lastPurchaseDate": "2026-10-27",
+          "dueDate": "2026-12-15",
+          "status": "Pendiente",
+          "purchaseOrderIds": [],
+          "history": [
+            {
+              "type": "payment",
+              "amount": 4480000,
+              "method": "Transferencia",
+              "date": "2026-11-13 10:43 a.m."
+            }
+          ],
+          "updatedAt": 1794584637403
+        }
+      ],
       "services": [],
       "categories": [
         {
@@ -28499,32 +28573,273 @@
         }
       ],
       "cashShiftLog": {
-        "shiftId": "TURNO-001",
-        "openedAt": "08:00 a.m.",
-        "openingCash": 0,
+        "shiftId": "TURNO-392",
+        "openingCash": 422000,
         "openingCard": 0,
         "openingAccount": "",
-        "openingTotal": 0,
+        "openingTotal": 422000,
         "cashSales": 0,
         "cardSales": 0,
-        "qrSales": 0,
-        "transferSales": 0,
-        "tarjetaSales": 0,
-        "creditSales": 0,
         "cashExpenses": 0,
-        "bankExpenses": 0,
-        "totalExpenses": 0,
-        "expectedCashInDrawer": 0,
+        "expectedCashInDrawer": 422000,
         "expectedCardInAccount": 0,
         "actualCashInDrawer": 0,
-        "closingCash": 0,
         "discrepancy": 0,
-        "status": "Cerrado"
+        "status": "Abierto",
+        "openedBy": "Jojan Torres",
+        "openedAt": "10:54 a.m.",
+        "openedDate": "2026-11-17",
+        "openedTimestamp": 1794930881798,
+        "openedIso": "2026-11-17T15:54:41.798Z",
+        "bankExpenses": 0,
+        "totalExpenses": 0
       },
       "cashShiftsHistory": [],
       "abonosVentas": [],
-      "abonosCompras": [],
-      "deletedAbonosCompras": [],
+      "abonosCompras": [
+        {
+          "id": "AB-C034188",
+          "date": "2026-10-28",
+          "time": "05:37 p.m.",
+          "timestamp": 1793227034188,
+          "shiftId": "TURNO-311",
+          "supplier": "Baby’s",
+          "poId": "CP-003",
+          "amount": 4207000,
+          "method": "Transferencia",
+          "cashier": "Tatiana torres",
+          "status": "Confirmado",
+          "closedShiftId": "TURNO-311"
+        },
+        {
+          "id": "AB-C972593",
+          "date": "2026-10-28",
+          "time": "05:52 p.m.",
+          "timestamp": 1793227972593,
+          "shiftId": "TURNO-311",
+          "supplier": "Baby’s",
+          "poId": "CP-003",
+          "amount": 660000,
+          "method": "Transferencia",
+          "cashier": "Tatiana torres",
+          "status": "Confirmado",
+          "closedShiftId": "TURNO-311"
+        },
+        {
+          "id": "AB-C450622",
+          "date": "2026-10-29",
+          "time": "05:37 p.m.",
+          "timestamp": 1793313450622,
+          "shiftId": "TURNO-549",
+          "supplier": "Carlos nazca",
+          "poId": "CP-001",
+          "amount": 1918000,
+          "method": "Transferencia",
+          "cashier": "Camila osorio",
+          "status": "Confirmado",
+          "closedShiftId": "TURNO-549"
+        },
+        {
+          "id": "AB-C059044",
+          "date": "2026-10-30",
+          "time": "10:44 a.m.",
+          "timestamp": 1793375059044,
+          "shiftId": "TURNO-938",
+          "supplier": "Baby’s",
+          "poId": "CP-003",
+          "amount": 3710000,
+          "method": "Transferencia",
+          "cashier": "Tatiana torres",
+          "status": "Confirmado",
+          "closedShiftId": "TURNO-938"
+        },
+        {
+          "id": "AB-C904808",
+          "date": "2026-10-30",
+          "time": "05:55 p.m.",
+          "timestamp": 1793400904808,
+          "shiftId": "TURNO-938",
+          "supplier": "Baby’s",
+          "poId": "CP-003",
+          "amount": 7644000,
+          "method": "Transferencia",
+          "cashier": "Tatiana torres",
+          "status": "Confirmado",
+          "closedShiftId": "TURNO-938"
+        },
+        {
+          "id": "AB-C923732",
+          "date": "2026-10-30",
+          "time": "05:55 p.m.",
+          "timestamp": 1793400923732,
+          "shiftId": "TURNO-938",
+          "supplier": "Baby’s",
+          "poId": "CP-003",
+          "amount": 3500000,
+          "method": "Efectivo (Caja)",
+          "cashier": "Tatiana torres",
+          "status": "Confirmado",
+          "closedShiftId": "TURNO-938"
+        },
+        {
+          "id": "AB-C709300",
+          "date": "2026-11-03",
+          "time": "04:18 p.m.",
+          "timestamp": 1793740709300,
+          "shiftId": "TURNO-782",
+          "supplier": "Baby’s",
+          "poId": "CP-003",
+          "amount": 1120000,
+          "method": "Efectivo (Caja)",
+          "cashier": "Evelin osorio",
+          "status": "Confirmado",
+          "closedShiftId": "TURNO-782"
+        },
+        {
+          "id": "AB-C452793",
+          "date": "2026-11-05",
+          "time": "02:20 p.m.",
+          "timestamp": 1793906452793,
+          "shiftId": "TURNO-551",
+          "supplier": "Baby’s",
+          "poId": "CP-003",
+          "amount": 4844000,
+          "method": "Transferencia",
+          "cashier": "Tatiana torres",
+          "status": "Confirmado",
+          "closedShiftId": "TURNO-551"
+        },
+        {
+          "id": "AB-C973222",
+          "date": "2026-11-06",
+          "time": "04:52 p.m.",
+          "timestamp": 1794001973222,
+          "shiftId": "TURNO-215",
+          "supplier": "mateo italiano",
+          "poId": "CP-004",
+          "amount": 3100000,
+          "method": "Efectivo (Caja)",
+          "cashier": "Lizeth olivera",
+          "status": "Confirmado",
+          "closedShiftId": "TURNO-215"
+        },
+        {
+          "id": "AB-C138422",
+          "date": "2026-11-06",
+          "time": "05:28 p.m.",
+          "timestamp": 1794004138422,
+          "shiftId": "TURNO-215",
+          "supplier": "mateo italiano",
+          "poId": "CP-004",
+          "amount": 1889000,
+          "method": "Efectivo (Caja)",
+          "cashier": "Lizeth olivera",
+          "status": "Confirmado",
+          "closedShiftId": "TURNO-215"
+        },
+        {
+          "id": "AB-C163467",
+          "date": "2026-11-10",
+          "time": "02:32 p.m.",
+          "timestamp": 1794339163467,
+          "shiftId": "TURNO-525",
+          "supplier": "Baby’s",
+          "poId": "CP-003",
+          "amount": 2948000,
+          "method": "Transferencia",
+          "cashier": "Camila osorio",
+          "status": "Confirmado",
+          "closedShiftId": "TURNO-525"
+        },
+        {
+          "id": "AB-C702473",
+          "date": "2026-11-10",
+          "time": "06:01 p.m.",
+          "timestamp": 1794351702473,
+          "shiftId": "TURNO-525",
+          "supplier": "Baby’s",
+          "poId": "CP-003",
+          "amount": 5000000,
+          "method": "Efectivo (Caja)",
+          "cashier": "Jojan Torres",
+          "status": "Confirmado",
+          "closedShiftId": "TURNO-525"
+        },
+        {
+          "id": "AB-C965336",
+          "date": "2026-11-11",
+          "time": "12:09 p.m.",
+          "timestamp": 1794416965336,
+          "shiftId": "TURNO-505",
+          "supplier": "Baby’s",
+          "poId": "CP-003",
+          "amount": 5739000,
+          "method": "Transferencia",
+          "cashier": "Camila osorio",
+          "status": "Confirmado",
+          "closedShiftId": "TURNO-505"
+        },
+        {
+          "id": "AB-C874822",
+          "date": "2026-11-12",
+          "time": "02:14 p.m.",
+          "timestamp": 1794510874822,
+          "shiftId": "TURNO-429",
+          "supplier": "Baby’s",
+          "poId": "CP-003",
+          "amount": 5576000,
+          "method": "Transferencia",
+          "cashier": "Administrador Torres Joyería",
+          "status": "Confirmado",
+          "closedShiftId": "TURNO-429"
+        },
+        {
+          "id": "AB-C975347",
+          "date": "2026-11-12",
+          "time": "02:16 p.m.",
+          "timestamp": 1794510975347,
+          "shiftId": "TURNO-429",
+          "supplier": "Baby’s",
+          "poId": "CP-003",
+          "amount": 2300000,
+          "method": "Efectivo (Caja)",
+          "cashier": "Administrador Torres Joyería",
+          "status": "Confirmado",
+          "closedShiftId": "TURNO-429"
+        },
+        {
+          "id": "AB-C989981",
+          "date": "2026-11-12",
+          "time": "02:16 p.m.",
+          "timestamp": 1794510989981,
+          "shiftId": "TURNO-429",
+          "supplier": "Baby’s",
+          "poId": "CP-003",
+          "amount": 6600000,
+          "method": "Transferencia",
+          "cashier": "Administrador Torres Joyería",
+          "status": "Confirmado",
+          "closedShiftId": "TURNO-429"
+        },
+        {
+          "id": "AB-C637405",
+          "date": "2026-11-13",
+          "time": "10:43 a.m.",
+          "timestamp": 1794584637405,
+          "shiftId": "TURNO-940",
+          "supplier": "Baby’s",
+          "poId": "CP-003",
+          "amount": 4480000,
+          "method": "Transferencia",
+          "cashier": "Jojan Torres",
+          "status": "Confirmado",
+          "closedShiftId": "TURNO-940"
+        }
+      ],
+      "deletedAbonosCompras": [
+        "AB-C494682",
+        "AB-C520407"
+      ],
       "balanceSheet": {
         "assetsCurrent": 0,
         "assetsFixed": 0,
@@ -28660,21 +28975,30 @@
         }
       },
       "sales": [],
-      "updatedAt": "2026-11-17T02:50:25.070Z",
+      "updatedAt": "2026-11-17T15:55:24.296Z",
       "deletedSuppliers": [
         "PRV-801",
         "PRV-533"
       ],
-      "deletedSupplierCredits": [],
-      "deletedCustomers": [],
-      "deletedCustomerCredits": [],
+      "deletedSupplierCredits": [
+        "CP-004",
+        "suppkey:mateo italiano__pending",
+        "CP-005",
+        "suppkey:carlos__pending"
+      ],
+      "deletedCustomers": [
+        "CLI-869"
+      ],
+      "deletedCustomerCredits": [
+        "SEP-509"
+      ],
       "deletedCategories": [],
       "deletedServices": [],
       "deletedAssets": [],
       "deletedUsers": [],
       "deletedPerfiles": [],
       "deletedPaymentMethods": [],
-      "resetVersion": 2
+      "resetVersion": 3
     },
     "store_2": {
       "store": {
