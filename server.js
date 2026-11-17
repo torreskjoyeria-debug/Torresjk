@@ -998,9 +998,15 @@ function mergeStoreState(serverData, clientData, isAdmin = false) {
       const dateMatches = po.date && (po.date === shiftOpenedDate || po.date.startsWith(shiftOpenedDate) || po.date.includes(shiftOpenedDdmmyyyy));
       const belongs = po.shiftId ? (po.shiftId === shiftId) : (!po.closedShiftId && dateMatches);
       if (belongs) {
+        const statusLower = String(po.paymentStatus || '').toLowerCase();
+        const methodLower = String(po.paymentMethod || '').toLowerCase();
+        // Excluir órdenes con estado/método "Cancelado" (no descuentan de efectivo ni de tarjeta/banco)
+        if (po.noCashOrBankDeduct || statusLower.includes('cancelad') || methodLower.includes('cancelad')) {
+          return;
+        }
         // Excluir compras a crédito pendientes donde NO hubo desembolso inmediato de dinero
         const isCreditPurchase = (po.paymentStatus && po.paymentStatus !== 'Pagado Total' && po.paymentStatus !== 'Pagado') || 
-                                 (po.paymentMethod && po.paymentMethod.toLowerCase().includes('crédito'));
+                                 methodLower.includes('crédito') || methodLower.includes('credito');
         if (isCreditPurchase && (!po.paidAmount || Number(po.paidAmount) <= 0)) {
           return;
         }

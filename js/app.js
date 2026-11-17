@@ -4219,11 +4219,15 @@ class NexusApp {
           this.syncAllCategoryGrams();
 
           // 3. Registrar Orden de Compra completa
-          const paymentStatus = document.getElementById('po-payment-status')?.value || 'Pagado Total';
+          const rawPayStatus = document.getElementById('po-payment-status')?.value || 'Pagado Total';
+          const rawPayMethod = document.getElementById('po-payment-method')?.value || 'Efectivo';
+          const isCanceladoNoDeduct = rawPayStatus === 'Cancelado' || (rawPayStatus === 'Pagado Total' && rawPayMethod === 'Cancelado');
+          const paymentStatus = isCanceladoNoDeduct ? 'Cancelado' : rawPayStatus;
           const isPaid = paymentStatus === 'Pagado Total';
-          const paymentMethod = isPaid 
-            ? (document.getElementById('po-payment-method')?.value || 'Efectivo')
-            : 'Crédito Proveedor';
+          const isSettled = isPaid || isCanceladoNoDeduct;
+          const paymentMethod = isCanceladoNoDeduct
+            ? 'Cancelado'
+            : (isPaid ? rawPayMethod : 'Crédito Proveedor');
 
           const now = new Date();
           const knownPoIds = new Set([
@@ -4259,7 +4263,8 @@ class NexusApp {
             status: "Recibido",
             paymentStatus: paymentStatus,
             paymentMethod: paymentMethod,
-            paidAmount: isPaid ? totalCost : 0
+            paidAmount: isSettled ? totalCost : 0,
+            noCashOrBankDeduct: isCanceladoNoDeduct ? true : undefined
           };
           if (!this.data.purchases || !Array.isArray(this.data.purchases)) {
             this.data.purchases = [];
@@ -4267,7 +4272,7 @@ class NexusApp {
           this.data.purchases.unshift(newPO);
 
           // Si fue a crédito (Pendiente), acumular o registrar deuda en cuentas por pagar de supplierCredits (Híbrido)
-          if (!isPaid) {
+          if (!isSettled) {
             if (!Array.isArray(this.data.supplierCredits)) this.data.supplierCredits = [];
             const suppNorm = (supp || '').toLowerCase().trim();
             const suppObj = (this.data.suppliers || []).find(s => 
@@ -7709,7 +7714,7 @@ class NexusApp {
         // Obtener todas las compras impagas de este proveedor
         const unpaidPOs = this.data.purchases.filter(p => 
           (linkedPOIds.has(p.id) || (p.supplier || '').toLowerCase().trim() === suppNorm) &&
-          p.paymentStatus !== 'Pagado Total'
+          p.paymentStatus !== 'Pagado Total' && p.paymentStatus !== 'Cancelado'
         );
         // Ordenar por fecha cronológica ascendente (las más viejas se pagan primero)
         unpaidPOs.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0) || (a.date || '').localeCompare(b.date || ''));
@@ -11393,7 +11398,7 @@ class NexusApp {
     const canDeletePO = this.canPerformAction('delete', 'purchase');
 
     tbody.innerHTML = this.data.purchases.map(po => {
-      const isPaid = po.paymentStatus === 'Pagado Total';
+      const isPaid = po.paymentStatus === 'Pagado Total' || po.paymentStatus === 'Cancelado';
       const receiptBtn = `<button class="btn-action-view" onclick="app.showPurchaseReceiptModal('${po.id}')" title="Ver Recibo Térmico de Compra" style="margin-right:4px;">🧾 Recibo</button>`;
       const payBtn = !isPaid 
         ? `<button class="btn btn-primary text-xs" onclick="app.markPurchaseAsPaid('${po.id}')" title="Marcar como pagada y saldar cuenta" style="padding:2px 8px; margin-right:4px; font-weight:700; background:#059669; border-color:#059669;">💳 Pagar</button>` 
@@ -11415,7 +11420,7 @@ class NexusApp {
         const expectedTotal = Math.round(totalGrams * unitCost);
         if (po.total < expectedTotal && Math.round(qty * unitCost) === po.total) {
           po.total = expectedTotal;
-          if (po.paymentStatus === 'Pagado Total') {
+          if (po.paymentStatus === 'Pagado Total' || po.paymentStatus === 'Cancelado') {
             po.paidAmount = expectedTotal;
           }
         }
@@ -11766,7 +11771,7 @@ class NexusApp {
         poTbody.innerHTML = suppPOs.map(po => {
           const poTotal = Number(po.total) || 0;
           const poPaid = Number(po.paidAmount) || 0;
-          const isPoPaid = po.paymentStatus === 'Pagado Total' || poPaid >= poTotal - 0.01;
+          const isPoPaid = po.paymentStatus === 'Pagado Total' || po.paymentStatus === 'Cancelado' || poPaid >= poTotal - 0.01;
           const grams = Number(po.totalGrams) || Number(po.productGrams) || 0;
           const qty = po.itemsCount || po.quantity || 1;
 
@@ -13679,9 +13684,15 @@ class NexusApp {
     // 3. Compras de Mercancía de Contado (Efectivo & Transferencia / Banco)
     (this.data.purchases || []).forEach(po => {
       if (matchesShift(po.date, po.time, po.shiftId, po.timestamp, po.closedShiftId)) {
+        // Excluir órdenes marcadas como "Cancelado" (no descuentan de caja efectivo ni de cuentas bancarias/tarjeta)
+        const statusLower = String(po.paymentStatus || '').toLowerCase();
+        const methodLower = String(po.paymentMethod || '').toLowerCase();
+        if (po.noCashOrBankDeduct || statusLower.includes('cancelad') || methodLower.includes('cancelad')) {
+          return;
+        }
         // Excluir compras a crédito pendientes donde NO hubo desembolso inmediato de dinero
         const isCreditPurchase = (po.paymentStatus && po.paymentStatus !== 'Pagado Total' && po.paymentStatus !== 'Pagado') || 
-                                 (po.paymentMethod && po.paymentMethod.toLowerCase().includes('crédito'));
+                                 methodLower.includes('crédito') || methodLower.includes('credito');
         if (isCreditPurchase && (!po.paidAmount || Number(po.paidAmount) <= 0)) {
           return;
         }
@@ -17084,11 +17095,12 @@ class NexusApp {
         `;
       } else {
         tbody.innerHTML = displayPurchases.map(po => {
-          const payBadgeClass = po.paymentStatus === 'Pagado Total' ? 'badge-active' : (po.paymentStatus === 'Pagado Parcial' ? 'badge-warning' : 'badge-danger');
+          const isPoSettled = po.paymentStatus === 'Pagado Total' || po.paymentStatus === 'Cancelado';
+          const payBadgeClass = isPoSettled ? 'badge-active' : (po.paymentStatus === 'Pagado Parcial' ? 'badge-warning' : 'badge-danger');
           const deliverBadgeClass = (po.status || '').toLowerCase() === 'recibido' ? 'badge-active' : 'badge-warning';
           
           const matchingCred = credits.find(c => c.supplier === po.supplier);
-          const pendingBalance = matchingCred ? matchingCred.pendingAmount : (po.paymentStatus === 'Pagado Total' ? 0 : po.total);
+          const pendingBalance = matchingCred ? matchingCred.pendingAmount : (isPoSettled ? 0 : po.total);
 
           return `
             <tr>
@@ -17198,7 +17210,7 @@ class NexusApp {
 
       (metrics.displayPurchases || []).forEach(p => {
         const s = (p.paymentStatus || '').toLowerCase();
-        if (s.includes('total')) paidTotal += Number(p.total) || 0;
+        if (s.includes('total') || s.includes('cancelad')) paidTotal += Number(p.total) || 0;
         else if (s.includes('parcial')) paidPartial += Number(p.total) || 0;
         else pending += Number(p.total) || 0;
       });
@@ -18611,7 +18623,8 @@ class NexusApp {
       const grams = Number(p.totalGrams) || 0;
       const unitCost = Number(p.unitCost) || 0;
       const total = Number(p.total) || 0;
-      const paid = Number(p.paidAmount) || (p.paymentStatus === 'Pagado Total' ? total : 0);
+      const isSettled = p.paymentStatus === 'Pagado Total' || p.paymentStatus === 'Cancelado';
+      const paid = Number(p.paidAmount) || (isSettled ? total : 0);
       const pending = Math.max(0, total - paid);
 
       totalInversion += total;
@@ -18633,7 +18646,7 @@ class NexusApp {
       suppMap[sName].paid += paid;
       suppMap[sName].pending += pending;
 
-      const isPaid = p.paymentStatus === 'Pagado Total';
+      const isPaid = isSettled;
       const badgeStyle = isPaid ? 'BadgeGreen' : (paid > 0 ? 'BadgeAmber' : 'BadgeRose');
 
       rowsDetalle += `
@@ -19043,9 +19056,10 @@ class NexusApp {
       const grams = Number(p.totalGrams) || 0;
       const unitCost = Number(p.unitCost) || 0;
       const total = Number(p.total) || 0;
-      const paid = Number(p.paidAmount) || (p.paymentStatus === 'Pagado Total' ? total : 0);
+      const isSettled = p.paymentStatus === 'Pagado Total' || p.paymentStatus === 'Cancelado';
+      const paid = Number(p.paidAmount) || (isSettled ? total : 0);
       const pending = Math.max(0, total - paid);
-      const isPaid = p.paymentStatus === 'Pagado Total';
+      const isPaid = isSettled;
       const badgeStyle = isPaid ? 'BadgeGreen' : (paid > 0 ? 'BadgeAmber' : 'BadgeRose');
 
       rowsPurchases += `
@@ -21433,7 +21447,7 @@ class NexusApp {
     const dateFormatted = po.date ? new Date(po.date + 'T12:00:00').toLocaleDateString('es-CO') : new Date().toLocaleDateString('es-CO');
     const timeFormatted = po.time || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-    const isPaid = po.paymentStatus === 'Pagado Total';
+    const isPaid = po.paymentStatus === 'Pagado Total' || po.paymentStatus === 'Cancelado';
     const paidAmount = isPaid ? po.total : (po.paidAmount !== undefined ? po.paidAmount : 0);
 
     const receiptHtml = this.buildThermalTicketHtml({
