@@ -1129,10 +1129,13 @@ class NexusApp {
         if (dbData && dbData.products && Array.isArray(dbData.products)) {
           const dbTime = new Date(dbData.updatedAt || 0).getTime();
           const localTime = new Date(localData?.updatedAt || 0).getTime();
+          const dbResetVer = Number(dbData.resetVersion) || 0;
+          const localResetVer = Number(localData?.resetVersion) || 0;
+          const isLocalBeforeReset = dbResetVer > localResetVer;
 
           // Preserve any local deletion blacklists so an immediate page refresh after deleting never resurrects records
           let hasPendingLocalDeletions = false;
-          if (localData) {
+          if (localData && !isLocalBeforeReset) {
             [
               'deletedExpenses',
               'deletedPurchases',
@@ -1163,7 +1166,7 @@ class NexusApp {
           }
 
           // If local data is strictly newer by more than 2s (e.g. user created entities while DB was syncing), preserve local data and re-sync
-          if (localData && localData.products && localTime > dbTime + 2000) {
+          if (localData && localData.products && !isLocalBeforeReset && localTime > dbTime + 2000) {
             console.log('[NexusApp] LocalStorage tiene datos más recientes que el servidor. Preservando estado local y re-sincronizando...');
             this.data = Object.assign({}, INITIAL_DATA, localData);
             this.data.store = Object.assign({}, INITIAL_DATA.store, localData.store || {});
@@ -1795,70 +1798,77 @@ class NexusApp {
             const expCount = d.expenses?.length || 0;
             const acCount = d.abonosCompras?.length || 0;
             const storeName = d.store?.name || '';
-            return `${pFp};${cFp};${sFp};${scFp};${ccFp};${catFp};${srvFp};${astFp};${pmFp};${uFp};${prfFp};${cashFp};${txCount};${poCount};${expCount};${acCount};${storeName}`;
+            const resetVer = Number(d.resetVersion) || 0;
+            return `${resetVer};${pFp};${cFp};${sFp};${scFp};${ccFp};${catFp};${srvFp};${astFp};${pmFp};${uFp};${prfFp};${cashFp};${txCount};${poCount};${expCount};${acCount};${storeName}`;
           };
 
           const localFp = buildFingerprint(this.data);
           const remoteFp = buildFingerprint(remote);
 
           if (localFp !== remoteFp) {
-            // Smart local preservation: merge all local deletion blacklists
-            [
-              'deletedExpenses',
-              'deletedPurchases',
-              'deletedProducts',
-              'deletedAbonosCompras',
-              'deletedSuppliers',
-              'deletedSupplierCredits',
-              'deletedCustomers',
-              'deletedCustomerCredits',
-              'deletedCategories',
-              'deletedServices',
-              'deletedAssets',
-              'deletedUsers',
-              'deletedPerfiles',
-              'deletedPaymentMethods'
-            ].forEach(delKey => {
-              const localList = Array.isArray(this.data[delKey]) ? this.data[delKey] : [];
-              const remoteList = Array.isArray(remote[delKey]) ? remote[delKey] : [];
-              remote[delKey] = Array.from(new Set([...localList, ...remoteList]));
-            });
+            const remoteResetVer = Number(remote.resetVersion) || 0;
+            const localResetVer = Number(this.data?.resetVersion) || 0;
+            const isRemoteFreshReset = remoteResetVer > localResetVer;
 
-            // Smart local preservation: merge recent local transactions that might not yet be in remote
-            const localTxs = this.data.recentTransactions || [];
-            const remoteTxs = remote.recentTransactions || [];
-            const txMap = new Map();
-            remoteTxs.forEach(t => { if (t && t.id) txMap.set(t.id, t); });
-            localTxs.forEach(t => {
-              if (t && t.id && !txMap.has(t.id)) {
-                const age = Date.now() - (t.timestamp || (t.createdAt ? new Date(t.createdAt).getTime() : 0));
-                if (age < 30 * 60 * 1000) {
-                  txMap.set(t.id, t);
+            if (!isRemoteFreshReset) {
+              // Smart local preservation: merge all local deletion blacklists
+              [
+                'deletedExpenses',
+                'deletedPurchases',
+                'deletedProducts',
+                'deletedAbonosCompras',
+                'deletedSuppliers',
+                'deletedSupplierCredits',
+                'deletedCustomers',
+                'deletedCustomerCredits',
+                'deletedCategories',
+                'deletedServices',
+                'deletedAssets',
+                'deletedUsers',
+                'deletedPerfiles',
+                'deletedPaymentMethods'
+              ].forEach(delKey => {
+                const localList = Array.isArray(this.data[delKey]) ? this.data[delKey] : [];
+                const remoteList = Array.isArray(remote[delKey]) ? remote[delKey] : [];
+                remote[delKey] = Array.from(new Set([...localList, ...remoteList]));
+              });
+
+              // Smart local preservation: merge recent local transactions that might not yet be in remote
+              const localTxs = this.data.recentTransactions || [];
+              const remoteTxs = remote.recentTransactions || [];
+              const txMap = new Map();
+              remoteTxs.forEach(t => { if (t && t.id) txMap.set(t.id, t); });
+              localTxs.forEach(t => {
+                if (t && t.id && !txMap.has(t.id)) {
+                  const age = Date.now() - (t.timestamp || (t.createdAt ? new Date(t.createdAt).getTime() : 0));
+                  if (age < 30 * 60 * 1000) {
+                    txMap.set(t.id, t);
+                  }
                 }
-              }
-            });
-            remote.recentTransactions = Array.from(txMap.values()).sort((a, b) => {
-              const tA = a.timestamp || 0;
-              const tB = b.timestamp || 0;
-              return tB - tA;
-            });
+              });
+              remote.recentTransactions = Array.from(txMap.values()).sort((a, b) => {
+                const tA = a.timestamp || 0;
+                const tB = b.timestamp || 0;
+                return tB - tA;
+              });
 
-            const delExpSet = new Set(remote.deletedExpenses || []);
+              const delExpSet = new Set(remote.deletedExpenses || []);
 
-            // Smart local preservation: merge recent local expenses that might not yet be in remote
-            const localExp = (this.data.expenses || []).filter(e => e && e.id && !delExpSet.has(e.id));
-            const remoteExp = (remote.expenses || []).filter(e => e && e.id && !delExpSet.has(e.id));
-            const expMap = new Map();
-            remoteExp.forEach(e => { if (e && e.id && !delExpSet.has(e.id)) expMap.set(e.id, e); });
-            localExp.forEach(e => {
-              if (e && e.id && !delExpSet.has(e.id) && !expMap.has(e.id)) {
-                const age = Date.now() - (e.timestamp || 0);
-                if (age < 30 * 60 * 1000) {
-                  expMap.set(e.id, e);
+              // Smart local preservation: merge recent local expenses that might not yet be in remote
+              const localExp = (this.data.expenses || []).filter(e => e && e.id && !delExpSet.has(e.id));
+              const remoteExp = (remote.expenses || []).filter(e => e && e.id && !delExpSet.has(e.id));
+              const expMap = new Map();
+              remoteExp.forEach(e => { if (e && e.id && !delExpSet.has(e.id)) expMap.set(e.id, e); });
+              localExp.forEach(e => {
+                if (e && e.id && !delExpSet.has(e.id) && !expMap.has(e.id)) {
+                  const age = Date.now() - (e.timestamp || 0);
+                  if (age < 30 * 60 * 1000) {
+                    expMap.set(e.id, e);
+                  }
                 }
-              }
-            });
-            remote.expenses = Array.from(expMap.values()).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+              });
+              remote.expenses = Array.from(expMap.values()).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+            }
 
             if (remote.deletedAbonosCompras?.length > 0 && Array.isArray(remote.abonosCompras)) {
               const delAcSet = new Set(remote.deletedAbonosCompras);

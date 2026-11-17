@@ -41,6 +41,7 @@ app.use((req, res, next) => {
     /^\/db\.json(\.tmp)?$/i,
     /^\/server\.js$/i,
     /^\/package(-lock)?\.json$/i,
+    /^\/backups(\/|$)/i,
     /^\/scratch(\/|$)/i,
     /^\/\.vscode(\/|$)/i,
     /^\/\.git(\/|$)/i,
@@ -197,7 +198,15 @@ function mergeStoreState(serverData, clientData, isAdmin = false) {
   if (!serverData || typeof serverData !== 'object') return clientData;
   if (!clientData || typeof clientData !== 'object') return serverData;
 
+  const serverResetVer = Number(serverData.resetVersion) || 0;
+  const clientResetVer = Number(clientData.resetVersion) || 0;
+  if (serverResetVer > clientResetVer) {
+    console.warn(`[NexusServer] Ignorando payload obsoleto previo al reset (clientResetVer=${clientResetVer} < serverResetVer=${serverResetVer})`);
+    return serverData;
+  }
+
   const result = Object.assign({}, clientData);
+  result.resetVersion = Math.max(serverResetVer, clientResetVer);
   const nowMs = Date.now();
 
   // 1. MERGE recentTransactions (Keyed by id, strictly preserve any transaction already committed to server)
