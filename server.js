@@ -687,7 +687,7 @@ function mergeStoreState(serverData, clientData, isAdmin = false) {
           result.purchases.forEach(po => {
             if (!po) return;
             const poSuppNorm = String(po.supplier || '').toLowerCase().trim();
-            if (linkedPoIds.has(po.id) || (scSuppNorm && poSuppNorm === scSuppNorm && po.paymentStatus !== 'Pagado Total')) {
+            if (linkedPoIds.has(po.id) || (scSuppNorm && poSuppNorm === scSuppNorm && po.paymentStatus !== 'Pagado Total' && po.paymentStatus !== 'Cancelado')) {
               po.paymentStatus = 'Pagado Total';
               po.paidAmount = Number(po.total) || 0;
             }

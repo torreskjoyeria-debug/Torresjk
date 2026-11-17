@@ -1496,8 +1496,14 @@ class NexusApp {
       const suppId = suppObj ? suppObj.id : (credList[0].supplierId || '');
       const suppCreditBalance = suppObj ? Math.max(0, Number(suppObj.creditBalance) || 0) : 0;
 
-      // Unir todas las OCs asociadas
-      const suppPOs = this.data.purchases.filter(p => (p.supplier || '').toLowerCase().trim() === suppName);
+      // Unir únicamente las OCs a crédito asociadas (excluir compras de contado o Cancelado)
+      const suppPOs = this.data.purchases.filter(p => {
+        if (!p || (p.supplier || '').toLowerCase().trim() !== suppName) return false;
+        const st = String(p.paymentStatus || '').toLowerCase();
+        const mt = String(p.paymentMethod || '').toLowerCase();
+        if (p.noCashOrBankDeduct || st.includes('cancelad') || mt.includes('cancelad')) return false;
+        return st.includes('pend') || mt.includes('crédito') || mt.includes('credito');
+      });
       const allPOIds = new Set(suppPOs.map(p => p.id));
       const combinedHistory = [];
       credList.forEach(c => {
@@ -1579,7 +1585,13 @@ class NexusApp {
           sc.status !== 'Pagado Total' && (Number(sc.pendingAmount) || 0) > 0
         );
         if (!existing) {
-          const suppPOs = this.data.purchases.filter(p => (p.supplier || '').toLowerCase().trim() === (s.name || '').toLowerCase().trim());
+          const suppPOs = this.data.purchases.filter(p => {
+            if (!p || (p.supplier || '').toLowerCase().trim() !== (s.name || '').toLowerCase().trim()) return false;
+            const st = String(p.paymentStatus || '').toLowerCase();
+            const mt = String(p.paymentMethod || '').toLowerCase();
+            if (p.noCashOrBankDeduct || st.includes('cancelad') || mt.includes('cancelad')) return false;
+            return st.includes('pend') || mt.includes('crédito') || mt.includes('credito');
+          });
           consolidated.push({
             id: allocateCpId([]),
             supplier: s.name,
@@ -4362,6 +4374,7 @@ class NexusApp {
           this.renderPOSProducts();
 
           poForm.reset();
+          this.onPurchasePaymentStatusChange();
           this.closeModal('purchase-modal');
 
           const unitLabel = isUnidades ? 'u.' : (targetProd.weightUnit || 'g');
@@ -7129,13 +7142,18 @@ class NexusApp {
     }
     this.syncAllCategoryGrams();
 
-    // 3. REVERTIR CRÉDITOS Y DEUDAS DE PROVEEDORES
+    // 3. REVERTIR CRÉDITOS Y DEUDAS DE PROVEEDORES (SOLO SI LA COMPRA FUE A CRÉDITO Y NO CANCELADA/CONTADO)
     const poTotal = Number(po.total) || 0;
-    const isCreditPurchase = (po.paymentStatus || '').toLowerCase().includes('pend') || 
-                             (po.paymentMethod || '').toLowerCase().includes('crédito') ||
-                             (po.paymentMethod || '').toLowerCase().includes('credito');
+    const poStatusLower = String(po.paymentStatus || '').toLowerCase();
+    const poMethodLower = String(po.paymentMethod || '').toLowerCase();
+    const isCanceladoPO = !!po.noCashOrBankDeduct || poStatusLower.includes('cancelad') || poMethodLower.includes('cancelad');
+    const isCreditPurchase = !isCanceladoPO && (
+      poStatusLower.includes('pend') || 
+      poMethodLower.includes('crédito') ||
+      poMethodLower.includes('credito')
+    );
 
-    if (Array.isArray(this.data.supplierCredits)) {
+    if (isCreditPurchase && Array.isArray(this.data.supplierCredits)) {
       const suppNorm = (po.supplier || '').toLowerCase().trim();
       const suppObj = (this.data.suppliers || []).find(s => (s.name || '').toLowerCase().trim() === suppNorm);
 
@@ -7840,7 +7858,7 @@ class NexusApp {
       this.data.purchases.forEach(po => {
         if (!po) return;
         const poSuppNorm = String(po.supplier || '').toLowerCase().trim();
-        if (linkedIds.has(po.id) || (suppNorm && poSuppNorm === suppNorm && po.paymentStatus !== 'Pagado Total')) {
+        if (linkedIds.has(po.id) || (suppNorm && poSuppNorm === suppNorm && po.paymentStatus !== 'Pagado Total' && po.paymentStatus !== 'Cancelado')) {
           po.paymentStatus = 'Pagado Total';
           po.paidAmount = Number(po.total) || 0;
         }
@@ -19709,10 +19727,13 @@ class NexusApp {
     const totalAbonosVentas = abonosVentas.reduce((acc, a) => acc + (Number(a.amount) || 0), 0);
     const totalPurchases = purchases.reduce((acc, p) => acc + (Number(p.total) || 0), 0);
     const totalPagadoPurchases = purchases.reduce((acc, p) => acc + (Number(p.paidAmount) || 0), 0);
-    const totalPendingPurchases = purchases.reduce((acc, p) => acc + ((Number(p.total) || 0) - (Number(p.paidAmount) || 0)), 0);
+    const totalCashOutPurchases = purchases
+      .filter(p => !p.noCashOrBankDeduct && !String(p.paymentStatus || '').toLowerCase().includes('cancelad') && !String(p.paymentMethod || '').toLowerCase().includes('cancelad'))
+      .reduce((acc, p) => acc + (Number(p.paidAmount) || 0), 0);
+    const totalPendingPurchases = purchases.reduce((acc, p) => acc + Math.max(0, (Number(p.total) || 0) - (Number(p.paidAmount) || 0)), 0);
 
-    // Flujo neto de fondos estimado
-    const netCashFlow = (totalSales + totalAbonosVentas) - (totalCashExpenses + totalPagadoPurchases);
+    // Flujo neto de fondos estimado (excluyendo órdenes "Cancelado" que no desembolsan de caja ni banco)
+    const netCashFlow = (totalSales + totalAbonosVentas) - (totalCashExpenses + totalCashOutPurchases);
 
     // 2. Expense classification for P&L
     let expNomina = 0;
