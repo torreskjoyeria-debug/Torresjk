@@ -4700,13 +4700,8 @@ class NexusApp {
       suppSelect.value = '';
     }
 
-    if (dl && this.data.products) {
-      dl.innerHTML = this.data.products.map(p => {
-        const isPesaje = (p.measureType || 'Pesaje') === 'Pesaje';
-        const unit = isPesaje ? (p.weightUnit || 'g') : 'u.';
-        const weightInfo = !isPesaje && (p.pieceWeight || p.weight) ? ` · ${p.pieceWeight || p.weight}g` : '';
-        return `<option value="${this.escapeHtml(p.name)}">${this.escapeHtml(p.name)} (Código: ${this.escapeHtml(p.sku || p.id)} · Stock: ${p.stock} ${unit}${weightInfo})</option>`;
-      }).join('');
+    if (dl) {
+      dl.innerHTML = '';
     }
 
     const quantityInput = document.getElementById('po-quantity');
@@ -4820,122 +4815,15 @@ class NexusApp {
   }
 
   onPurchaseProductNameInput() {
-    const nameInput = document.getElementById('po-product-name');
-    if (!nameInput) return;
-    const rawVal = nameInput.value.trim();
-    if (!rawVal) {
-      const hiddenId = document.getElementById('po-product-id');
-      if (hiddenId) hiddenId.value = '';
-      this.updatePurchaseCalculations();
-      return;
-    }
-
-    const valLower = rawVal.toLowerCase();
-
     const hiddenId = document.getElementById('po-product-id');
-    const skuInput = document.getElementById('po-product-sku');
-    const unitCostInput = document.getElementById('po-unit-cost');
-    const gramsInput = document.getElementById('po-product-grams');
-    const measureSelect = document.getElementById('po-measure-type');
-    const catSelect = document.getElementById('po-category-select');
-    const catInfo = document.getElementById('po-preview-cat-info');
-
-    const currentSkuVal = (skuInput?.value || '').trim().toLowerCase();
-
-    // Coincidencia segura: primero por SKU/ID exacto; por nombre solo si es único y el usuario no ha escrito otro SKU distinto
-    let targetProd = (this.data.products || []).find(p => 
-      (p.sku && p.sku.toLowerCase().trim() === valLower) ||
-      p.id.toLowerCase().trim() === valLower
-    );
-    if (!targetProd) {
-      const byName = (this.data.products || []).filter(p => p.name && p.name.toLowerCase().trim() === valLower);
-      if (byName.length === 1) {
-        const candidate = byName[0];
-        const candSku = String(candidate.sku || candidate.id || '').toLowerCase().trim();
-        if (!currentSkuVal || currentSkuVal === candSku) {
-          targetProd = candidate;
-        }
-      }
-    }
-
-    if (targetProd) {
-      if (hiddenId) hiddenId.value = targetProd.id;
-      if (skuInput && !currentSkuVal) skuInput.value = targetProd.sku || targetProd.id;
-      if (unitCostInput && (!unitCostInput.value || unitCostInput.value === '0')) {
-        unitCostInput.value = this.formatNumberWithCommas(targetProd.cost || 0);
-      }
-
-      if (catSelect && targetProd.category) {
-        catSelect.value = targetProd.category;
-      }
-
-      const isUnidades = (targetProd.measureType || 'Pesaje') === 'Unidades';
-      if (measureSelect) {
-        measureSelect.value = isUnidades ? 'Unidades' : 'Pesaje';
-      }
-
-      if (gramsInput) {
-        if (isUnidades) {
-          const val = targetProd.pieceWeight !== undefined && targetProd.pieceWeight !== null ? targetProd.pieceWeight : (targetProd.weight || 0);
-          gramsInput.value = val > 0 ? this.formatNumberWithCommas(val, true) : '';
-        } else {
-          gramsInput.value = '';
-        }
-      }
-
-      if (catInfo) {
-        catInfo.textContent = `Categoría: ${targetProd.categoryName || targetProd.category || 'General'}`;
-      }
-    } else {
-      if (hiddenId) hiddenId.value = '';
-      if (catInfo) {
-        const catObj = catSelect ? (this.data.categories || []).find(c => c.id === catSelect.value) : null;
-        catInfo.textContent = `Nuevo Producto ${catObj ? `(${catObj.name})` : ''}`;
-      }
-    }
-
-    this.onPurchaseMeasureTypeChange();
+    if (hiddenId) hiddenId.value = '';
+    this.updatePurchaseCalculations();
   }
 
   onPurchaseSkuInput() {
-    const skuInput = document.getElementById('po-product-sku');
-    if (!skuInput) return;
-    const skuVal = skuInput.value.trim().toLowerCase();
-    if (!skuVal) return;
-
-    const matchedProd = (this.data.products || []).find(p => 
-      (p.sku && p.sku.toLowerCase().trim() === skuVal) ||
-      (p.code && p.code.toLowerCase().trim() === skuVal) ||
-      (p.id && p.id.toLowerCase().trim() === skuVal)
-    );
-
-    if (matchedProd) {
-      const hiddenId = document.getElementById('po-product-id');
-      const nameInput = document.getElementById('po-product-name');
-      const unitCostInput = document.getElementById('po-unit-cost');
-      const gramsInput = document.getElementById('po-product-grams');
-      const measureSelect = document.getElementById('po-measure-type');
-      const catSelect = document.getElementById('po-category-select');
-      const catInfo = document.getElementById('po-preview-cat-info');
-
-      if (hiddenId) hiddenId.value = matchedProd.id;
-      if (nameInput && !nameInput.value) nameInput.value = matchedProd.name;
-      if (unitCostInput && (!unitCostInput.value || unitCostInput.value === '0')) {
-        unitCostInput.value = this.formatNumberWithCommas(matchedProd.cost || 0);
-      }
-      if (catSelect && matchedProd.category) catSelect.value = matchedProd.category;
-      const isUnidades = (matchedProd.measureType || 'Pesaje') === 'Unidades';
-      if (measureSelect) measureSelect.value = isUnidades ? 'Unidades' : 'Pesaje';
-      if (gramsInput && isUnidades) {
-        const val = matchedProd.pieceWeight !== undefined && matchedProd.pieceWeight !== null ? matchedProd.pieceWeight : (matchedProd.weight || 0);
-        gramsInput.value = val > 0 ? this.formatNumberWithCommas(val, true) : '';
-      }
-      if (catInfo) catInfo.textContent = `Categoría: ${matchedProd.categoryName || matchedProd.category || 'General'}`;
-      this.onPurchaseMeasureTypeChange();
-    } else {
-      const hiddenId = document.getElementById('po-product-id');
-      if (hiddenId) hiddenId.value = '';
-    }
+    const hiddenId = document.getElementById('po-product-id');
+    if (hiddenId) hiddenId.value = '';
+    this.updatePurchaseCalculations();
   }
 
   updatePurchaseCalculations() {
