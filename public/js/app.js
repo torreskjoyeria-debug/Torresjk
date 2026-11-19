@@ -825,7 +825,12 @@ class NexusApp {
     if (!Array.isArray(this.data.deletedCustomers)) this.data.deletedCustomers = [];
     if (!Array.isArray(this.data.deletedCustomerCredits)) this.data.deletedCustomerCredits = [];
     if (!Array.isArray(this.data.deletedSuppliers)) this.data.deletedSuppliers = [];
-    if (!Array.isArray(this.data.deletedSupplierCredits)) this.data.deletedSupplierCredits = [];
+    if (!Array.isArray(this.data.deletedSupplierCredits)) {
+      this.data.deletedSupplierCredits = [];
+    } else {
+      this.data.deletedSupplierCredits = this.data.deletedSupplierCredits.filter(id => id && !String(id).startsWith('suppkey:'));
+    }
+    if (!Array.isArray(this.data.deletedAbonosVentas)) this.data.deletedAbonosVentas = [];
     if (!Array.isArray(this.data.deletedServices)) this.data.deletedServices = [];
     if (!Array.isArray(this.data.deletedAssets)) this.data.deletedAssets = [];
     if (!Array.isArray(this.data.deletedPaymentMethods)) this.data.deletedPaymentMethods = [];
@@ -1085,6 +1090,12 @@ class NexusApp {
     if (!this.data.abonosVentas || !Array.isArray(this.data.abonosVentas)) {
       this.data.abonosVentas = [];
     }
+    if (!this.data.deletedAbonosVentas || !Array.isArray(this.data.deletedAbonosVentas)) {
+      this.data.deletedAbonosVentas = [];
+    } else if (this.data.deletedAbonosVentas.length > 0) {
+      const delAvSet = new Set(this.data.deletedAbonosVentas);
+      this.data.abonosVentas = (this.data.abonosVentas || []).filter(a => a && a.id && !delAvSet.has(a.id));
+    }
     if (!this.data.abonosCompras || !Array.isArray(this.data.abonosCompras)) {
       this.data.abonosCompras = [];
     }
@@ -1141,6 +1152,7 @@ class NexusApp {
               'deletedPurchases',
               'deletedProducts',
               'deletedAbonosCompras',
+              'deletedAbonosVentas',
               'deletedSuppliers',
               'deletedSupplierCredits',
               'deletedCustomers',
@@ -1514,14 +1526,24 @@ class NexusApp {
         }
       });
 
-      const pendingList = credList.filter(c => (Number(c.pendingAmount) || 0) > 0 || c.status !== 'Pagado Total');
-      const paidList = credList.filter(c => (Number(c.pendingAmount) || 0) <= 0 || c.status === 'Pagado Total');
+      const pendingList = credList.filter(c => (Number(c.pendingAmount) || 0) > 0 && c.status !== 'Pagado Total' && c.status !== 'Saldado');
+      const paidList = credList.filter(c => (Number(c.pendingAmount) || 0) <= 0 || c.status === 'Pagado Total' || c.status === 'Saldado');
 
-      const totalOwedSum = pendingList.reduce((sum, c) => sum + (Number(c.totalOwed) || 0), 0);
+      const pendingFromCredits = pendingList.reduce((sum, c) => sum + (Number(c.pendingAmount) || 0), 0);
       const pendingVal = suppObj
-        ? (suppCreditBalance > 0 ? suppCreditBalance : pendingList.reduce((sum, c) => sum + (Number(c.pendingAmount) || 0), 0))
-        : pendingList.reduce((sum, c) => sum + (Number(c.pendingAmount) || 0), 0);
-      const paidVal = Math.max(0, totalOwedSum - pendingVal);
+        ? (suppCreditBalance > 0 ? suppCreditBalance : pendingFromCredits)
+        : pendingFromCredits;
+
+      if (suppObj && Number(suppObj.creditBalance || 0) !== pendingVal) {
+        suppObj.creditBalance = pendingVal;
+      }
+
+      // Si hay deuda pendiente pero todos los créditos estaban en paidList (ej. tras revertir un abono),
+      // tomar el totalOwed de credList para conservar el histórico completo de deuda y abonos.
+      const baseListForOwed = pendingList.length > 0 ? pendingList : credList;
+      const totalOwedSum = baseListForOwed.reduce((sum, c) => sum + (Number(c.totalOwed) || 0), 0);
+      const effectiveTotalOwed = totalOwedSum > pendingVal ? totalOwedSum : pendingVal;
+      const paidVal = Math.max(0, effectiveTotalOwed - pendingVal);
 
       const allDates = credList.map(c => c.date).filter(Boolean).sort();
       const earliest = allDates[0] || new Date().toISOString().slice(0, 10);
@@ -1539,7 +1561,7 @@ class NexusApp {
           id: allocateCpId([...pendingList, ...credList]),
           supplier: realName,
           supplierId: suppId,
-          totalOwed: totalOwedSum > pendingVal ? totalOwedSum : pendingVal,
+          totalOwed: effectiveTotalOwed,
           paidAmount: paidVal,
           pendingAmount: pendingVal,
           date: earliest,
@@ -1553,8 +1575,8 @@ class NexusApp {
         });
       }
 
-      // 1 registro consolidado saldado si tiene historial pagado
-      if (paidList.length > 0 && (pendingVal === 0 || paidList.length > 5)) {
+      // 1 registro consolidado saldado si no hay deuda pendiente pero tiene historial pagado
+      if (paidList.length > 0 && pendingVal === 0) {
         const totalPaidHist = paidList.reduce((sum, c) => sum + (Number(c.totalOwed) || Number(c.paidAmount) || 0), 0);
         consolidated.push({
           id: allocateCpId([...paidList, ...credList]),
@@ -1603,7 +1625,9 @@ class NexusApp {
             lastPurchaseDate: new Date().toISOString().slice(0, 10),
             dueDate: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
             status: "Pendiente",
-            purchaseOrderIds: suppPOs.map(p => p.id)
+            purchaseOrderIds: suppPOs.map(p => p.id),
+            createdAt: Number(s.createdAt) || Date.now(),
+            updatedAt: Number(s.updatedAt) || Date.now()
           });
         }
       }
@@ -1829,6 +1853,7 @@ class NexusApp {
                 'deletedPurchases',
                 'deletedProducts',
                 'deletedAbonosCompras',
+                'deletedAbonosVentas',
                 'deletedSuppliers',
                 'deletedSupplierCredits',
                 'deletedCustomers',
@@ -1885,6 +1910,10 @@ class NexusApp {
             if (remote.deletedAbonosCompras?.length > 0 && Array.isArray(remote.abonosCompras)) {
               const delAcSet = new Set(remote.deletedAbonosCompras);
               remote.abonosCompras = remote.abonosCompras.filter(a => a && a.id && !delAcSet.has(a.id));
+            }
+            if (remote.deletedAbonosVentas?.length > 0 && Array.isArray(remote.abonosVentas)) {
+              const delAvSet = new Set(remote.deletedAbonosVentas);
+              remote.abonosVentas = remote.abonosVentas.filter(a => a && a.id && !delAvSet.has(a.id));
             }
             if (remote.deletedPurchases?.length > 0 && Array.isArray(remote.purchases)) {
               const delSet = new Set(remote.deletedPurchases);
@@ -3511,17 +3540,35 @@ class NexusApp {
           supp.updatedAt = Date.now();
 
           if (!Array.isArray(this.data.supplierCredits)) this.data.supplierCredits = [];
-          (this.data.supplierCredits || []).forEach(sc => {
-            if (sc.supplier === oldName) sc.supplier = name;
-          });
+          if (oldName !== name) {
+            (this.data.supplierCredits || []).forEach(sc => {
+              if (sc.supplier === oldName) sc.supplier = name;
+            });
+            (this.data.abonosCompras || []).forEach(ab => {
+              if (ab.supplier === oldName) ab.supplier = name;
+            });
+            (this.data.purchases || []).forEach(po => {
+              if (po.supplier === oldName) po.supplier = name;
+            });
+          }
 
           let existingCredit = this.data.supplierCredits.find(sc => 
-            (sc.supplier === name || sc.supplierId === supp.id) &&
+            (sc.supplier?.toLowerCase().trim() === name.toLowerCase().trim() || sc.supplierId === supp.id) &&
             sc.status !== 'Pagado Total'
           );
+          if (!existingCredit && pendingBalance > 0) {
+            existingCredit = this.data.supplierCredits.find(sc =>
+              sc.supplier?.toLowerCase().trim() === name.toLowerCase().trim() || sc.supplierId === supp.id
+            );
+          }
           if (existingCredit) {
             existingCredit.pendingAmount = pendingBalance;
-            if ((Number(existingCredit.totalOwed) || 0) < pendingBalance) existingCredit.totalOwed = pendingBalance;
+            const paidSoFar = Number(existingCredit.paidAmount) || 0;
+            if ((Number(existingCredit.totalOwed) || 0) < pendingBalance + paidSoFar) {
+              existingCredit.totalOwed = pendingBalance + paidSoFar;
+            }
+            existingCredit.status = pendingBalance > 0 ? 'Pendiente' : 'Pagado Total';
+            existingCredit.updatedAt = Date.now();
           } else if (pendingBalance > 0) {
             const newCreditId = this.getNextSupplierCreditId();
             this.data.supplierCredits.push({
@@ -3533,7 +3580,9 @@ class NexusApp {
               pendingAmount: pendingBalance,
               date: new Date().toISOString().slice(0, 10),
               dueDate: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
-              status: "Pendiente"
+              status: "Pendiente",
+              createdAt: Date.now(),
+              updatedAt: Date.now()
             });
           }
 
@@ -6942,11 +6991,14 @@ class NexusApp {
 
     // 1. REVERSIÓN AUTOMÁTICA DE EFECTIVO A LA CAJA
     let cashToRefund = 0;
-    const relatedAbonos = (this.data.abonosCompras || []).filter(ab => ab.poId === po.id);
+    const relatedAbonos = (this.data.abonosCompras || []).filter(ab => ab.poId === po.id || ab.targetPoId === po.id);
     let cashFromAbonos = 0;
     relatedAbonos.forEach(ab => {
       const meth = (ab.method || '').toLowerCase();
-      if (meth.includes('efectivo') || meth.includes('caja')) {
+      if (ab.deductedFromCash === false || meth.includes('sin caja') || meth.includes('externo')) return;
+      if (ab.paymentBreakdown && Number(ab.paymentBreakdown.cash) > 0) {
+        cashFromAbonos += Number(ab.paymentBreakdown.cash) || 0;
+      } else if (meth.includes('efectivo') || meth.includes('caja')) {
         cashFromAbonos += Number(ab.amount) || 0;
       }
     });
@@ -6962,10 +7014,12 @@ class NexusApp {
         }
       });
       // Eliminar abonos vinculados a esta orden de compra
-      this.data.abonosCompras = (this.data.abonosCompras || []).filter(ab => ab.poId !== po.id);
+      this.data.abonosCompras = (this.data.abonosCompras || []).filter(ab => ab.poId !== po.id && ab.targetPoId !== po.id);
     } else {
       const poMethod = (po.paymentMethod || '').toLowerCase();
-      const isCash = poMethod.includes('efectivo') || poMethod.includes('caja');
+      const poStatus = (po.paymentStatus || '').toLowerCase();
+      const isCancelado = !!po.noCashOrBankDeduct || poMethod.includes('cancelad') || poStatus.includes('cancelad');
+      const isCash = !isCancelado && (poMethod.includes('efectivo') || poMethod.includes('caja'));
       const wasPaid = po.paymentStatus === 'Pagado Total' || (Number(po.paidAmount) > 0);
       if (isCash && wasPaid) {
         cashToRefund = Number(po.paidAmount || po.total) || 0;
@@ -7032,6 +7086,8 @@ class NexusApp {
 
     // 3. REVERTIR CRÉDITOS Y DEUDAS DE PROVEEDORES (SOLO SI LA COMPRA FUE A CRÉDITO Y NO CANCELADA/CONTADO)
     const poTotal = Number(po.total) || 0;
+    const poPaidSoFar = Number(po.paidAmount) || 0;
+    const unpaidFromPo = relatedAbonos.length > 0 ? poTotal : Math.max(0, poTotal - poPaidSoFar);
     const poStatusLower = String(po.paymentStatus || '').toLowerCase();
     const poMethodLower = String(po.paymentMethod || '').toLowerCase();
     const isCanceladoPO = !!po.noCashOrBankDeduct || poStatusLower.includes('cancelad') || poMethodLower.includes('cancelad');
@@ -7056,9 +7112,12 @@ class NexusApp {
                           (Array.isArray(cred.purchaseOrderIds) && cred.purchaseOrderIds.includes(po.id));
 
         if (matchesPO || (isCreditPurchase && credSuppNorm && credSuppNorm === suppNorm)) {
-          const amountToDeduct = Math.min(Number(cred.pendingAmount) || 0, poTotal);
+          const amountToDeduct = Math.min(Number(cred.pendingAmount) || 0, unpaidFromPo);
           cred.totalOwed = Math.round(Math.max(0, (Number(cred.totalOwed) || 0) - poTotal) * 100) / 100;
           cred.pendingAmount = Math.round(Math.max(0, (Number(cred.pendingAmount) || 0) - amountToDeduct) * 100) / 100;
+          if (relatedAbonos.length === 0 && poPaidSoFar > 0) {
+            cred.paidAmount = Math.round(Math.max(0, (Number(cred.paidAmount) || 0) - poPaidSoFar) * 100) / 100;
+          }
           cred.updatedAt = Date.now();
 
           if (Array.isArray(cred.purchaseOrderIds)) {
@@ -7082,7 +7141,7 @@ class NexusApp {
       this.data.supplierCredits = this.data.supplierCredits.filter(cred => !cred._delete);
 
       if (isCreditPurchase && suppObj) {
-        suppObj.creditBalance = Math.round(Math.max(0, (Number(suppObj.creditBalance) || 0) - poTotal) * 100) / 100;
+        suppObj.creditBalance = Math.round(Math.max(0, (Number(suppObj.creditBalance) || 0) - unpaidFromPo) * 100) / 100;
         suppObj.updatedAt = Date.now();
       }
     }
@@ -7122,56 +7181,106 @@ class NexusApp {
       this.showToast(`Abono #${id} no encontrado.`, 'warning');
       return;
     }
-    if (!confirm(`¿Estás seguro de anular el abono #${id} de ${this.formatCurrency(ab.amount)} a ${ab.supplier}? Si fue en efectivo, el dinero se reintegrará automáticamente a la caja.`)) return;
+    if (!confirm(`¿Estás seguro de anular el abono #${id} de ${this.formatCurrency(ab.amount)} a ${ab.supplier}? Si fue descontado de efectivo, el dinero se reintegrará automáticamente a la caja y se restaurará el saldo pendiente del proveedor.`)) return;
 
     const amt = Number(ab.amount) || 0;
-    const isCash = (ab.method || '').toLowerCase().includes('efectivo') || (ab.method || '').toLowerCase().includes('caja');
+    const methLower = (ab.method || '').toLowerCase();
+    const wasDeductedFromCash = ab.deductedFromCash !== false && !methLower.includes('sin caja') && !methLower.includes('externo');
+    let cashToRestore = 0;
+    let bankToRestore = 0;
 
-    if (isCash && amt > 0 && this.data.cashShiftLog) {
-      this.data.cashShiftLog.cashExpenses = Math.round(Math.max(0, (Number(this.data.cashShiftLog.cashExpenses) || 0) - amt) * 100) / 100;
+    if (ab.paymentBreakdown) {
+      if (wasDeductedFromCash) {
+        cashToRestore = Math.round(Number(ab.paymentBreakdown.cash) || 0);
+      }
+      bankToRestore = Math.round(Number(ab.paymentBreakdown.electronic) || 0);
+    } else if (methLower.includes('efectivo') || methLower.includes('caja') || methLower.includes('gaveta')) {
+      if (wasDeductedFromCash) {
+        cashToRestore = Math.round(amt);
+      }
+    } else {
+      bankToRestore = Math.round(amt);
+    }
+
+    if (cashToRestore > 0 && this.data.cashShiftLog && !ab.outsideShift) {
+      this.data.cashShiftLog.cashExpenses = Math.round(Math.max(0, (Number(this.data.cashShiftLog.cashExpenses) || 0) - cashToRestore) * 100) / 100;
       this.data.cashShiftLog.expectedCashInDrawer = Math.round(((Number(this.data.cashShiftLog.openingCash) || 0) + (Number(this.data.cashShiftLog.cashSales) || 0) - (Number(this.data.cashShiftLog.cashExpenses) || 0)) * 100) / 100;
       if (this.data.store) {
         this.data.store.cashInBox = this.data.cashShiftLog.expectedCashInDrawer;
       }
-      if (Array.isArray(this.data.cashShiftsHistory)) {
-        const histShift = this.data.cashShiftsHistory.find(s => s.shiftId === this.data.cashShiftLog.shiftId || s.id === this.data.cashShiftLog.id);
-        if (histShift) {
-          histShift.cashExpenses = this.data.cashShiftLog.cashExpenses;
-          histShift.expectedCashInDrawer = this.data.cashShiftLog.expectedCashInDrawer;
-          if (histShift.closingCash !== undefined) {
-            histShift.difference = Math.round((Number(histShift.closingCash) - Number(histShift.expectedCashInDrawer)) * 100) / 100;
-          }
-        }
-      }
     }
 
-    // Revertir deuda en supplierCredits si existe el crédito
-    if (ab.poId && Array.isArray(this.data.supplierCredits)) {
-      const cred = this.data.supplierCredits.find(c => c.id === ab.poId || c.poId === ab.poId);
+    // Revertir deuda en supplierCredits (buscando por ID, poId, purchaseOrderIds o nombre de proveedor)
+    const suppNorm = String(ab.supplier || '').toLowerCase().trim();
+    if (Array.isArray(this.data.supplierCredits)) {
+      let cred = null;
+      if (ab.poId) {
+        cred = this.data.supplierCredits.find(c =>
+          c && (c.id === ab.poId || c.poId === ab.poId || (Array.isArray(c.purchaseOrderIds) && c.purchaseOrderIds.includes(ab.poId)))
+        );
+      }
+      if (!cred && suppNorm) {
+        cred = this.data.supplierCredits.find(c => c && String(c.supplier || '').toLowerCase().trim() === suppNorm);
+      }
       if (cred) {
         cred.pendingAmount = Math.round(((Number(cred.pendingAmount) || 0) + amt) * 100) / 100;
         cred.paidAmount = Math.round(Math.max(0, (Number(cred.paidAmount) || 0) - amt) * 100) / 100;
+        if ((Number(cred.totalOwed) || 0) < cred.pendingAmount + cred.paidAmount) {
+          cred.totalOwed = Math.round((cred.pendingAmount + cred.paidAmount) * 100) / 100;
+        }
         if (cred.pendingAmount > 0) {
           cred.status = 'Pendiente';
+        }
+        if (Array.isArray(cred.history)) {
+          const histIdx = cred.history.findIndex(h => h && h.type === 'payment' && (h.abonoId === ab.id || Math.abs((Number(h.amount) || 0) - amt) < 0.01));
+          if (histIdx !== -1) cred.history.splice(histIdx, 1);
         }
         cred.updatedAt = Date.now();
       }
     }
 
     // Revertir saldo del proveedor
-    const suppObj = (this.data.suppliers || []).find(s => s.name?.toLowerCase().trim() === ab.supplier?.toLowerCase().trim());
+    const suppObj = (this.data.suppliers || []).find(s => s && String(s.name || '').toLowerCase().trim() === suppNorm);
     if (suppObj) {
       suppObj.creditBalance = Math.round(((Number(suppObj.creditBalance) || 0) + amt) * 100) / 100;
       suppObj.updatedAt = Date.now();
     }
 
-    // Revertir pago en la orden de compra si existe
-    if (ab.poId && Array.isArray(this.data.purchases)) {
-      const po = this.data.purchases.find(p => p.id === ab.poId);
-      if (po) {
-        po.paidAmount = Math.round(Math.max(0, (Number(po.paidAmount) || 0) - amt) * 100) / 100;
-        if (po.paidAmount < Number(po.total) - 0.01) {
-          po.paymentStatus = 'Pendiente';
+    // Revertir pago en la(s) orden(es) de compra a crédito del proveedor
+    if (Array.isArray(this.data.purchases)) {
+      const exactPo = (ab.targetPoId && this.data.purchases.find(p => p && p.id === ab.targetPoId)) ||
+                      (ab.poId && this.data.purchases.find(p => p && p.id === ab.poId));
+      if (exactPo) {
+        const stLower = String(exactPo.paymentStatus || '').toLowerCase();
+        const mtLower = String(exactPo.paymentMethod || '').toLowerCase();
+        const isCancelado = !!exactPo.noCashOrBankDeduct || stLower.includes('cancelad') || mtLower.includes('cancelad');
+        if (!isCancelado) {
+          exactPo.paidAmount = Math.round(Math.max(0, (Number(exactPo.paidAmount) || 0) - amt) * 100) / 100;
+          if (exactPo.paidAmount < Number(exactPo.total) - 0.01) {
+            exactPo.paymentStatus = 'Pendiente';
+          }
+        }
+      } else if (suppNorm) {
+        // Reversión en cascada inversa sobre las órdenes a crédito del proveedor
+        const suppCreditPOs = this.data.purchases.filter(p => {
+          if (!p || String(p.supplier || '').toLowerCase().trim() !== suppNorm) return false;
+          const stLower = String(p.paymentStatus || '').toLowerCase();
+          const mtLower = String(p.paymentMethod || '').toLowerCase();
+          if (p.noCashOrBankDeduct || stLower.includes('cancelad') || mtLower.includes('cancelad')) return false;
+          return (Number(p.paidAmount) || 0) > 0 && (mtLower.includes('crédito') || mtLower.includes('credito') || stLower.includes('pend') || p.paidAmount !== undefined);
+        });
+        suppCreditPOs.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+        let toRevert = amt;
+        for (const po of suppCreditPOs) {
+          if (toRevert <= 0) break;
+          const paidNow = Number(po.paidAmount) || 0;
+          if (paidNow <= 0) continue;
+          const revPortion = Math.min(toRevert, paidNow);
+          po.paidAmount = Math.round(Math.max(0, paidNow - revPortion) * 100) / 100;
+          if (po.paidAmount < (Number(po.total) || 0) - 0.01) {
+            po.paymentStatus = 'Pendiente';
+          }
+          toRevert = Math.round((toRevert - revPortion) * 100) / 100;
         }
       }
     }
@@ -7183,14 +7292,23 @@ class NexusApp {
       this.data.deletedAbonosCompras.push(id);
     }
     this.data.abonosCompras = (this.data.abonosCompras || []).filter(a => a.id !== id);
-    if (isCash && amt > 0 && ab.closedShiftId && Array.isArray(this.data.cashShiftsHistory)) {
-      const closedHist = this.data.cashShiftsHistory.find(s => s && (s.shiftId === ab.closedShiftId || s.id === ab.closedShiftId));
+
+    const targetClosedShiftId = ab.closedShiftId || ab.shiftId;
+    if (targetClosedShiftId && Array.isArray(this.data.cashShiftsHistory)) {
+      const closedHist = this.data.cashShiftsHistory.find(s => s && (s.shiftId === targetClosedShiftId || s.id === targetClosedShiftId));
       if (closedHist) {
-        closedHist.cashExpenses = Math.round(Math.max(0, (Number(closedHist.cashExpenses) || 0) - amt));
-        closedHist.expectedCashInDrawer = Math.round((Number(closedHist.openingCash) || 0) + (Number(closedHist.cashSales) || 0) - closedHist.cashExpenses);
-        if (closedHist.closingCash !== undefined) {
-          closedHist.difference = Math.round((Number(closedHist.closingCash) || 0) - closedHist.expectedCashInDrawer);
+        if (cashToRestore > 0) {
+          closedHist.cashExpenses = Math.round(Math.max(0, (Number(closedHist.cashExpenses) || 0) - cashToRestore));
+          closedHist.expectedCashInDrawer = Math.round((Number(closedHist.openingCash) || 0) + (Number(closedHist.cashSales) || 0) - closedHist.cashExpenses);
+          if (closedHist.closingCash !== undefined) {
+            closedHist.difference = Math.round((Number(closedHist.closingCash) || 0) - closedHist.expectedCashInDrawer);
+          }
         }
+        if (bankToRestore > 0) {
+          closedHist.bankExpenses = Math.round(Math.max(0, (Number(closedHist.bankExpenses) || 0) - bankToRestore));
+          closedHist.expectedCardInAccount = Math.round((Number(closedHist.openingCard) || 0) + (Number(closedHist.cardSales) || 0) - closedHist.bankExpenses);
+        }
+        closedHist.totalExpenses = Math.round((Number(closedHist.cashExpenses) || 0) + (Number(closedHist.bankExpenses) || 0));
       }
     }
     this.calculateShiftTotals();
@@ -7199,12 +7317,100 @@ class NexusApp {
     this.renderAbonosComprasTable();
     this.renderCuadreCajaCard();
     this.renderCashStatusIndicator();
-    this.showToast(`Abono #${id} anulado y dinero reintegrado a caja`, 'warning');
+    const cashRestoreMsg = cashToRestore > 0 ? ' y dinero reintegrado a caja' : '';
+    this.showToast(`Abono #${id} anulado, deuda restaurada${cashRestoreMsg}`, 'warning');
     await this.savePersistence();
   }
 
-  openAbonoModal(type, id) {
+  async deleteAbonoVenta(id) {
+    if (!this.canPerformAction('delete', 'sale') && !this.canPerformAction('delete', 'customer') && !this.canPerformAction('delete', 'expense')) {
+      this.showToast('Acceso Denegado: No tienes permisos para anular abonos de clientes.', 'danger');
+      return;
+    }
+    const ab = (this.data.abonosVentas || []).find(a => a && a.id === id);
+    if (!ab) {
+      this.showToast(`Abono de venta #${id} no encontrado.`, 'warning');
+      return;
+    }
+    if (!confirm(`¿Estás seguro de anular el abono #${id} de ${this.formatCurrency(ab.amount)} del cliente ${ab.customer}? Se restaurará el saldo pendiente en la cuenta del cliente.`)) return;
+
+    const amt = Number(ab.amount) || 0;
+    const custNorm = String(ab.customer || '').toLowerCase().trim();
+
+    // 1. Restaurar saldo en customerCredits
+    if (Array.isArray(this.data.customerCredits)) {
+      let cred = ab.creditId ? this.data.customerCredits.find(c => c && c.id === ab.creditId) : null;
+      if (!cred && custNorm) {
+        cred = this.data.customerCredits.find(c => c && String(c.customer || '').toLowerCase().trim() === custNorm);
+      }
+      if (cred) {
+        cred.currentBalance = Math.round(((Number(cred.currentBalance) || 0) + amt) * 100) / 100;
+        if ((Number(cred.totalGranted) || 0) < cred.currentBalance) {
+          cred.totalGranted = cred.currentBalance;
+        }
+        if (cred.currentBalance > 0 && cred.status === 'Saldado') {
+          cred.status = 'Al Día';
+        }
+        cred.updatedAt = Date.now();
+      }
+    }
+
+    // 2. Restaurar saldo en directorio de clientes
+    const cust = (this.data.customers || []).find(c =>
+      c && ((ab.customerId && c.id === ab.customerId) || String(c.name || '').toLowerCase().trim() === custNorm)
+    );
+    if (cust) {
+      cust.creditBalance = Math.round(((Number(cust.creditBalance) || 0) + amt) * 100) / 100;
+      cust.updatedAt = Date.now();
+    }
+
+    // 3. Registrar en lista negra deletedAbonosVentas y remover de abonosVentas
+    if (!Array.isArray(this.data.deletedAbonosVentas)) {
+      this.data.deletedAbonosVentas = [];
+    }
+    if (!this.data.deletedAbonosVentas.includes(id)) {
+      this.data.deletedAbonosVentas.push(id);
+    }
+    this.data.abonosVentas = (this.data.abonosVentas || []).filter(a => a && a.id !== id);
+
+    // 4. Ajustar turno cerrado si pertenecía a uno
+    const targetClosedShiftId = ab.closedShiftId || ab.shiftId;
+    if (targetClosedShiftId && Array.isArray(this.data.cashShiftsHistory)) {
+      const closedHist = this.data.cashShiftsHistory.find(s => s && (s.shiftId === targetClosedShiftId || s.id === targetClosedShiftId));
+      if (closedHist) {
+        const methLower = String(ab.method || '').toLowerCase();
+        const cashPart = ab.paymentBreakdown
+          ? Math.round(Number(ab.paymentBreakdown.cash) || 0)
+          : (methLower.includes('efectivo') ? Math.round(amt) : 0);
+        const elecPart = ab.paymentBreakdown
+          ? Math.round(Number(ab.paymentBreakdown.electronic) || 0)
+          : (!methLower.includes('efectivo') ? Math.round(amt) : 0);
+        if (cashPart > 0) {
+          closedHist.cashSales = Math.round(Math.max(0, (Number(closedHist.cashSales) || 0) - cashPart));
+          closedHist.expectedCashInDrawer = Math.round((Number(closedHist.openingCash) || 0) + closedHist.cashSales - (Number(closedHist.cashExpenses) || 0));
+          if (closedHist.closingCash !== undefined) {
+            closedHist.difference = Math.round((Number(closedHist.closingCash) || 0) - closedHist.expectedCashInDrawer);
+          }
+        }
+        if (elecPart > 0) {
+          closedHist.cardSales = Math.round(Math.max(0, (Number(closedHist.cardSales) || 0) - elecPart));
+          closedHist.expectedCardInAccount = Math.round((Number(closedHist.openingCard) || 0) + closedHist.cardSales - (Number(closedHist.bankExpenses) || 0));
+        }
+      }
+    }
+
+    this.calculateShiftTotals();
+    this.syncAllModules();
+    this.renderAbonosVentasTable();
+    this.renderCuadreCajaCard();
+    this.renderCashStatusIndicator();
+    this.showToast(`Abono de cliente #${id} anulado y saldo restaurado`, 'warning');
+    await this.savePersistence();
+  }
+
+  openAbonoModal(type, id, optionalPrefillAmount = null, optionalTargetPoId = null) {
     this.currentAbonoContext = { type, id };
+    this.currentAbonoTargetPoId = optionalTargetPoId || null;
     const typeInput = document.getElementById('abono-credit-type');
     const idInput = document.getElementById('abono-credit-id');
     const titleEl = document.getElementById('abono-modal-title');
@@ -7213,44 +7419,56 @@ class NexusApp {
     const pendingBalEl = document.getElementById('abono-pending-balance');
     const amountInput = document.getElementById('abono-amount-input');
     const methodSelect = document.getElementById('abono-method-select');
+    const deductCheck = document.getElementById('abono-deduct-cash-check');
 
     if (typeInput) typeInput.value = type;
     if (idInput) idInput.value = id;
 
     if (type === 'customer') {
-      const cred = this.data.customerCredits.find(c => c.id === id);
+      const cred = (this.data.customerCredits || []).find(c => c && c.id === id);
       if (!cred) return;
-      this.currentAbonoMaxBalance = cred.currentBalance;
+      this.currentAbonoMaxBalance = Number(cred.currentBalance) || 0;
       if (titleEl) titleEl.textContent = `Registrar Abono de Cliente (${cred.id})`;
       if (entityLabelEl) entityLabelEl.textContent = 'Cliente:';
       if (entityNameEl) entityNameEl.textContent = cred.customer;
       if (pendingBalEl) pendingBalEl.textContent = this.formatCurrency(cred.currentBalance);
+      const initAmt = (optionalPrefillAmount !== null && optionalPrefillAmount > 0)
+        ? Math.min(Number(optionalPrefillAmount), this.currentAbonoMaxBalance)
+        : this.currentAbonoMaxBalance;
       if (amountInput) {
-        amountInput.value = this.formatNumberWithCommas(cred.currentBalance);
-        amountInput.max = cred.currentBalance;
+        amountInput.value = this.formatNumberWithCommas(initAmt);
+        amountInput.max = this.currentAbonoMaxBalance;
       }
       if (methodSelect) methodSelect.value = 'Efectivo';
     } else {
-      let cp = (this.data.supplierCredits || []).find(s => s.id === id);
+      let cp = (this.data.supplierCredits || []).find(s => s && s.id === id);
       if (!cp) {
         const cleanId = String(id || '').toLowerCase().trim();
         cp = (this.data.supplierCredits || []).find(s => 
-          String(s.id || '').toLowerCase().trim() === cleanId ||
-          String(s.supplier || '').toLowerCase().trim() === cleanId ||
-          String(s.supplierId || '').toLowerCase().trim() === cleanId
+          s && (
+            String(s.id || '').toLowerCase().trim() === cleanId ||
+            String(s.supplier || '').toLowerCase().trim() === cleanId ||
+            String(s.supplierId || '').toLowerCase().trim() === cleanId
+          )
         );
       }
       if (!cp) return;
       this.currentAbonoMaxBalance = Number(cp.pendingAmount) || 0;
-      if (titleEl) titleEl.textContent = `Registrar Pago a Proveedor (${cp.id})`;
+      if (titleEl) titleEl.textContent = optionalTargetPoId
+        ? `Registrar Pago a Proveedor (${cp.id} · ${optionalTargetPoId})`
+        : `Registrar Pago a Proveedor (${cp.id})`;
       if (entityLabelEl) entityLabelEl.textContent = 'Proveedor:';
       if (entityNameEl) entityNameEl.textContent = cp.supplier;
       if (pendingBalEl) pendingBalEl.textContent = this.formatCurrency(cp.pendingAmount);
+      const initAmt = (optionalPrefillAmount !== null && optionalPrefillAmount > 0)
+        ? Math.min(Number(optionalPrefillAmount), this.currentAbonoMaxBalance)
+        : this.currentAbonoMaxBalance;
       if (amountInput) {
-        amountInput.value = this.formatNumberWithCommas(cp.pendingAmount);
-        amountInput.max = cp.pendingAmount;
+        amountInput.value = this.formatNumberWithCommas(initAmt);
+        amountInput.max = this.currentAbonoMaxBalance;
       }
       if (methodSelect) methodSelect.value = 'Efectivo';
+      if (deductCheck) deductCheck.checked = true;
       if (idInput) idInput.value = cp.id;
     }
 
@@ -7261,16 +7479,16 @@ class NexusApp {
 
     if (amountInput) {
       amountInput.oninput = () => {
-        this.updateAbonoCashPreview();
+        this.updateAbonoCashPreview(false);
         this.updateAbonoMixedCalc();
       };
     }
     if (methodSelect) {
-      methodSelect.onchange = () => this.updateAbonoCashPreview();
+      methodSelect.onchange = () => this.updateAbonoCashPreview(true);
     }
-    this.updateAbonoCashPreview();
-    ['abono-mixed-cash', 'abono-mixed-electronic'].forEach(id => {
-      const el = document.getElementById(id);
+    this.updateAbonoCashPreview(true);
+    ['abono-mixed-cash', 'abono-mixed-electronic'].forEach(inpId => {
+      const el = document.getElementById(inpId);
       if (el) this.setupThousandMask(el, false, () => this.updateAbonoMixedCalc());
     });
     this.openModal('abono-modal');
@@ -7296,9 +7514,11 @@ class NexusApp {
         diffEl.style.color = 'var(--rose-danger)';
       }
     }
+    // Actualizar vista previa de efectivo en caja con la porción en efectivo del pago mixto
+    this.updateAbonoCashPreview(false, true);
   }
 
-  updateAbonoCashPreview() {
+  updateAbonoCashPreview(fromMethodChange = false, skipMixedRecalc = false) {
     const type = document.getElementById('abono-credit-type')?.value;
     const cashPreviewBox = document.getElementById('abono-cash-preview-box');
     const currentValEl = document.getElementById('abono-cash-current-val');
@@ -7306,13 +7526,14 @@ class NexusApp {
     const amountInput = document.getElementById('abono-amount-input');
     const methodSelect = document.getElementById('abono-method-select');
     const deductCheck = document.getElementById('abono-deduct-cash-check');
+    const deductLabel = document.getElementById('abono-deduct-cash-label') || (deductCheck ? deductCheck.closest('label') : null);
     const submitBtn = document.getElementById('abono-submit-btn');
     const mixedBox = document.getElementById('abono-mixed-box');
     const method = methodSelect?.value || 'Efectivo';
 
     if (mixedBox) {
       mixedBox.style.display = method === 'Pago Mixto' ? 'flex' : 'none';
-      if (method === 'Pago Mixto') {
+      if (method === 'Pago Mixto' && !skipMixedRecalc) {
         this.updateAbonoMixedCalc();
       }
     }
@@ -7326,14 +7547,24 @@ class NexusApp {
     if (cashPreviewBox) cashPreviewBox.style.display = 'block';
 
     const currentCash = Number(this.data.cashShiftLog?.expectedCashInDrawer) || Number(this.data.store?.cashInBox) || 0;
-    const amountToPay = this.parseCleanNumber(amountInput?.value) || 0;
+    const totalAmountToPay = this.parseCleanNumber(amountInput?.value) || 0;
     const isCash = method.toLowerCase().includes('efectivo');
+    const isMixed = method === 'Pago Mixto';
+    const hasCashComponent = isCash || isMixed;
 
-    if (deductCheck && isCash) {
-      deductCheck.checked = true;
+    if (fromMethodChange && deductCheck) {
+      deductCheck.checked = hasCashComponent;
     }
 
-    const willDeduct = isCash || (deductCheck ? deductCheck.checked : false);
+    if (deductLabel) {
+      deductLabel.style.display = hasCashComponent ? 'flex' : 'none';
+    }
+
+    const cashPortionToPay = isMixed
+      ? (this.parseCleanNumber(document.getElementById('abono-mixed-cash')?.value) || 0)
+      : (isCash ? totalAmountToPay : 0);
+
+    const willDeduct = hasCashComponent && cashPortionToPay > 0 && (deductCheck ? deductCheck.checked : true);
 
     if (currentValEl) {
       currentValEl.textContent = this.formatCurrency(currentCash);
@@ -7341,13 +7572,16 @@ class NexusApp {
 
     if (afterValEl) {
       if (willDeduct) {
-        const remaining = Math.round((currentCash - amountToPay) * 100) / 100;
+        const remaining = Math.round((currentCash - cashPortionToPay) * 100) / 100;
         afterValEl.textContent = this.formatCurrency(remaining);
         if (remaining < 0) {
           afterValEl.style.color = 'var(--rose-danger, #EF4444)';
         } else {
           afterValEl.style.color = 'var(--emerald-text, #10B981)';
         }
+      } else if (!hasCashComponent) {
+        afterValEl.textContent = `${this.formatCurrency(currentCash)} (Pago bancario — No descuenta de gaveta)`;
+        afterValEl.style.color = 'var(--text-muted, #94A3B8)';
       } else {
         afterValEl.textContent = `${this.formatCurrency(currentCash)} (Sin descontar de caja)`;
         afterValEl.style.color = 'var(--text-muted, #94A3B8)';
@@ -7359,20 +7593,34 @@ class NexusApp {
     }
   }
 
-  openAbonoModalByEntity(type, entityIdentifier) {
+  openAbonoModalByEntity(type, entityIdentifier, optionalPrefillAmount = null, optionalTargetPoId = null) {
     if (type === 'customer') {
-      const cust = this.data.customers.find(c => c.id === entityIdentifier || c.name === entityIdentifier);
-      const entityName = cust ? cust.name : entityIdentifier;
-      let cred = this.data.customerCredits.find(c => (c.customer === entityName || (cust && c.customer === cust.name)) && c.currentBalance > 0);
+      const cleanIdent = String(entityIdentifier || '').toLowerCase().trim();
+      let cred = (this.data.customerCredits || []).find(c =>
+        c && String(c.id || '').toLowerCase().trim() === cleanIdent && Number(c.currentBalance) > 0
+      );
+      const cust = (this.data.customers || []).find(c =>
+        c && (String(c.id || '').toLowerCase().trim() === cleanIdent || String(c.name || '').toLowerCase().trim() === cleanIdent)
+      );
+      const entityName = cred ? cred.customer : (cust ? cust.name : entityIdentifier);
       if (!cred) {
-        if (cust && cust.creditBalance > 0) {
+        const entityNameNorm = String(entityName || '').toLowerCase().trim();
+        cred = (this.data.customerCredits || []).find(c =>
+          c && (
+            String(c.customer || '').toLowerCase().trim() === entityNameNorm ||
+            (cust && (c.customerId === cust.id || String(c.customer || '').toLowerCase().trim() === String(cust.name || '').toLowerCase().trim()))
+          ) && Number(c.currentBalance) > 0
+        );
+      }
+      if (!cred) {
+        if (cust && Number(cust.creditBalance) > 0) {
           const newCcId = this.generateUniqueEntityId('CC', this.data.customerCredits, this.data.deletedCustomerCredits, 3);
           cred = {
             id: newCcId,
             customer: entityName,
             customerId: cust.id || '',
-            totalGranted: cust.creditBalance,
-            currentBalance: cust.creditBalance,
+            totalGranted: Number(cust.creditBalance),
+            currentBalance: Number(cust.creditBalance),
             dueDate: new Date().toISOString().slice(0, 10),
             status: "Pendiente",
             createdAt: Date.now(),
@@ -7382,20 +7630,25 @@ class NexusApp {
         }
       }
       if (cred) {
-        this.openAbonoModal('customer', cred.id);
+        this.openAbonoModal('customer', cred.id, optionalPrefillAmount, optionalTargetPoId);
       } else {
         this.showToast(`No hay créditos pendientes registrados para ${entityName}`, 'info');
       }
     } else if (type === 'supplier') {
       const cleanIdent = String(entityIdentifier || '').toLowerCase().trim();
       const supp = (this.data.suppliers || []).find(s => 
-        String(s.id || '').toLowerCase().trim() === cleanIdent || 
-        String(s.name || '').toLowerCase().trim() === cleanIdent
+        s && (
+          String(s.id || '').toLowerCase().trim() === cleanIdent || 
+          String(s.name || '').toLowerCase().trim() === cleanIdent
+        )
       );
       const entityName = supp ? supp.name : entityIdentifier;
       let cp = (this.data.supplierCredits || []).find(s => 
-        (String(s.supplier || '').toLowerCase().trim() === cleanIdent || (supp && String(s.supplier || '').toLowerCase().trim() === String(supp.name || '').toLowerCase().trim())) && 
-        Number(s.pendingAmount) > 0
+        s && (
+          String(s.id || '').toLowerCase().trim() === cleanIdent ||
+          String(s.supplier || '').toLowerCase().trim() === cleanIdent ||
+          (supp && (s.supplierId === supp.id || String(s.supplier || '').toLowerCase().trim() === String(supp.name || '').toLowerCase().trim()))
+        ) && Number(s.pendingAmount) > 0
       );
       if (!cp) {
         const bal = supp ? Number(supp.creditBalance) || 0 : 0;
@@ -7410,14 +7663,16 @@ class NexusApp {
             pendingAmount: bal,
             date: new Date().toISOString().slice(0, 10),
             dueDate: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
-            status: "Pendiente"
+            status: "Pendiente",
+            createdAt: Date.now(),
+            updatedAt: Date.now()
           };
           if (!this.data.supplierCredits) this.data.supplierCredits = [];
           this.data.supplierCredits.push(cp);
         }
       }
       if (cp) {
-        this.openAbonoModal('supplier', cp.id);
+        this.openAbonoModal('supplier', cp.id, optionalPrefillAmount, optionalTargetPoId);
       } else {
         this.showToast(`No hay saldos pendientes registrados con ${entityName}`, 'info');
       }
@@ -7443,14 +7698,14 @@ class NexusApp {
     if (method === 'Pago Mixto') {
       mixedCash = this.parseCleanNumber(document.getElementById('abono-mixed-cash')?.value) || 0;
       mixedElec = this.parseCleanNumber(document.getElementById('abono-mixed-electronic')?.value) || 0;
-      if (mixedCash + mixedElec < amountPaid - 0.01) {
-        this.showToast(`La distribución de Efectivo (${this.formatCurrency(mixedCash)}) y Electrónico (${this.formatCurrency(mixedElec)}) debe cubrir el monto a abonar (${this.formatCurrency(amountPaid)}).`, 'warning');
+      if (Math.abs((mixedCash + mixedElec) - amountPaid) > 1) {
+        this.showToast(`La suma de Efectivo (${this.formatCurrency(mixedCash)}) y Electrónico (${this.formatCurrency(mixedElec)}) debe ser exactamente igual al monto a abonar (${this.formatCurrency(amountPaid)}).`, 'warning');
         return;
       }
     }
 
     if (type === 'customer') {
-      const cred = (this.data.customerCredits || []).find(c => c.id === id);
+      const cred = (this.data.customerCredits || []).find(c => c && c.id === id);
       if (!cred) return;
 
       if (amountPaid > cred.currentBalance + 0.01) {
@@ -7466,38 +7721,41 @@ class NexusApp {
       }
       cred.updatedAt = Date.now();
 
-      const cust = (this.data.customers || []).find(c => c.name === cred.customer);
+      const credCustNorm = String(cred.customer || '').toLowerCase().trim();
+      const cust = (this.data.customers || []).find(c =>
+        c && ((cred.customerId && c.id === cred.customerId) || String(c.name || '').toLowerCase().trim() === credCustNorm)
+      );
       if (cust) {
-        cust.creditBalance = Math.round(Math.max(0, (cust.creditBalance || 0) - actualPay) * 100) / 100;
+        cust.creditBalance = Math.round(Math.max(0, (Number(cust.creditBalance) || 0) - actualPay) * 100) / 100;
         cust.updatedAt = Date.now();
       }
 
-      // Sync with cashier cash drawer and electronic sales
-      if (method === 'Pago Mixto') {
-        if (!this.data.cashShiftLog) this.data.cashShiftLog = { openingCash: 0, cashSales: 0, cardSales: 0, cashExpenses: 0, expectedCashInDrawer: 0, status: 'Abierto' };
-        if (mixedCash > 0) {
-          this.data.cashShiftLog.cashSales = Math.round(((Number(this.data.cashShiftLog.cashSales) || 0) + mixedCash) * 100) / 100;
+      const activeShift = this.data.cashShiftLog && this.data.cashShiftLog.status === 'Abierto' ? this.data.cashShiftLog : null;
+
+      // Sync with cashier cash drawer and electronic sales only if there is an active shift
+      if (activeShift) {
+        if (method === 'Pago Mixto') {
+          if (mixedCash > 0) {
+            this.data.cashShiftLog.cashSales = Math.round(((Number(this.data.cashShiftLog.cashSales) || 0) + mixedCash) * 100) / 100;
+            this.data.cashShiftLog.expectedCashInDrawer = Math.round(((Number(this.data.cashShiftLog.openingCash) || 0) + (Number(this.data.cashShiftLog.cashSales) || 0) - (Number(this.data.cashShiftLog.cashExpenses) || 0)) * 100) / 100;
+            if (this.data.store) {
+              this.data.store.cashInBox = this.data.cashShiftLog.expectedCashInDrawer;
+            }
+          }
+          if (mixedElec > 0) {
+            this.data.cashShiftLog.cardSales = Math.round(((Number(this.data.cashShiftLog.cardSales) || 0) + mixedElec) * 100) / 100;
+          }
+        } else if (method.toLowerCase().includes('efectivo')) {
+          this.data.cashShiftLog.cashSales = Math.round(((Number(this.data.cashShiftLog.cashSales) || 0) + actualPay) * 100) / 100;
           this.data.cashShiftLog.expectedCashInDrawer = Math.round(((Number(this.data.cashShiftLog.openingCash) || 0) + (Number(this.data.cashShiftLog.cashSales) || 0) - (Number(this.data.cashShiftLog.cashExpenses) || 0)) * 100) / 100;
           if (this.data.store) {
             this.data.store.cashInBox = this.data.cashShiftLog.expectedCashInDrawer;
           }
+        } else if (method.toLowerCase().includes('tarjeta') || method.toLowerCase().includes('transfer')) {
+          this.data.cashShiftLog.cardSales = Math.round(((Number(this.data.cashShiftLog.cardSales) || 0) + actualPay) * 100) / 100;
         }
-        if (mixedElec > 0) {
-          this.data.cashShiftLog.cardSales = Math.round(((Number(this.data.cashShiftLog.cardSales) || 0) + mixedElec) * 100) / 100;
-        }
-      } else if (method.toLowerCase().includes('efectivo')) {
-        if (!this.data.cashShiftLog) this.data.cashShiftLog = { openingCash: 0, cashSales: 0, cardSales: 0, cashExpenses: 0, expectedCashInDrawer: 0, status: 'Abierto' };
-        this.data.cashShiftLog.cashSales = Math.round(((Number(this.data.cashShiftLog.cashSales) || 0) + actualPay) * 100) / 100;
-        this.data.cashShiftLog.expectedCashInDrawer = Math.round(((Number(this.data.cashShiftLog.openingCash) || 0) + (Number(this.data.cashShiftLog.cashSales) || 0) - (Number(this.data.cashShiftLog.cashExpenses) || 0)) * 100) / 100;
-        if (this.data.store) {
-          this.data.store.cashInBox = this.data.cashShiftLog.expectedCashInDrawer;
-        }
-      } else if (method.toLowerCase().includes('tarjeta') || method.toLowerCase().includes('transfer')) {
-        if (!this.data.cashShiftLog) this.data.cashShiftLog = { openingCash: 0, cashSales: 0, cardSales: 0, cashExpenses: 0, expectedCashInDrawer: 0, status: 'Abierto' };
-        this.data.cashShiftLog.cardSales = Math.round(((Number(this.data.cashShiftLog.cardSales) || 0) + actualPay) * 100) / 100;
       }
 
-      const activeShift = this.data.cashShiftLog && this.data.cashShiftLog.status === 'Abierto' ? this.data.cashShiftLog : null;
       const now = new Date();
       if (!this.data.abonosVentas) this.data.abonosVentas = [];
       this.data.abonosVentas.unshift({
@@ -7506,8 +7764,11 @@ class NexusApp {
         time: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         timestamp: now.getTime(),
         shiftId: activeShift ? activeShift.shiftId : null,
+        outsideShift: !activeShift ? true : undefined,
         customer: cred.customer,
-        invoiceId: `TX-${Date.now().toString().slice(-5)}`,
+        customerId: cust ? cust.id : (cred.customerId || undefined),
+        creditId: cred.id,
+        invoiceId: cred.id || `TX-${Date.now().toString().slice(-5)}`,
         amount: actualPay,
         method: method,
         paymentBreakdown: method === 'Pago Mixto' ? { cash: mixedCash, electronic: mixedElec } : undefined,
@@ -7523,28 +7784,34 @@ class NexusApp {
       this.showToast(`Abono de ${this.formatCurrency(actualPay)} registrado a ${cred.customer}`, 'success');
 
     } else if (type === 'supplier') {
-      let cp = (this.data.supplierCredits || []).find(s => s.id === id);
+      let cp = (this.data.supplierCredits || []).find(s => s && s.id === id);
       if (!cp) {
         const cleanId = String(id || '').toLowerCase().trim();
         cp = (this.data.supplierCredits || []).find(s => 
-          String(s.id || '').toLowerCase().trim() === cleanId || 
-          String(s.supplier || '').toLowerCase().trim() === cleanId ||
-          String(s.supplierId || '').toLowerCase().trim() === cleanId
+          s && (
+            String(s.id || '').toLowerCase().trim() === cleanId || 
+            String(s.supplier || '').toLowerCase().trim() === cleanId ||
+            String(s.supplierId || '').toLowerCase().trim() === cleanId
+          )
         );
       }
       if (!cp) {
-        const po = (this.data.purchases || []).find(p => p.id === id);
+        const po = (this.data.purchases || []).find(p => p && p.id === id);
         if (po) {
           cp = (this.data.supplierCredits || []).find(s => 
-            s.id === po.id || 
-            (s.supplier && s.supplier.toLowerCase().trim() === String(po.supplier).toLowerCase().trim())
+            s && (
+              s.id === po.id || 
+              (s.supplier && s.supplier.toLowerCase().trim() === String(po.supplier).toLowerCase().trim())
+            )
           );
         }
       }
       if (!cp) {
         const suppObj = (this.data.suppliers || []).find(s => 
-          s.id === id || 
-          s.name?.toLowerCase().trim() === String(id).toLowerCase().trim()
+          s && (
+            s.id === id || 
+            s.name?.toLowerCase().trim() === String(id).toLowerCase().trim()
+          )
         );
         if (suppObj && Number(suppObj.creditBalance) > 0) {
           const newCreditId = this.getNextSupplierCreditId();
@@ -7557,7 +7824,9 @@ class NexusApp {
             pendingAmount: Number(suppObj.creditBalance),
             date: new Date().toISOString().slice(0, 10),
             dueDate: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
-            status: "Pendiente"
+            status: "Pendiente",
+            createdAt: Date.now(),
+            updatedAt: Date.now()
           };
           if (!this.data.supplierCredits) this.data.supplierCredits = [];
           this.data.supplierCredits.push(cp);
@@ -7577,6 +7846,9 @@ class NexusApp {
       const actualPay = Math.round(Math.min(amountPaid, cp.pendingAmount) * 100) / 100;
       cp.pendingAmount = Math.round(Math.max(0, cp.pendingAmount - actualPay) * 100) / 100;
       cp.paidAmount = Math.round(((Number(cp.paidAmount) || 0) + actualPay) * 100) / 100;
+      if ((Number(cp.totalOwed) || 0) < cp.pendingAmount + cp.paidAmount) {
+        cp.totalOwed = Math.round((cp.pendingAmount + cp.paidAmount) * 100) / 100;
+      }
       if (cp.pendingAmount <= 0) {
         cp.pendingAmount = 0;
         cp.status = "Pagado Total";
@@ -7584,46 +7856,53 @@ class NexusApp {
       cp.updatedAt = Date.now();
 
       const supp = (this.data.suppliers || []).find(s => 
-        s.name?.toLowerCase().trim() === cp.supplier?.toLowerCase().trim() ||
-        s.id === cp.supplierId
+        s && (
+          s.name?.toLowerCase().trim() === cp.supplier?.toLowerCase().trim() ||
+          s.id === cp.supplierId
+        )
       );
       if (supp) {
         supp.creditBalance = Math.round(Math.max(0, (Number(supp.creditBalance) || 0) - actualPay) * 100) / 100;
         supp.updatedAt = Date.now();
       }
 
-      // Solo descontar de caja FÍSICA si fue pagado en Efectivo o porción efectivo de Pago Mixto
+      // Respetar estrictamente la casilla "Descontar este valor del dinero en caja (Arqueo de Turno)"
       const isCash = method.toLowerCase().includes('efectivo');
       const isMixed = method === 'Pago Mixto';
-      const shouldDeductFromCash = isCash || (isMixed && mixedCash > 0);
-      const cashDeductAmount = isMixed ? mixedCash : actualPay;
+      const deductCheck = document.getElementById('abono-deduct-cash-check');
+      const userWantsCashDeduct = deductCheck ? deductCheck.checked : true;
+      const shouldDeductFromCash = (isCash || (isMixed && mixedCash > 0)) && userWantsCashDeduct;
+      const cashDeductAmount = isMixed ? mixedCash : (isCash ? actualPay : 0);
+      const activeShift = this.data.cashShiftLog && this.data.cashShiftLog.status === 'Abierto' ? this.data.cashShiftLog : null;
 
-      if (shouldDeductFromCash && cashDeductAmount > 0) {
-        if (!this.data.cashShiftLog) {
-          this.data.cashShiftLog = { openingCash: 0, cashSales: 0, cashExpenses: 0, expectedCashInDrawer: 0, status: 'Abierto' };
-        }
+      if (shouldDeductFromCash && cashDeductAmount > 0 && activeShift) {
         this.data.cashShiftLog.cashExpenses = Math.round(((Number(this.data.cashShiftLog.cashExpenses) || 0) + cashDeductAmount) * 100) / 100;
         this.data.cashShiftLog.expectedCashInDrawer = Math.round(((Number(this.data.cashShiftLog.openingCash) || 0) + (Number(this.data.cashShiftLog.cashSales) || 0) - (Number(this.data.cashShiftLog.cashExpenses) || 0)) * 100) / 100;
         if (this.data.store) {
           this.data.store.cashInBox = this.data.cashShiftLog.expectedCashInDrawer;
         }
-
-        // Los pagos a proveedores no son gastos operativos: son egresos de caja que amortizan pasivo
-        // y se registran en this.data.abonosCompras para auditoría y arqueo sin distorsionar el P&L ni el balance.
       }
 
-      // Amortizar pago a proveedores en cascada a través de las órdenes de compra más antiguas (Híbrido)
+      // Amortizar pago a proveedores en cascada (priorizando targetPoId si se abrió desde una Orden de Compra específica)
+      const targetPoId = this.currentAbonoTargetPoId || null;
       if (this.data.purchases && Array.isArray(this.data.purchases)) {
         const suppNorm = (cp.supplier || '').toLowerCase().trim();
         const linkedPOIds = new Set(Array.isArray(cp.purchaseOrderIds) ? cp.purchaseOrderIds : (cp.poId ? [cp.poId] : []));
         
         // Obtener todas las compras impagas de este proveedor
         const unpaidPOs = this.data.purchases.filter(p => 
+          p &&
           (linkedPOIds.has(p.id) || (p.supplier || '').toLowerCase().trim() === suppNorm) &&
-          p.paymentStatus !== 'Pagado Total' && p.paymentStatus !== 'Cancelado'
+          p.paymentStatus !== 'Pagado Total' && p.paymentStatus !== 'Cancelado' && !p.noCashOrBankDeduct
         );
-        // Ordenar por fecha cronológica ascendente (las más viejas se pagan primero)
-        unpaidPOs.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0) || (a.date || '').localeCompare(b.date || ''));
+        // Ordenar: primero la OC objetivo (si aplica), luego por fecha cronológica ascendente (las más viejas primero)
+        unpaidPOs.sort((a, b) => {
+          if (targetPoId) {
+            if (a.id === targetPoId && b.id !== targetPoId) return -1;
+            if (b.id === targetPoId && a.id !== targetPoId) return 1;
+          }
+          return (a.timestamp || 0) - (b.timestamp || 0) || (a.date || '').localeCompare(b.date || '');
+        });
 
         let unallocated = actualPay;
         for (const po of unpaidPOs) {
@@ -7641,34 +7920,46 @@ class NexusApp {
         }
       }
 
+      const activeCashier = this.data.store?.cashier || (this.currentUser ? this.currentUser.name : "Cajero");
+      const now = new Date();
+      const newAbonoId = `AB-C${Date.now().toString().slice(-6)}`;
+
+      let methodLabel = method;
+      if (isCash) {
+        methodLabel = shouldDeductFromCash ? `${method} (Caja)` : `${method} (Externo / Sin Caja)`;
+      } else if (isMixed) {
+        methodLabel = shouldDeductFromCash ? `${method} (Caja + Banco)` : `${method} (Sin Caja)`;
+      }
+
       if (!Array.isArray(cp.history)) cp.history = [];
       cp.history.push({
         type: 'payment',
+        abonoId: newAbonoId,
         amount: actualPay,
-        method: method,
-        date: `${new Date().toISOString().slice(0, 10)} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+        method: methodLabel,
+        date: `${now.toISOString().slice(0, 10)} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
       });
-
-      const activeCashier = this.data.store?.cashier || (this.currentUser ? this.currentUser.name : "Cajero");
-      const activeShift = this.data.cashShiftLog && this.data.cashShiftLog.status === 'Abierto' ? this.data.cashShiftLog : null;
-      const now = new Date();
 
       if (!this.data.abonosCompras) this.data.abonosCompras = [];
       this.data.abonosCompras.unshift({
-        id: `AB-C${Date.now().toString().slice(-6)}`,
+        id: newAbonoId,
         date: now.toISOString().slice(0, 10),
         time: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         timestamp: now.getTime(),
         shiftId: activeShift ? activeShift.shiftId : null,
+        outsideShift: !activeShift ? true : undefined,
+        deductedFromCash: shouldDeductFromCash,
         supplier: cp.supplier,
         poId: cp.id || `OC-${Date.now().toString().slice(-5)}`,
+        targetPoId: targetPoId || undefined,
         amount: actualPay,
-        method: shouldDeductFromCash ? `${method} (Caja)` : method,
+        method: methodLabel,
         paymentBreakdown: isMixed ? { cash: mixedCash, electronic: mixedElec } : undefined,
         cashier: activeCashier,
         status: "Confirmado"
       });
 
+      this.currentAbonoTargetPoId = null;
       this.closeModal('abono-modal');
       this.calculateShiftTotals();
       this.syncAllModules();
@@ -7676,7 +7967,7 @@ class NexusApp {
       this.renderAbonosComprasTable();
       this.renderCuadreCajaCard();
       this.renderCashStatusIndicator();
-      const deductMsg = shouldDeductFromCash ? ' y descontado de caja' : '';
+      const deductMsg = (shouldDeductFromCash && activeShift) ? ' y descontado de caja' : '';
       this.showToast(`Pago de ${this.formatCurrency(actualPay)} registrado a ${cp.supplier}${deductMsg}`, 'success');
       await this.savePersistence();
     }
@@ -11357,68 +11648,57 @@ class NexusApp {
   }
 
   async markPurchaseAsPaid(poId) {
-    const po = (this.data.purchases || []).find(p => p.id === poId);
+    const po = (this.data.purchases || []).find(p => p && p.id === poId);
     if (!po) return;
 
-    po.paymentStatus = 'Pagado Total';
-    if (!po.paymentMethod || po.paymentMethod === 'Crédito Proveedor') {
-      po.paymentMethod = 'Transferencia';
+    const poTotal = Number(po.total) || 0;
+    const poPaid = Number(po.paidAmount) || 0;
+    const poPending = Math.max(0, poTotal - poPaid);
+    if (poPending <= 0 || po.paymentStatus === 'Pagado Total' || po.paymentStatus === 'Cancelado') {
+      this.showToast(`La orden #${po.id} ya se encuentra saldada.`, 'info');
+      return;
     }
-    po.paidAmount = po.total;
 
-    // Si se paga en efectivo de caja, reflejar en el arqueo y registrar abono
-    const isCash = (po.paymentMethod || '').toLowerCase().includes('efectivo');
-    if (isCash) {
-      if (!this.data.cashShiftLog) {
-        this.data.cashShiftLog = { openingCash: 0, cashSales: 0, cashExpenses: 0, expectedCashInDrawer: 0, status: 'Abierto' };
+    this.syncSupplierCreditsState();
+    const suppNorm = String(po.supplier || 'Proveedor General').toLowerCase().trim();
+    if (!Array.isArray(this.data.supplierCredits)) this.data.supplierCredits = [];
+
+    let cp = this.data.supplierCredits.find(s =>
+      s && (
+        s.id === po.id ||
+        s.poId === po.id ||
+        (Array.isArray(s.purchaseOrderIds) && s.purchaseOrderIds.includes(po.id)) ||
+        String(s.supplier || '').toLowerCase().trim() === suppNorm
+      ) && Number(s.pendingAmount) > 0
+    );
+
+    if (!cp) {
+      const suppObj = (this.data.suppliers || []).find(s => s && String(s.name || '').toLowerCase().trim() === suppNorm);
+      const newCreditId = this.getNextSupplierCreditId();
+      cp = {
+        id: newCreditId,
+        poId: po.id,
+        purchaseOrderIds: [po.id],
+        supplier: suppObj ? suppObj.name : (po.supplier || 'Proveedor General'),
+        supplierId: suppObj ? suppObj.id : '',
+        totalOwed: poTotal,
+        paidAmount: poPaid,
+        pendingAmount: poPending,
+        date: po.date || new Date().toISOString().slice(0, 10),
+        lastPurchaseDate: po.date || new Date().toISOString().slice(0, 10),
+        dueDate: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
+        status: 'Pendiente',
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      };
+      this.data.supplierCredits.push(cp);
+      if (suppObj && (Number(suppObj.creditBalance) || 0) < poPending) {
+        suppObj.creditBalance = poPending;
+        suppObj.updatedAt = Date.now();
       }
-      this.data.cashShiftLog.cashExpenses = Math.round(((Number(this.data.cashShiftLog.cashExpenses) || 0) + po.total) * 100) / 100;
-      this.data.cashShiftLog.expectedCashInDrawer = Math.round(((Number(this.data.cashShiftLog.openingCash) || 0) + (Number(this.data.cashShiftLog.cashSales) || 0) - (Number(this.data.cashShiftLog.cashExpenses) || 0)) * 100) / 100;
-      if (this.data.store) {
-        this.data.store.cashInBox = this.data.cashShiftLog.expectedCashInDrawer;
-      }
-
-      // Los pagos a proveedores no son gastos operativos: son egresos de caja y van en abonosCompras
     }
 
-    const activeShift = this.data.cashShiftLog && this.data.cashShiftLog.status === 'Abierto' ? this.data.cashShiftLog : null;
-    const now = new Date();
-    if (!this.data.abonosCompras) this.data.abonosCompras = [];
-    this.data.abonosCompras.unshift({
-      id: `AB-C${Date.now().toString().slice(-6)}`,
-      date: now.toISOString().slice(0, 10),
-      time: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      timestamp: now.getTime(),
-      shiftId: activeShift ? activeShift.shiftId : null,
-      supplier: po.supplier,
-      poId: po.id,
-      amount: po.total,
-      method: isCash ? `${po.paymentMethod || 'Efectivo'} (Caja)` : po.paymentMethod,
-      cashier: this.data.store?.cashier || (this.currentUser ? this.currentUser.name : "Cajero"),
-      status: "Confirmado"
-    });
-
-    // Si tiene un crédito asociado en supplierCredits, marcarlo saldado
-    if (this.data.supplierCredits) {
-      const cred = this.data.supplierCredits.find(c => c.id === po.id || (c.supplier?.toLowerCase().trim() === po.supplier?.toLowerCase().trim() && c.totalOwed === po.total));
-      if (cred) {
-        cred.pendingAmount = 0;
-        cred.paidAmount = po.total;
-        cred.status = 'Pagado Total';
-      }
-    }
-
-    const suppObj = (this.data.suppliers || []).find(s => s.name?.toLowerCase().trim() === po.supplier?.toLowerCase().trim());
-    if (suppObj) {
-      suppObj.creditBalance = Math.round(Math.max(0, (Number(suppObj.creditBalance) || 0) - po.total) * 100) / 100;
-    }
-
-    await this.savePersistence();
-    this.syncAllModules();
-    this.renderCuadreCajaCard();
-    this.renderCashStatusIndicator();
-    this.showToast(`Orden #${po.id} marcada como Pagada Total y descontada de caja`, 'success');
-    this.showPurchaseReceiptModal(po.id);
+    this.openAbonoModal('supplier', cp.id, poPending, po.id);
   }
 
   renderFinCreditosClientesTable() {
@@ -12963,7 +13243,8 @@ class NexusApp {
     const closedShiftIds = new Set((this.data.cashShiftsHistory || []).map(s => s.id || s.shiftId));
 
     return (this.data.abonosVentas || []).filter(a => {
-      if (!a.date) return false;
+      if (!a || !a.date) return false;
+      if (a.outsideShift) return false;
       // 1. Coincidencia explícita con el turno activo
       if (a.shiftId) return a.shiftId === shift.shiftId;
       // 2. Si ya pertenece a un turno cerrado, descartar estrictamente
@@ -13508,7 +13789,8 @@ class NexusApp {
     const closedShiftIds = new Set((this.data.cashShiftsHistory || []).map(s => s.id || s.shiftId));
 
     // Helper: coincidencia estricta y segura con el turno activo
-    const matchesShift = (dateStr, timeStr, itemShiftId, itemTimestamp = 0, closedShiftId = null) => {
+    const matchesShift = (dateStr, timeStr, itemShiftId, itemTimestamp = 0, closedShiftId = null, outsideShift = false) => {
+      if (outsideShift) return false;
       // 1. Si el egreso tiene un shiftId explícito asignado:
       if (itemShiftId) {
         return !!(shiftId && itemShiftId === shiftId);
@@ -13539,7 +13821,7 @@ class NexusApp {
 
     // 1. Gastos Operativos (Efectivo & Transferencia / Banco)
     (this.data.expenses || []).forEach(e => {
-      if (matchesShift(e.date, e.time, e.shiftId, e.timestamp, e.closedShiftId)) {
+      if (matchesShift(e.date, e.time, e.shiftId, e.timestamp, e.closedShiftId, e.outsideShift)) {
         const m = (e.method || 'Efectivo').toLowerCase();
         const isCash = m.includes('efectivo') || m.includes('caja') || m.includes('gaveta') || m.includes('cash');
         items.push({
@@ -13564,9 +13846,60 @@ class NexusApp {
 
     // 2. Abonos / Pagos a Proveedores (Efectivo & Transferencia / Banco)
     (this.data.abonosCompras || []).forEach(a => {
-      if (matchesShift(a.date, a.time, a.shiftId, a.timestamp, a.closedShiftId)) {
+      if (matchesShift(a.date, a.time, a.shiftId, a.timestamp, a.closedShiftId, a.outsideShift)) {
         const m = (a.method || 'Efectivo').toLowerCase();
-        const isCash = m.includes('efectivo') || m.includes('caja') || m.includes('gaveta') || m.includes('cash');
+        const wasDeductedFromCash = a.deductedFromCash !== false && !m.includes('sin caja') && !m.includes('externo');
+
+        if (a.paymentBreakdown) {
+          const cashPart = Math.round(Number(a.paymentBreakdown.cash) || 0);
+          const elecPart = Math.round(Number(a.paymentBreakdown.electronic) || 0);
+          if (cashPart > 0 && wasDeductedFromCash) {
+            items.push({
+              id: a.id,
+              date: a.date,
+              time: a.time || shift.openedAt || '',
+              concept: `Pago a Proveedor (Efectivo Mixto): ${a.supplier}${a.poId ? ` (${a.poId})` : ''}`,
+              category: 'Abono Proveedor',
+              type: 'Abono Proveedor',
+              typeKey: 'abonos',
+              isCash: true,
+              method: 'Pago Mixto (Efectivo Caja)',
+              channel: 'Efectivo (Gaveta)',
+              badgeBg: '#EEF2FF',
+              badgeColor: '#4F46E5',
+              icon: '💳',
+              cashier: a.cashier || 'Cajero',
+              amount: cashPart
+            });
+          }
+          if (elecPart > 0) {
+            items.push({
+              id: a.id,
+              date: a.date,
+              time: a.time || shift.openedAt || '',
+              concept: `Pago a Proveedor (Electrónico Mixto): ${a.supplier}${a.poId ? ` (${a.poId})` : ''}`,
+              category: 'Abono Proveedor',
+              type: 'Abono Proveedor',
+              typeKey: 'abonos',
+              isCash: false,
+              method: 'Pago Mixto (Banco/Electrónico)',
+              channel: 'Banco / Transferencia',
+              badgeBg: '#F5F3FF',
+              badgeColor: '#7C3AED',
+              icon: '🏦',
+              cashier: a.cashier || 'Cajero',
+              amount: elecPart
+            });
+          }
+          return;
+        }
+
+        const rawIsCash = m.includes('efectivo') || m.includes('caja') || m.includes('gaveta') || m.includes('cash');
+        // Si fue efectivo externo / sin descontar de caja, no restar de la gaveta ni del banco del turno
+        if (rawIsCash && !wasDeductedFromCash) {
+          return;
+        }
+        const isCash = rawIsCash && wasDeductedFromCash;
         items.push({
           id: a.id,
           date: a.date,
@@ -15331,9 +15664,10 @@ class NexusApp {
     if (!tbody) return;
     const list = this.data.abonosVentas || [];
     if (list.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:2.5rem 1rem; color:var(--text-muted);"><div style="font-size:1.6rem; margin-bottom:0.5rem;">🧾</div><div style="font-weight:700; color:var(--text-main);">No hay abonos a ventas registrados</div><div style="font-size:0.85rem; margin-top:0.25rem;">Los cobros registrados desde Créditos de Clientes o Plan Separe aparecerán aquí.</div></td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:2.5rem 1rem; color:var(--text-muted);"><div style="font-size:1.6rem; margin-bottom:0.5rem;">🧾</div><div style="font-weight:700; color:var(--text-main);">No hay abonos a ventas registrados</div><div style="font-size:0.85rem; margin-top:0.25rem;">Los cobros registrados desde Créditos de Clientes o Plan Separe aparecerán aquí.</div></td></tr>`;
       return;
     }
+    const canDelete = this.canPerformAction('delete', 'sale') || this.canPerformAction('delete', 'customer') || this.canPerformAction('delete', 'expense');
     tbody.innerHTML = list.map(ab => `
       <tr>
         <td><b>${this.escapeHtml(ab.id)}</b></td>
@@ -15343,6 +15677,9 @@ class NexusApp {
         <td><span class="font-bold" style="color:var(--emerald-text);">${this.formatCurrency(ab.amount)}</span></td>
         <td>${this.escapeHtml(ab.method)}</td>
         <td>${this.escapeHtml(ab.cashier || 'Cajero')}</td>
+        <td style="text-align:center;">
+          ${canDelete ? `<button class="btn-action-delete" onclick="app.deleteAbonoVenta('${this.escapeHtml(ab.id)}')" title="Anular abono y restaurar saldo del cliente" style="padding:2px 8px; font-size:0.75rem;">Anular</button>` : '<span style="color:var(--text-muted); font-size:0.75rem;">—</span>'}
+        </td>
       </tr>
     `).join('');
   }
@@ -17005,32 +17342,31 @@ class NexusApp {
           const payBadgeClass = isPoSettled ? 'badge-active' : (po.paymentStatus === 'Pagado Parcial' ? 'badge-warning' : 'badge-danger');
           const deliverBadgeClass = (po.status || '').toLowerCase() === 'recibido' ? 'badge-active' : 'badge-warning';
           
-          const matchingCred = credits.find(c => c.supplier === po.supplier);
-          const pendingBalance = matchingCred ? matchingCred.pendingAmount : (isPoSettled ? 0 : po.total);
+          const pendingBalance = isPoSettled ? 0 : Math.max(0, (Number(po.total) || 0) - (Number(po.paidAmount) || 0));
 
           return `
             <tr>
-              <td><span style="font-weight: 800; font-family: monospace; color: var(--primary-indigo);">${po.id}</span></td>
+              <td><span style="font-weight: 800; font-family: monospace; color: var(--primary-indigo);">${this.escapeHtml(po.id)}</span></td>
               <td>
-                <div style="font-weight: 700; color: var(--text-main);">${po.supplier}</div>
+                <div style="font-weight: 700; color: var(--text-main);">${this.escapeHtml(po.supplier)}</div>
               </td>
-              <td style="color: var(--text-muted); font-size: 0.82rem;">${po.date}</td>
+              <td style="color: var(--text-muted); font-size: 0.82rem;">${this.escapeHtml(po.date)}</td>
               <td><span class="font-bold">${po.itemsCount || 1} ítems</span></td>
               <td><span style="font-weight: 800; color: var(--text-main);">$ ${Number(po.total).toLocaleString('es-CO')}</span></td>
               <td>
                 <span class="badge ${payBadgeClass}">
-                  <span class="badge-dot"></span>${po.paymentStatus || 'Pendiente'}
+                  <span class="badge-dot"></span>${this.escapeHtml(po.paymentStatus || 'Pendiente')}
                 </span>
               </td>
               <td>
                 <span class="badge ${deliverBadgeClass}">
-                  <span class="badge-dot"></span>${po.status || 'Recibido'}
+                  <span class="badge-dot"></span>${this.escapeHtml(po.status || 'Recibido')}
                 </span>
               </td>
               <td style="text-align: center;">
                 <div class="action-btn-group" style="justify-content: center;">
                   ${pendingBalance > 0 ? `
-                    <button class="btn btn-primary text-xs" style="padding: 3px 8px; font-weight: 700;" onclick="app.openAbonoModalByEntity('supplier', '${po.supplier}')" title="Abonar a Proveedor">
+                    <button class="btn btn-primary text-xs" style="padding: 3px 8px; font-weight: 700;" onclick="app.markPurchaseAsPaid('${this.escapeHtml(po.id)}')" title="Abonar o Pagar Orden a Proveedor">
                       💳 Pagar
                     </button>
                   ` : `

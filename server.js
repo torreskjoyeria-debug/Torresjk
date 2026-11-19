@@ -312,13 +312,29 @@ function mergeStoreState(serverData, clientData, isAdmin = false) {
     .filter(e => e && e.id && !deletedExpenses.has(e.id))
     .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
-  // 3. MERGE abonosVentas & abonosCompras (Keyed by id)
+  // 3. MERGE abonosVentas & abonosCompras (Keyed by id with deletion blacklists)
+  const deletedAbonosVentas = new Set([
+    ...(Array.isArray(clientData.deletedAbonosVentas) ? clientData.deletedAbonosVentas : []),
+    ...(Array.isArray(serverData.deletedAbonosVentas) ? serverData.deletedAbonosVentas : [])
+  ]);
   const serverAv = Array.isArray(serverData.abonosVentas) ? serverData.abonosVentas : [];
   const clientAv = Array.isArray(clientData.abonosVentas) ? clientData.abonosVentas : [];
+  if (isAdmin && Array.isArray(clientData.abonosVentas)) {
+    const clientAvIds = new Set(clientAv.map(a => a && a.id).filter(Boolean));
+    serverAv.forEach(sa => {
+      if (sa && sa.id && !clientAvIds.has(sa.id)) {
+        const itemTs = Number(sa.createdAt || sa.timestamp) || 0;
+        if (!itemTs || (nowMs - itemTs > 120000)) {
+          deletedAbonosVentas.add(sa.id);
+        }
+      }
+    });
+  }
+  result.deletedAbonosVentas = Array.from(deletedAbonosVentas);
   const avMap = new Map();
-  serverAv.forEach(a => { if (a && a.id) avMap.set(a.id, a); });
-  clientAv.forEach(a => { if (a && a.id) avMap.set(a.id, a); });
-  result.abonosVentas = Array.from(avMap.values());
+  serverAv.forEach(a => { if (a && a.id && !deletedAbonosVentas.has(a.id)) avMap.set(a.id, a); });
+  clientAv.forEach(a => { if (a && a.id && !deletedAbonosVentas.has(a.id)) avMap.set(a.id, a); });
+  result.abonosVentas = Array.from(avMap.values()).filter(a => a && a.id && !deletedAbonosVentas.has(a.id));
 
   const deletedAbonosCompras = new Set([
     ...(Array.isArray(clientData.deletedAbonosCompras) ? clientData.deletedAbonosCompras : []),
@@ -532,19 +548,18 @@ function mergeStoreState(serverData, clientData, isAdmin = false) {
     [
       ...(Array.isArray(clientData.deletedSupplierCredits) ? clientData.deletedSupplierCredits : []),
       ...(Array.isArray(serverData.deletedSupplierCredits) ? serverData.deletedSupplierCredits : [])
-    ].map(id => String(id || '').trim()).filter(Boolean)
+    ].map(id => String(id || '').trim()).filter(id => id && !id.startsWith('suppkey:'))
   );
   const explicitClientDeletedSc = new Set(
     (Array.isArray(clientData.deletedSupplierCredits) ? clientData.deletedSupplierCredits : [])
-      .map(id => String(id || '').trim()).filter(Boolean)
+      .map(id => String(id || '').trim()).filter(id => id && !id.startsWith('suppkey:'))
   );
 
+  // Key strictly by canonical supplier identity (without __pending/__paid state suffix) so that paying off a credit
+  // transitions the existing record in place instead of falsely triggering deletion blacklisting or duplication.
   const getScSuppKey = (sc) => {
     if (!sc) return '';
-    const sName = String(sc.supplier || sc.supplierId || sc.id || '').toLowerCase().trim();
-    if (!sName) return '';
-    const state = (Number(sc.pendingAmount) > 0 && sc.status !== 'Pagado Total') ? 'pending' : 'paid';
-    return `${sName}__${state}`;
+    return String(sc.supplier || sc.supplierId || sc.id || '').toLowerCase().trim();
   };
 
   const serverSuppCredits = Array.isArray(serverData.supplierCredits) ? serverData.supplierCredits : [];
@@ -552,33 +567,19 @@ function mergeStoreState(serverData, clientData, isAdmin = false) {
   const newlyDeletedScObjects = [];
 
   if (isAdmin && Array.isArray(clientData.supplierCredits)) {
+    const clientScIds = new Set(clientSuppCredits.map(c => c && c.id ? String(c.id).trim() : '').filter(Boolean));
     const clientScSuppKeys = new Set(clientSuppCredits.map(getScSuppKey).filter(Boolean));
     serverSuppCredits.forEach(sSc => {
       if (!sSc) return;
       const scId = String(sSc.id || '').trim();
       const sKey = getScSuppKey(sSc);
       const explicitlyDeleted = scId && explicitClientDeletedSc.has(scId);
-      const missingBySupplier = sKey && !clientScSuppKeys.has(sKey);
-      if (explicitlyDeleted || missingBySupplier) {
+      const missingCompletely = (!scId || !clientScIds.has(scId)) && (!sKey || !clientScSuppKeys.has(sKey));
+      if (explicitlyDeleted || missingCompletely) {
         const itemTs = Number(sSc.createdAt || sSc.timestamp) || 0;
         if (explicitlyDeleted || !itemTs || (nowMs - itemTs > 120000)) {
           if (scId) deletedSupplierCredits.add(scId);
-          if (sKey) deletedSupplierCredits.add(`suppkey:${sKey}`);
           newlyDeletedScObjects.push(sSc);
-        }
-      }
-    });
-
-    // If admin created a fresh credit for a supplier, un-blacklist its suppkey
-    clientSuppCredits.forEach(cSc => {
-      if (!cSc) return;
-      const scId = String(cSc.id || '').trim();
-      if (scId && explicitClientDeletedSc.has(scId)) return;
-      const sKey = getScSuppKey(cSc);
-      if (sKey && deletedSupplierCredits.has(`suppkey:${sKey}`)) {
-        const cTs = Number(cSc.updatedAt || cSc.createdAt || cSc.timestamp) || 0;
-        if (cTs && (nowMs - cTs < 120000)) {
-          deletedSupplierCredits.delete(`suppkey:${sKey}`);
         }
       }
     });
@@ -589,14 +590,22 @@ function mergeStoreState(serverData, clientData, isAdmin = false) {
       const scId = String(cSc.id || '').trim();
       const sKey = getScSuppKey(cSc);
       if (scId && explicitClientDeletedSc.has(scId)) return;
-      if (sKey && deletedSupplierCredits.has(`suppkey:${sKey}`)) return;
+      // If a newly created/updated credit reused a previously deleted ID, un-blacklist it if updated recently
+      if (scId && deletedSupplierCredits.has(scId)) {
+        const cTs = Number(cSc.updatedAt || cSc.createdAt || cSc.timestamp) || 0;
+        if (cTs && (nowMs - cTs < 120000)) {
+          deletedSupplierCredits.delete(scId);
+        } else {
+          return;
+        }
+      }
       scMap.set(sKey || scId, Object.assign({}, cSc));
     });
     serverSuppCredits.forEach(sSc => {
       if (!sSc) return;
       const scId = String(sSc.id || '').trim();
       const sKey = getScSuppKey(sSc);
-      if ((scId && deletedSupplierCredits.has(scId)) || (sKey && deletedSupplierCredits.has(`suppkey:${sKey}`))) return;
+      if (scId && deletedSupplierCredits.has(scId)) return;
       if (!scMap.has(sKey || scId)) {
         scMap.set(sKey || scId, Object.assign({}, sSc));
       }
@@ -608,21 +617,21 @@ function mergeStoreState(serverData, clientData, isAdmin = false) {
       if (!sSc) return;
       const scId = String(sSc.id || '').trim();
       const sKey = getScSuppKey(sSc);
-      if ((scId && deletedSupplierCredits.has(scId)) || (sKey && deletedSupplierCredits.has(`suppkey:${sKey}`))) return;
+      if (scId && deletedSupplierCredits.has(scId)) return;
       scMap.set(sKey || scId, Object.assign({}, sSc));
     });
     clientSuppCredits.forEach(cSc => {
       if (!cSc) return;
       const scId = String(cSc.id || '').trim();
       const sKey = getScSuppKey(cSc);
-      if ((scId && deletedSupplierCredits.has(scId)) || (sKey && deletedSupplierCredits.has(`suppkey:${sKey}`))) return;
+      if (scId && deletedSupplierCredits.has(scId)) return;
       const existing = scMap.get(sKey || scId);
       if (!existing) {
         scMap.set(sKey || scId, Object.assign({}, cSc));
       } else {
         const sTs = Number(existing.updatedAt || existing.createdAt || 0) || 0;
         const cTs = Number(cSc.updatedAt || cSc.createdAt || 0) || 0;
-        if (cTs > sTs) {
+        if (cTs >= sTs) {
           scMap.set(sKey || scId, Object.assign({}, existing, cSc));
         }
       }
@@ -647,8 +656,6 @@ function mergeStoreState(serverData, clientData, isAdmin = false) {
       const matchName = sc.supplier && deletedSuppNames.has(String(sc.supplier).toLowerCase().trim());
       if (matchId || matchName) {
         if (sc.id) deletedSupplierCredits.add(String(sc.id).trim());
-        const sKey = getScSuppKey(sc);
-        if (sKey) deletedSupplierCredits.add(`suppkey:${sKey}`);
         return false;
       }
       return true;
@@ -656,22 +663,18 @@ function mergeStoreState(serverData, clientData, isAdmin = false) {
   }
   result.deletedSupplierCredits = Array.from(deletedSupplierCredits);
 
-  // If a supplierCredit was deleted, ensure its supplier creditBalance is 0 and linked POs are marked paid
-  if (newlyDeletedScObjects.length > 0 || deletedSupplierCredits.size > 0) {
-    const checkScList = newlyDeletedScObjects.length > 0 ? newlyDeletedScObjects : serverSuppCredits.filter(oldSc =>
-      oldSc && ((oldSc.id && deletedSupplierCredits.has(String(oldSc.id).trim())) || deletedSupplierCredits.has(`suppkey:${getScSuppKey(oldSc)}`))
-    );
-    checkScList.forEach(oldSc => {
+  // If a supplierCredit was explicitly deleted, ensure its supplier creditBalance is 0 and linked POs are marked paid
+  if (newlyDeletedScObjects.length > 0) {
+    newlyDeletedScObjects.forEach(oldSc => {
       if (!oldSc) return;
       const scSuppNorm = String(oldSc.supplier || '').toLowerCase().trim();
       const scSuppId = String(oldSc.supplierId || '').trim();
-      const stillHasActiveCredit = (result.supplierCredits || []).some(activeSc =>
+      const stillHasCreditRecord = (result.supplierCredits || []).some(activeSc =>
         activeSc &&
         ((scSuppId && String(activeSc.supplierId || '').trim() === scSuppId) ||
-         (scSuppNorm && String(activeSc.supplier || '').toLowerCase().trim() === scSuppNorm)) &&
-        Number(activeSc.pendingAmount) > 0
+         (scSuppNorm && String(activeSc.supplier || '').toLowerCase().trim() === scSuppNorm))
       );
-      if (!stillHasActiveCredit) {
+      if (!stillHasCreditRecord) {
         if (Array.isArray(result.suppliers)) {
           const supp = result.suppliers.find(s =>
             s && ((scSuppId && String(s.id || '').trim() === scSuppId) ||
@@ -944,16 +947,22 @@ function mergeStoreState(serverData, clientData, isAdmin = false) {
       }
     });
 
+    const shiftOpenTs = Number(shift.openedTimestamp) || 0;
     let totalCashAbonos = 0;
     (result.abonosVentas || []).forEach(a => {
+      if (!a || a.outsideShift) return;
+      if (!a.shiftId && shiftOpenTs > 0 && a.timestamp && Number(a.timestamp) < (shiftOpenTs - 60000)) return;
       const belongs = a.shiftId ? (a.shiftId === shiftId) : (!a.closedShiftId && a.date && a.date.startsWith(shiftOpenedDate));
       if (belongs) {
         const amt = Math.round(Number(a.amount) || 0);
         const m = (a.method || '').toLowerCase();
         if (a.paymentBreakdown) {
           totalCashAbonos += Math.round(Number(a.paymentBreakdown.cash) || 0);
+          totalCardSales += Math.round(Number(a.paymentBreakdown.electronic) || 0);
         } else if (m.includes('efectivo') || m.includes('cash')) {
           totalCashAbonos += amt;
+        } else if (!m.includes('crédito') && !m.includes('credito')) {
+          totalCardSales += amt;
         }
       }
     });
@@ -962,6 +971,8 @@ function mergeStoreState(serverData, clientData, isAdmin = false) {
     let totalBankExpenses = 0;
     const shiftOpenedDdmmyyyy = shiftOpenedDate.split('-').reverse().join('/');
     (result.expenses || []).forEach(e => {
+      if (!e || e.outsideShift) return;
+      if (!e.shiftId && shiftOpenTs > 0 && e.timestamp && Number(e.timestamp) < (shiftOpenTs - 60000)) return;
       // STRICT: Must match this shiftId, OR if no shiftId, must match shift openedDate and NOT belong to a closed shift
       const dateMatches = e.date && (e.date === shiftOpenedDate || e.date.startsWith(shiftOpenedDate) || e.date.includes(shiftOpenedDdmmyyyy));
       const belongs = e.shiftId ? (e.shiftId === shiftId) : (!e.closedShiftId && dateMatches);
@@ -979,13 +990,25 @@ function mergeStoreState(serverData, clientData, isAdmin = false) {
     let totalCashAbonosCompras = 0;
     let totalBankAbonosCompras = 0;
     (result.abonosCompras || []).forEach(a => {
+      if (!a || a.outsideShift) return;
+      if (!a.shiftId && shiftOpenTs > 0 && a.timestamp && Number(a.timestamp) < (shiftOpenTs - 60000)) return;
       const dateMatches = a.date && (a.date === shiftOpenedDate || a.date.startsWith(shiftOpenedDate) || a.date.includes(shiftOpenedDdmmyyyy));
       const belongs = a.shiftId ? (a.shiftId === shiftId) : (!a.closedShiftId && dateMatches);
       if (belongs) {
         const m = (a.method || 'Efectivo').toLowerCase();
+        const wasDeductedFromCash = a.deductedFromCash !== false && !m.includes('sin caja') && !m.includes('externo');
+        if (a.paymentBreakdown) {
+          if (wasDeductedFromCash) {
+            totalCashAbonosCompras += Math.round(Number(a.paymentBreakdown.cash) || 0);
+          }
+          totalBankAbonosCompras += Math.round(Number(a.paymentBreakdown.electronic) || 0);
+          return;
+        }
         const amt = Math.round(Number(a.amount) || 0);
         if (m.includes('efectivo') || m.includes('cash') || m.includes('caja') || m.includes('gaveta')) {
-          totalCashAbonosCompras += amt;
+          if (wasDeductedFromCash) {
+            totalCashAbonosCompras += amt;
+          }
         } else {
           totalBankAbonosCompras += amt;
         }
